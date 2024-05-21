@@ -43,8 +43,7 @@ Manager aggregates host/VM inventory, consoles, storage and networking. It suppo
 - **Cold migration:** VM stopped, supported disks and compatible destination networks. Target imports directly from source; Manager does not relay disk data. Source deletion follows completed target disk imports.
 - **Live migration:** experimental KubeVirt decentralized migration. Hosts need compatible networks and L2 connectivity on the configured migration network. Disk copying makes this slower than reattaching shared storage.
 - **Replication:** per-VM, opt-in, crash-consistent snapshots and full disk copies. Refresh stages replacement disks while retaining the previous replica until swap. Failure recovery around an uncertain swap acknowledgement remains under review.
-- **Failover:** manual by default, requiring an unreachable owner and a completed replica. Power off or otherwise fence the owner before manual promotion. Automatic mode still relies on reachability checks and cannot guarantee prevention of split brain.
-- **Isolation:** the host fence timer stops protected guests when Manager heartbeats are stale and no peer is reachable. This does not prove fencing to Manager. During Manager outages, protected guests can continue while peers remain reachable.
+- **Failover:** TBA.
 
 Use unique protected VM names across hosts. Treat registered hosts as trusted: Manager still incorporates their UI responses.
 
