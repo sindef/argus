@@ -14,7 +14,6 @@ Lightweight KubeVirt hypervisor on Kairos and K3s. Each host runs an independent
 | Disk | Separate OS and VM disks; at least 10 GiB each for testing |
 | VM overhead | Previously estimated at 150–250 MiB per running VM, plus guest memory |
 
-Idle usage is measured as `MemTotal - MemAvailable`, with no running VMs. The 1.2 GiB goal has not been demonstrated. Results vary with hardware, controller activity and ZFS cache usage.
 
 ## Architecture
 
