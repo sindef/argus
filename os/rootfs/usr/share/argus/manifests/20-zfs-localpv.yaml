@@ -1,0 +1,14 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: zfs-localpv
+  namespace: kube-system
+spec:
+  repo: https://openebs.github.io/zfs-localpv
+  chart: zfs-localpv
+  version: 2.11.2
+  targetNamespace: openebs
+  createNamespace: true
+  valuesContent: |-
+    analytics:
+      enabled: false
