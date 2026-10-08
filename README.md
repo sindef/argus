@@ -1,4 +1,4 @@
-# kubevisor
+# argus
 
 Lightweight KubeVirt hypervisor. One node = one standalone single-node k3s cluster (sqlite via kine), ESXi-style. Clustering is an optional manager on top, not a property of the nodes.
 
@@ -26,7 +26,7 @@ See [docs/architecture.drawio](docs/architecture.drawio).
 | VM runtime | KubeVirt | `spec.infra.replicas: 1` |
 | Images | CDI | DataVolumes, upload proxy, smart clone. Scratch on ZFS SC |
 | Storage | OpenEBS ZFS LocalPV | Block mode, snapshots, clones, compression |
-| UI | `kubevisor` (Go, single binary, in-cluster) | Serves web UI, local auth, talks to kube API as own ServiceAccount |
+| UI | `argus` (Go, single binary, in-cluster) | Serves web UI, local auth, talks to kube API as own ServiceAccount |
 
 ### UI
 
@@ -47,19 +47,19 @@ See [docs/architecture.drawio](docs/architecture.drawio).
 | Stage | Deliverable | Done when |
 |---|---|---|
 | 0 | `os/`: Kairos image with k3s config + baked manifests (KubeVirt, CDI, Multus thin, ZFS LocalPV, NADs), ISO build, example cloud-config | Fresh host boots a VM from a CDI-imported cloud image on a LAN VLAN |
-| 1 | `cmd/kubevisor`: auth, VM list/detail/power, console | Manage VM lifecycle + console from browser |
+| 1 | `cmd/argus`: auth, VM list/detail/power, console | Manage VM lifecycle + console from browser |
 | 2 | UI: create VM, disks, images upload/import, networks, snapshots | No kubectl needed for day-to-day |
 | 3 | Footprint pass: measure, trim requests/limits, reserved resources | Idle RAM documented on real hardware |
-| 4 | `cmd/kubevisor-center`: node registry, aggregated view, cold migrate, templates | Move VM between two nodes from UI |
+| 4 | `cmd/argus-center`: node registry, aggregated view, cold migrate, templates | Move VM between two nodes from UI |
 | 5 | HA restart (backup/replication based) | Open |
 
 ## Layout
 
 ```
-os/              Kairos image (Dockerfile, rootfs overlay, cloud-config example)
-cmd/kubevisor/   node UI binary
-cmd/kubevisor-center/   manager (stage 4)
-internal/        shared Go packages
-web/             templates, static assets
-docs/            architecture.drawio
+os/                Kairos image (Dockerfile, rootfs overlay, cloud-config example)
+cmd/argus/         node UI binary
+cmd/argus-center/  manager (stage 4)
+internal/          shared Go packages
+web/               templates, static assets
+docs/              architecture.drawio
 ```
