@@ -26,12 +26,12 @@ See [docs/architecture.drawio](docs/architecture.drawio).
 | VM runtime | KubeVirt | `spec.infra.replicas: 1` |
 | Images | CDI | DataVolumes, upload proxy, smart clone. Scratch on ZFS SC |
 | Storage | OpenEBS ZFS LocalPV | Block mode, snapshots, clones, compression |
-| UI | `kubevisor` (Go, single binary, in-cluster) | Serves web UI, proxies kube API with user's token |
+| UI | `kubevisor` (Go, single binary, in-cluster) | Serves web UI, local auth, talks to kube API as own ServiceAccount |
 
 ### UI
 
 - Go binary, embedded static assets. Server-rendered HTML + htmx. noVNC + xterm.js for console.
-- Auth: login with ServiceAccount token. All API calls made with that token; RBAC is the permission model.
+- Auth: local users (bcrypt, stored in a Secret), app roles admin/operator/read-only. Binary uses its own scoped ServiceAccount; users never see Kubernetes. Later: OIDC, LDAP bind. SAML via OIDC broker.
 - Console: proxy KubeVirt `vnc` / `console` subresource websockets.
 - Scope: VMs (CRUD, power, console), disks (DataVolume), images (upload/import), networks (NAD), snapshots, node stats.
 
