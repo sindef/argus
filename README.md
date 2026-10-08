@@ -19,7 +19,7 @@ See [docs/architecture.drawio](docs/architecture.drawio).
 
 | Layer | Component | Notes |
 |---|---|---|
-| OS | Kairos (Ubuntu 24.04 base, k3s provider), KVM, `br0`, ZFS pool | Immutable A/B image built from `os/Dockerfile`. `br0` with VLAN filtering, uplink enslaved |
+| OS | Kairos (Ubuntu 26.04 base, k3s provider), KVM, `br0`, ZFS pool | Immutable A/B image built from `os/Dockerfile`. `br0` with VLAN filtering, uplink enslaved |
 | K8s | k3s server, sqlite (kine) | `--disable traefik,servicelb,metrics-server,local-storage --disable-cloud-controller --disable-network-policy --flannel-backend=host-gw` |
 | Pod network | flannel (in-process) | Infra pods only |
 | VM network | Multus (thin) + bridge CNI | One NAD per VLAN on `br0`, `ipam: {}`, LAN DHCP. VMs `autoattachPodInterface: false` |

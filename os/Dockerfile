@@ -1,0 +1,23 @@
+ARG KAIROS_INIT_VERSION=v4.3.0
+
+FROM quay.io/kairos/kairos-init:${KAIROS_INIT_VERSION} AS kairos-init
+
+FROM ubuntu:26.04
+ARG VERSION=0.1.0
+ARG K3S_VERSION=v1.35.8+k3s1
+ARG KUBEVIRT_VERSION=v1.9.0
+ARG CDI_VERSION=v1.66.1
+
+RUN --mount=type=bind,from=kairos-init,src=/kairos-init,dst=/kairos-init \
+    /kairos-init -s install -m generic -p k3s --provider-k3s-version "${K3S_VERSION}" --version "${VERSION}"
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends zfsutils-linux \
+    && rm -rf /var/lib/apt/lists/*
+
+ADD https://github.com/kubevirt/kubevirt/releases/download/${KUBEVIRT_VERSION}/kubevirt-operator.yaml /usr/share/argus/manifests/10-kubevirt-operator.yaml
+ADD https://github.com/kubevirt/containerized-data-importer/releases/download/${CDI_VERSION}/cdi-operator.yaml /usr/share/argus/manifests/10-cdi-operator.yaml
+COPY rootfs/ /
+
+RUN --mount=type=bind,from=kairos-init,src=/kairos-init,dst=/kairos-init \
+    /kairos-init -s init -m generic -p k3s --provider-k3s-version "${K3S_VERSION}" --version "${VERSION}"
