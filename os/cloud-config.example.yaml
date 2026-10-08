@@ -1,0 +1,55 @@
+#cloud-config
+hostname: argus-01
+
+users:
+  - name: argus
+    groups:
+      - admin
+    ssh_authorized_keys:
+      - github:CHANGEME
+
+install:
+  device: /dev/disk/by-id/CHANGEME-os-disk
+  auto: true
+  reboot: true
+
+k3s:
+  enabled: true
+
+stages:
+  initramfs:
+    - name: br0
+      files:
+        - path: /etc/systemd/network/05-br0.netdev
+          permissions: 0644
+          content: |
+            [NetDev]
+            Name=br0
+            Kind=bridge
+
+            [Bridge]
+            VLANFiltering=yes
+            DefaultPVID=1
+        - path: /etc/systemd/network/05-uplink.network
+          permissions: 0644
+          content: |
+            [Match]
+            Name=CHANGEME-uplink
+
+            [Network]
+            Bridge=br0
+
+            [BridgeVLAN]
+            VLAN=2-4094
+        - path: /etc/systemd/network/05-br0.network
+          permissions: 0644
+          content: |
+            [Match]
+            Name=br0
+
+            [Network]
+            DHCP=yes
+  boot:
+    - name: zpool
+      commands:
+        - /usr/local/sbin/argus-zpool argus /dev/disk/by-id/CHANGEME-vm-disk

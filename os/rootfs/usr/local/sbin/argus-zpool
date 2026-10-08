@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+pool="$1"
+dev="$2"
+
+zpool list -H "$pool" >/dev/null 2>&1 && exit 0
+zpool import -N "$pool" 2>/dev/null && exit 0
+
+if blkid -p "$dev" >/dev/null 2>&1 || [ "$(lsblk -no NAME "$dev" | wc -l)" -gt 1 ]; then
+    echo "argus-zpool: refusing to create $pool, $dev is not blank" >&2
+    exit 1
+fi
+
+zpool create -m none -o ashift=12 -O compression=lz4 -O atime=off "$pool" "$dev"
