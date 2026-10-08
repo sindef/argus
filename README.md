@@ -19,8 +19,8 @@ See [docs/architecture.drawio](docs/architecture.drawio).
 
 | Layer | Component | Notes |
 |---|---|---|
-| OS | Minimal Linux, KVM, `br0`, ZFS pool | `br0` with `vlan_filtering=1`, uplink enslaved |
-| K8s | k3s server, sqlite (kine) | `--disable traefik,servicelb,metrics-server --disable-cloud-controller --disable-network-policy --flannel-backend=host-gw` |
+| OS | Kairos (Ubuntu 24.04 base, k3s provider), KVM, `br0`, ZFS pool | Immutable A/B image built from `os/Dockerfile`. `br0` with VLAN filtering, uplink enslaved |
+| K8s | k3s server, sqlite (kine) | `--disable traefik,servicelb,metrics-server,local-storage --disable-cloud-controller --disable-network-policy --flannel-backend=host-gw` |
 | Pod network | flannel (in-process) | Infra pods only |
 | VM network | Multus (thin) + bridge CNI | One NAD per VLAN on `br0`, `ipam: {}`, LAN DHCP. VMs `autoattachPodInterface: false` |
 | VM runtime | KubeVirt | `spec.infra.replicas: 1` |
@@ -46,7 +46,7 @@ See [docs/architecture.drawio](docs/architecture.drawio).
 
 | Stage | Deliverable | Done when |
 |---|---|---|
-| 0 | `deploy/node`: install script + kustomize manifests (k3s config, KubeVirt, CDI, Multus thin, ZFS LocalPV, NADs) | Fresh host boots a VM from a CDI-imported cloud image on a LAN VLAN |
+| 0 | `os/`: Kairos image with k3s config + baked manifests (KubeVirt, CDI, Multus thin, ZFS LocalPV, NADs), ISO build, example cloud-config | Fresh host boots a VM from a CDI-imported cloud image on a LAN VLAN |
 | 1 | `cmd/kubevisor`: auth, VM list/detail/power, console | Manage VM lifecycle + console from browser |
 | 2 | UI: create VM, disks, images upload/import, networks, snapshots | No kubectl needed for day-to-day |
 | 3 | Footprint pass: measure, trim requests/limits, reserved resources | Idle RAM documented on real hardware |
@@ -56,7 +56,7 @@ See [docs/architecture.drawio](docs/architecture.drawio).
 ## Layout
 
 ```
-deploy/node/     install script, k3s config, kustomize manifests
+os/              Kairos image (Dockerfile, rootfs overlay, cloud-config example)
 cmd/kubevisor/   node UI binary
 cmd/kubevisor-center/   manager (stage 4)
 internal/        shared Go packages
