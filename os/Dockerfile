@@ -13,6 +13,22 @@ RUN --mount=type=bind,from=kairos-init,src=/kairos-init,dst=/kairos-init \
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends zfsutils-linux \
+    && apt-get purge -y --auto-remove \
+        linux-firmware \
+        linux-firmware-amd-graphics \
+        linux-firmware-broadcom-wireless \
+        linux-firmware-intel-graphics \
+        linux-firmware-intel-wireless \
+        linux-firmware-marvell-prestera \
+        linux-firmware-marvell-wireless \
+        linux-firmware-mediatek \
+        linux-firmware-mellanox-spectrum \
+        linux-firmware-nvidia-graphics \
+        linux-firmware-qualcomm-graphics \
+        linux-firmware-qualcomm-misc \
+        linux-firmware-qualcomm-wireless \
+        neovim \
+        neovim-runtime \
     && rm -rf /var/lib/apt/lists/*
 
 ADD https://github.com/kubevirt/kubevirt/releases/download/${KUBEVIRT_VERSION}/kubevirt-operator.yaml /usr/share/argus/manifests/10-kubevirt-operator.yaml
