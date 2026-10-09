@@ -386,6 +386,12 @@ func (s *Server) apiMetrics(w http.ResponseWriter, r *http.Request) {
 	m := kube.MetricsSample{Time: time.Now(), VMs: vms}
 	m.CPUTotal, m.CPUIdle = cpuTimes()
 	m.MemTotal, m.MemUsed = memInfo()
+	if pools, err := s.kube.Pools(r.Context()); err == nil {
+		for _, p := range pools {
+			m.PoolUsed += p.Used
+			m.PoolFree += p.Free
+		}
+	}
 	writeJSON(w, m)
 }
 

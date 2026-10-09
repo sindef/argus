@@ -1,0 +1,36 @@
+{{define "scripts"}}<link rel="stylesheet" href="/static/vendor/uplot/uPlot.min.css"><script src="/static/vendor/uplot/uPlot.iife.min.js"></script><script src="/static/charts.js"></script>{{end}}
+{{define "content"}}
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-database"/></svg>
+  <div><h1>Storage Pools</h1><div class="crumbs">Storage / Storage Pools</div></div>
+</div>
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+<div class="stats">
+  <div class="stat">{{template "icon" "database"}}<div><div class="label">Total Pools</div><div class="value">{{len .Pools}}</div><div class="detail">One local ZFS pool per host</div></div></div>
+  <div class="stat">{{template "icon" "server"}}<div><div class="label">Total Capacity</div><div class="value">{{bytes .Total}}</div></div></div>
+  <div class="stat">{{template "icon" "gauge"}}<div><div class="label">Used Capacity</div><div class="value">{{bytes .Used}}</div><div class="detail">{{pct .Used .Total}}% of total</div></div></div>
+  <div class="stat">{{template "icon" "shield-check"}}<div><div class="label">Healthy Pools</div><div class="value">{{index .Status "Healthy"}}</div></div></div>
+  <div class="stat">{{template "icon" "triangle-alert"}}<div><div class="label">Warning Pools</div><div class="value">{{index .Status "Warning"}}</div><div class="detail">80% used or more</div></div></div>
+</div>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>Host</th><th>Cluster</th><th>Capacity</th><th>Used</th><th>Free</th><th>Provisioned</th><th>Volumes</th><th>Snapshots</th><th>Status</th></tr></thead>
+  <tbody>{{range .Pools}}{{$u := pct .Used .Total}}<tr>
+    <td>{{template "icon" "database"}}{{.Name}}</td>
+    <td>{{.Host}}</td>
+    <td>{{.Cluster}}</td>
+    <td>{{bytes .Total}}</td>
+    <td class="meter">{{bytes .Used}} ({{$u}}%)<div class="bar {{if ge $u 90}}bad{{else if ge $u 80}}warn{{end}}"><span style="width:{{min100 $u}}%"></span></div></td>
+    <td>{{bytes .Free}}</td>
+    <td title="Thin provisioned">{{bytes .Provisioned}}</td>
+    <td>{{.Volumes}}</td>
+    <td>{{.Snapshots}}</td>
+    <td><span class="dot {{.Status}}">{{.Status}}</span></td>
+  </tr>{{else}}<tr><td colspan="10" class="muted">No reachable hosts.</td></tr>{{end}}</tbody>
+</table>
+</div>
+<div class="card spaced">
+  <div class="card-head">{{template "icon" "activity"}}<h2>Capacity Utilization</h2><span class="right muted">Last 7 days</span></div>
+  <div class="chart" data-src="/metrics?range=7d" data-window="604800" data-cols="poolUsed,poolFree" data-labels="Used,Free" data-unit="B" data-height="220"></div>
+</div>
+{{end}}

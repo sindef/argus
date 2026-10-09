@@ -5,6 +5,13 @@
   <div class="nav-items" hx-get="/nav/tree?nav={{.Nav}}" hx-trigger="load, every 30s" hx-swap="innerHTML"></div>
 </div>
 <a class="nav-link{{if eq .Nav "vms"}} active{{end}}" href="/vms">{{template "icon" "monitor"}}Virtual Machines</a>
+<div class="nav-section" id="storage">
+  <button class="nav-head">{{template "icon" "database"}}Storage<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-up"/></svg></button>
+  <div class="nav-items">
+    <a class="nav-link sub{{if eq .Nav "storage"}} active{{end}}" href="/storage">Storage Pools</a>
+    <a class="nav-link sub{{if eq .Nav "volumes"}} active{{end}}" href="/volumes">Volumes</a>
+  </div>
+</div>
 {{if eq .Session.Role "admin"}}
 <div class="nav-sep"></div>
 <div class="nav-section" id="admin">

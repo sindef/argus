@@ -82,6 +82,7 @@
 {{else if eq $.Tab "hardware"}}
 <div class="grid vm-summary">
   <div class="card"><div class="card-head">{{template "icon" "hard-drive"}}<h2>Disks</h2></div>{{template "disks" .}}
+    {{if and $.CanOperate (not .Running)}}<div class="spaced">{{range .Disks}}{{if ne .Name "root"}}<button class="btn sm" hx-post="{{$p}}/disks/{{.Name}}/delete" hx-target="#flash" hx-confirm="Detach {{.Name}}? Disks created with the VM are deleted; attached volumes are kept.">{{template "icon" "x"}}Detach {{.Name}}</button> {{end}}{{end}}</div>{{end}}
   </div>
   <div class="card"><div class="card-head">{{template "icon" "network"}}<h2>Network</h2></div>{{template "nics" .}}</div>
 </div>

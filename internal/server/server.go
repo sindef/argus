@@ -51,7 +51,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s := &Server{kube: k, auth: a, banner: o.Banner, runDir: o.RunDir, releaseFile: o.ReleaseFile, caPEM: o.CAPEM, nodeName: o.NodeName, manager: o.Manager, pages: map[string]*template.Template{}, mux: http.NewServeMux()}
 	s.version = readEnv(o.ReleaseFile)["KAIROS_VERSION"]
 	s.sso.m = map[string]ssoFlow{}
-	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html"} {
+	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html"} {
 		t, err := template.New(p).Funcs(funcs).ParseFS(web.FS, "templates/layout.html", "templates/manager-nav.html", "templates/"+p)
 		if err != nil {
 			return nil, err
@@ -84,9 +84,14 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/migrate", s.require(auth.Admin, s.managerMigrate))
 		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/protect", s.require(auth.Admin, s.managerProtect))
 		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/unprotect", s.require(auth.Admin, s.managerUnprotect))
+		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/disks/{disk}/delete", s.require(auth.Operator, s.managerRemoveDisk))
 		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/snapshots/{snap}/{op}", s.require(auth.Operator, s.managerSnapshotOp))
 		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/{action}", s.require(auth.Operator, s.managerVMAction))
 		s.mux.HandleFunc("GET /events", s.require(auth.ReadOnly, s.managerEvents))
+		s.mux.HandleFunc("GET /storage", s.require(auth.ReadOnly, s.managerStorage))
+		s.mux.HandleFunc("GET /volumes", s.require(auth.ReadOnly, s.managerVolumes))
+		s.mux.HandleFunc("POST /volumes", s.require(auth.Operator, s.managerVolumeOp))
+		s.mux.HandleFunc("POST /hosts/{node}/volumes/{op}", s.require(auth.Operator, s.managerVolumeOp))
 		s.mux.HandleFunc("GET /hosts", s.require(auth.ReadOnly, s.managerHosts))
 		s.mux.HandleFunc("POST /hosts", s.require(auth.Admin, s.managerAddNode))
 		s.mux.HandleFunc("POST /hosts/{node}/group", s.require(auth.Admin, s.managerGroupNode))
@@ -99,6 +104,8 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		return s, nil
 	}
 	s.mux.HandleFunc("GET /events", s.require(auth.ReadOnly, s.eventsPage))
+	s.mux.HandleFunc("GET /volumes", s.require(auth.ReadOnly, s.volumesPage))
+	s.mux.HandleFunc("POST /volumes/{op}", s.require(auth.Operator, s.volumeAction))
 	s.mux.HandleFunc("GET /images", s.require(auth.ReadOnly, s.images))
 	s.mux.HandleFunc("POST /images", s.require(auth.Operator, s.importImage))
 	s.mux.HandleFunc("POST /images/upload", s.require(auth.Operator, s.uploadImage))
@@ -116,6 +123,9 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("GET /api/vms", s.require(auth.Admin, s.apiVMs))
 	s.mux.HandleFunc("GET /api/metrics", s.require(auth.Admin, s.apiMetrics))
 	s.mux.HandleFunc("GET /api/events", s.require(auth.Admin, s.apiEvents))
+	s.mux.HandleFunc("GET /api/storage", s.require(auth.Admin, s.apiStorage))
+	s.mux.HandleFunc("POST /api/volumes/{op}", s.require(auth.Admin, s.apiVolumeOp))
+	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/disks/{disk}/delete", s.require(auth.Admin, s.apiRemoveDisk))
 	s.mux.HandleFunc("GET /api/networks", s.require(auth.Admin, s.apiNetworks))
 	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/disks", s.require(auth.Admin, s.apiDisks))
 	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/export", s.require(auth.Admin, s.apiExport))

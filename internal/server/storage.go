@@ -1,0 +1,132 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log"
+	"net/http"
+	"net/url"
+
+	"argus/internal/auth"
+	"argus/internal/kube"
+)
+
+type volumeReq struct {
+	Name string `json:"name"`
+	Size int    `json:"size"`
+	URL  string `json:"url"`
+	VM   string `json:"vm"`
+}
+
+type storageInfo struct {
+	Pools   []kube.Pool   `json:"pools"`
+	Volumes []kube.Volume `json:"volumes"`
+}
+
+func (s *Server) storage(ctx context.Context) (storageInfo, error) {
+	pools, err := s.kube.Pools(ctx)
+	if err != nil {
+		return storageInfo{}, err
+	}
+	vols, err := s.kube.Volumes(ctx)
+	return storageInfo{Pools: pools, Volumes: vols}, err
+}
+
+func (s *Server) volumeOp(ctx context.Context, op string, q volumeReq) error {
+	switch op {
+	case "create":
+		if !validObject.MatchString(q.Name) {
+			return errors.New("invalid name")
+		}
+		if q.Size < 1 || q.Size > 4096 {
+			return errors.New("size must be 1-4096 GiB")
+		}
+		if u, err := url.Parse(q.URL); q.URL != "" && (err != nil || (u.Scheme != "http" && u.Scheme != "https")) {
+			return errors.New("URL must be http or https")
+		}
+		return s.kube.CreateVolume(ctx, q.Name, q.Size, q.URL)
+	case "delete":
+		return s.kube.DeleteVolume(ctx, q.Name)
+	case "snapshot":
+		return s.kube.SnapshotVolume(ctx, q.Name)
+	case "attach":
+		return s.kube.AttachVolume(ctx, kube.Namespace, q.VM, q.Name)
+	case "delete-snapshot":
+		return s.kube.DeleteVolumeSnapshot(ctx, q.Name)
+	}
+	return errors.New("unknown volume operation")
+}
+
+func formVolume(r *http.Request) volumeReq {
+	var size int
+	intField(r, "size", 1, 4096, &size)
+	return volumeReq{Name: r.FormValue("name"), Size: size, URL: r.FormValue("url"), VM: r.FormValue("vm")}
+}
+
+type hostVolume struct {
+	kube.Volume
+	Host string
+}
+
+func stoppedVMs(vms []kube.VM) []string {
+	var out []string
+	for _, v := range vms {
+		if !v.Running {
+			out = append(out, v.Name)
+		}
+	}
+	return out
+}
+
+func (s *Server) volumesPage(w http.ResponseWriter, r *http.Request) {
+	st, err := s.storage(r.Context())
+	vms, _ := s.kube.ListVMs(r.Context())
+	rows := make([]hostVolume, len(st.Volumes))
+	for i, v := range st.Volumes {
+		rows[i] = hostVolume{Volume: v}
+	}
+	s.render(w, r, "volumes.html", "layout", map[string]any{"Nav": "volumes", "Pools": st.Pools, "Volumes": rows, "Attachable": map[string][]string{"": stoppedVMs(vms)}, "CanOperate": session(r).Role.Can(auth.Operator), "Error": errText(err)})
+}
+
+func (s *Server) volumeAction(w http.ResponseWriter, r *http.Request) {
+	q := formVolume(r)
+	if err := s.volumeOp(r.Context(), r.PathValue("op"), q); err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: volume %s %s", session(r).User, r.PathValue("op"), q.Name)
+	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) apiStorage(w http.ResponseWriter, r *http.Request) {
+	st, err := s.storage(r.Context())
+	if err != nil {
+		apiError(w, r, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, st)
+}
+
+func (s *Server) apiVolumeOp(w http.ResponseWriter, r *http.Request) {
+	var q volumeReq
+	if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
+		apiError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.volumeOp(r.Context(), r.PathValue("op"), q); err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	log.Printf("%s: volume %s %s", session(r).User, r.PathValue("op"), q.Name)
+	writeJSON(w, map[string]string{})
+}
+
+func (s *Server) apiRemoveDisk(w http.ResponseWriter, r *http.Request) {
+	if err := s.kube.RemoveDisk(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.PathValue("disk")); err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	log.Printf("%s: remove disk %s from %s/%s", session(r).User, r.PathValue("disk"), r.PathValue("ns"), r.PathValue("name"))
+	writeJSON(w, map[string]string{})
+}

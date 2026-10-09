@@ -50,6 +50,7 @@ var funcs = template.FuncMap{
 	"min100": func(v int) int { return min(v, 100) },
 	"add":    func(a, b int) int { return a + b },
 	"sub":    func(a, b int) int { return a - b },
+	"add64":  func(a, b int64) int64 { return a + b },
 	"vmCtx": func(v vmRow, root map[string]any) map[string]any {
 		return map[string]any{"V": v, "Page": fmt.Sprintf("/nodes/%s/vms/%s/%s", v.Host, v.Namespace, v.Name), "CanOperate": root["CanOperate"], "IsAdmin": root["IsAdmin"]}
 	},
