@@ -88,7 +88,47 @@ func (c *Client) DeleteImage(ctx context.Context, name string) error {
 	if dv.GetLabels()[imageLabel] != "true" {
 		return fmt.Errorf("%s is not an image", name)
 	}
+	if err := c.imageInUse(ctx, name); err != nil {
+		return err
+	}
 	return c.dyn.Resource(dvGVR).Namespace(Namespace).Delete(ctx, name, metav1.DeleteOptions{})
+}
+
+func (c *Client) imageInUse(ctx context.Context, name string) error {
+	dvs, err := c.dyn.Resource(dvGVR).Namespace(Namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+	cloned := map[string]bool{}
+	for _, dv := range dvs.Items {
+		src, _, _ := unstructured.NestedString(dv.Object, "spec", "source", "pvc", "name")
+		phase, _, _ := unstructured.NestedString(dv.Object, "status", "phase")
+		if src == name && phase != "Succeeded" {
+			return fmt.Errorf("%s is still being cloned to %s", name, dv.GetName())
+		}
+		cloned[dv.GetName()] = phase == "Succeeded"
+	}
+	vms, err := c.dyn.Resource(vmGVR).Namespace(Namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+	for _, vm := range vms.Items {
+		vols, _, _ := unstructured.NestedSlice(vm.Object, "spec", "template", "spec", "volumes")
+		for _, v := range vols {
+			if claim, _, _ := unstructured.NestedString(v.(obj), "persistentVolumeClaim", "claimName"); claim == name {
+				return fmt.Errorf("%s is attached as a CD-ROM to %s", name, vm.GetName())
+			}
+		}
+		templates, _, _ := unstructured.NestedSlice(vm.Object, "spec", "dataVolumeTemplates")
+		for _, t := range templates {
+			src, _, _ := unstructured.NestedString(t.(obj), "spec", "source", "pvc", "name")
+			dv, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
+			if src == name && !cloned[dv] {
+				return fmt.Errorf("%s has not finished cloning %s yet", vm.GetName(), name)
+			}
+		}
+	}
+	return nil
 }
 
 func (c *Client) Upload(ctx context.Context, name string, body io.Reader) error {
