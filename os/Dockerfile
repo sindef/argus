@@ -2,7 +2,7 @@ ARG KAIROS_INIT_VERSION=v4.3.0
 
 FROM quay.io/kairos/kairos-init:${KAIROS_INIT_VERSION} AS kairos-init
 
-FROM ubuntu:26.04
+FROM ubuntu:26.04 AS build
 ARG VERSION=0.1.0
 ARG K3S_VERSION=v1.35.8+k3s1
 ARG KUBEVIRT_VERSION=v1.9.0
@@ -49,3 +49,6 @@ RUN sed -i "s/argus:VERSION/argus:${VERSION}/" /usr/share/argus/manifests/40-arg
 
 RUN --mount=type=bind,from=kairos-init,src=/kairos-init,dst=/kairos-init \
     /kairos-init -s init -m generic -p k3s --provider-k3s-version "${K3S_VERSION}" --version "${VERSION}"
+
+FROM scratch
+COPY --from=build / /

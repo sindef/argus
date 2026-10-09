@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 
+zgenhostid -f "$(cut -c1-8 /etc/machine-id)"
+
 pool="${ARGUS_POOL:-argus}"
 dev="${ARGUS_DEVICE:?ARGUS_DEVICE not set}"
 
