@@ -1,7 +1,0 @@
-name: argus
-stages:
-  boot:
-    - name: Sync argus manifests into k3s
-      commands:
-        - mkdir -p /var/lib/rancher/k3s/server/manifests
-        - cp -f /usr/share/argus/manifests/*.yaml /var/lib/rancher/k3s/server/manifests/

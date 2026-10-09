@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+pool="${ARGUS_POOL:-argus}"
+dev="${ARGUS_DEVICE:?ARGUS_DEVICE not set}"
+
+for _ in $(seq 60); do
+    [ -b "$dev" ] && break
+    sleep 1
+done
+
+if ! zpool list -H "$pool" >/dev/null 2>&1 && ! zpool import -N "$pool" 2>/dev/null; then
+    if blkid -p "$dev" >/dev/null 2>&1 || [ "$(lsblk -no NAME "$dev" | wc -l)" -gt 1 ]; then
+        echo "argus-datastore: refusing to create $pool, $dev is not blank" >&2
+        exit 1
+    fi
+    zpool create -m none -o ashift=12 -O compression=lz4 -O atime=off "$pool" "$dev"
+fi
+
+zfs list -H "$pool/rancher" >/dev/null 2>&1 || zfs create -o canmount=noauto -o mountpoint=/var/lib/rancher "$pool/rancher"
+[ "$(zfs get -H -o value mounted "$pool/rancher")" = yes ] || zfs mount -O "$pool/rancher"

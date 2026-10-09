@@ -1,0 +1,11 @@
+[Unit]
+Description=Argus datastore
+Requires=zfs-load-module.service
+After=zfs-load-module.service systemd-udev-settle.service
+ConditionPathExists=!/run/cos/live_mode
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=/etc/argus/datastore.env
+ExecStart=/usr/sbin/argus-datastore

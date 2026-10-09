@@ -8,7 +8,7 @@ Lightweight KubeVirt hypervisor. One node = one standalone single-node k3s clust
 |---|---|---|
 | CPU | 2 cores, VT-x/AMD-V | 4 cores |
 | RAM (idle, no VMs) | ~1.5GB | 4GB+ |
-| Disk | 32GB OS + ZFS pool | NVMe |
+| Disk | 10GiB OS + 10GiB ZFS datastore | NVMe |
 | Per-VM overhead | ~150-250MB (virt-launcher) | |
 
 ## Architecture
@@ -25,7 +25,7 @@ See [docs/architecture.drawio](docs/architecture.drawio).
 | VM network | Multus (thin) + bridge CNI | One NAD per VLAN on `br0`, `ipam: {}`, LAN DHCP. VMs `autoattachPodInterface: false` |
 | VM runtime | KubeVirt | `spec.infra.replicas: 1` |
 | Images | CDI | DataVolumes, upload proxy, smart clone. Scratch on ZFS SC |
-| Storage | OpenEBS ZFS LocalPV | Block mode, snapshots, clones, compression |
+| Storage | ZFS pool `argus` + OpenEBS ZFS LocalPV | `argus/rancher` holds `/var/lib/rancher` (k3s state, images). VM disks are zvols: block mode, snapshots, clones, compression |
 | UI | `argus` (Go, single binary, in-cluster) | Serves web UI, local auth, talks to kube API as own ServiceAccount |
 
 ### UI

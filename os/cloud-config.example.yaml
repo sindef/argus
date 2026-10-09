@@ -18,6 +18,12 @@ k3s:
 
 stages:
   initramfs:
+    - name: datastore
+      files:
+        - path: /etc/argus/datastore.env
+          permissions: 0644
+          content: |
+            ARGUS_DEVICE=/dev/disk/by-id/CHANGEME-vm-disk
     - name: br0
       files:
         - path: /etc/systemd/network/05-br0.netdev
@@ -49,7 +55,3 @@ stages:
 
             [Network]
             DHCP=yes
-  boot:
-    - name: zpool
-      commands:
-        - /usr/local/sbin/argus-zpool argus /dev/disk/by-id/CHANGEME-vm-disk
