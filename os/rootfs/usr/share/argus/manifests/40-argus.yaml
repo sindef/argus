@@ -45,7 +45,7 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: [secrets]
-    verbs: [get, create]
+    verbs: [get, create, update]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -83,6 +83,11 @@ spec:
         - name: argus
           image: argus:VERSION
           imagePullPolicy: Never
+          env:
+            - name: ARGUS_BANNER
+              value: /host/run/argus/console.issue
+            - name: ARGUS_ADMIN_PASSWORD_FILE
+              value: /host/etc/argus/admin-password
           ports:
             - containerPort: 8443
               hostPort: 443
@@ -97,3 +102,18 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]
+          volumeMounts:
+            - name: run
+              mountPath: /host/run/argus
+            - name: etc
+              mountPath: /host/etc/argus
+              readOnly: true
+      volumes:
+        - name: run
+          hostPath:
+            path: /run/argus
+            type: Directory
+        - name: etc
+          hostPath:
+            path: /etc/argus
+            type: DirectoryOrCreate

@@ -1,0 +1,8 @@
+[Unit]
+Description=Reload console banner when argus updates it
+
+[Path]
+PathChanged=/run/argus/console.issue
+
+[Install]
+WantedBy=multi-user.target

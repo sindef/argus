@@ -31,7 +31,7 @@ See [docs/architecture.drawio](docs/architecture.drawio).
 ### UI
 
 - Go binary, embedded static assets. Server-rendered HTML + htmx. noVNC + xterm.js for console.
-- Auth: local users (bcrypt, Secret `argus-system/argus-users`), roles admin/operator/read-only. First visit creates the admin at `/setup`; closed once a user exists. Binary uses its own scoped ServiceAccount; users never see Kubernetes. Later: OIDC, LDAP bind. SAML via OIDC broker.
+- Auth: local users (bcrypt, Secret `argus-system/argus-users`), roles admin/operator/read-only. Initial `admin` password: from `/etc/argus/admin-password` if cloud-config writes it, otherwise random and shown on the node console. Change forced on first login. Admins manage users at `/users`; new and reset users get a one-time password. Binary uses its own scoped ServiceAccount; users never see Kubernetes. Later: OIDC, LDAP bind. SAML via OIDC broker.
 - Serves HTTPS on node port 443. Self-signed cert generated on first start, kept in Secret `argus-system/argus-tls`.
 - Image baked into the OS image and imported by k3s at boot; no registry needed.
 - Console: proxy KubeVirt `vnc` / `console` subresource websockets.

@@ -1,0 +1,6 @@
+[Unit]
+Description=Reload console banner
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/agetty --reload
