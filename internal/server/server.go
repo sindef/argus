@@ -70,6 +70,8 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("GET /{$}", s.require(auth.ReadOnly, s.centerVMs))
 		s.mux.HandleFunc("GET /vms", s.require(auth.ReadOnly, s.centerTable))
 		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/migrate", s.require(auth.Admin, s.centerMigrate))
+		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/protect", s.require(auth.Admin, s.centerProtect))
+		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/unprotect", s.require(auth.Admin, s.centerUnprotect))
 		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/{action}", s.require(auth.Operator, s.centerAction))
 		s.mux.HandleFunc("GET /nodes", s.require(auth.ReadOnly, s.centerNodes))
 		s.mux.HandleFunc("POST /nodes", s.require(auth.Admin, s.centerAddNode))

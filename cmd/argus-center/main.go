@@ -35,7 +35,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	srv, err := server.New(nil, store, server.Options{Banner: func(string) {}, Center: center.New(fs)})
+	ctr := center.New(fs)
+	ctr.Start()
+	srv, err := server.New(nil, store, server.Options{Banner: func(string) {}, Center: ctr})
 	if err != nil {
 		log.Fatal(err)
 	}

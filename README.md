@@ -49,6 +49,14 @@ See [docs/architecture.drawio](docs/architecture.drawio).
 - Live migrate (VM running): KubeVirt decentralized live migration (feature gate `DecentralizedLiveMigration`, alpha). The manager's migration network setting (VLAN + subnet ≥ /24) gives each node a fixed 16-address block and creates `kubevirt/argus-migration` on `br0`; virt-handler and the sync controller join it as `migration0`. Nodes need L2 on that VLAN. KubeVirt CAs are re-exchanged before each migration. Measured ~1s ping loss for a small VM.
 - argus restarts KubeVirt's sync controller before a live migration if its lease is stale: on lease loss it stops working without exiting.
 
+HA (per VM, opt-in from the manager):
+- Protect VM → pick replica node + interval. Manager replicates on the interval: online snapshot on the owner, export, full copy into a stopped replica on the replica node. Crash-consistent, full copy each time (no incremental yet). Replica is unavailable while it is being refreshed.
+- Protected VMs run with `runStrategy: Manual`; nothing starts on its own after a reboot. Manager heartbeats every node every 10s with the VMs it owns; node argus runs owned VMs, keeps others stopped, respects user power-off.
+- Failover: owner unreachable for 2 min and the replica node can't reach it either → ownership moves to the replica node, which starts the replica. The old node's copy stays off when it returns; replication then runs the other way.
+- Fencing: host timer `argus-fence` kills protected VMs' qemu if the node has had no heartbeat for 60s and can reach no peer. Independent of Kubernetes, which is not reliably reachable from pods while isolated.
+- Manager down: VMs keep running (peers reachable, no fencing); no failover until it returns.
+- VM names must be unique across nodes.
+
 ```
 make center
 docker run -d -p 443:8443 -e ARGUS_DATA=/home/nonroot/data -v argus-center:/home/nonroot argus-center:0.1.0
@@ -68,7 +76,7 @@ Add a node: on the node's Host page create a token and copy the CA fingerprint; 
 | 4 | Host page: OS update from a registry image, reboot, shutdown | Node updates itself from the UI, data intact |
 | 5 | `cmd/argus-center`: node registry, aggregated view, cold migrate, image library | Move VM between two nodes from UI |
 | 6 | Live migration between nodes (KubeVirt decentralized migration, migration VLAN) | Running VM moves between nodes |
-| 7 | HA restart (backup/replication based) | Open |
+| 7 | HA restart: replication, heartbeats, failover, host fencing | VM restarts on another node after host failure |
 
 ## Layout
 

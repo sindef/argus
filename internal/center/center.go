@@ -42,8 +42,12 @@ type NodeInfo struct {
 type Center struct {
 	store auth.Secrets
 
-	mu   sync.Mutex
-	jobs []*Job
+	mu       sync.Mutex
+	jobs     []*Job
+	lastSeen map[string]time.Time
+	syncing  map[string]bool
+	started  time.Time
+	haMu     sync.Mutex
 }
 
 type Job struct {
@@ -57,7 +61,7 @@ type Job struct {
 }
 
 func New(store auth.Secrets) *Center {
-	return &Center{store: store}
+	return &Center{store: store, lastSeen: map[string]time.Time{}, syncing: map[string]bool{}, started: time.Now()}
 }
 
 func (c *Center) Nodes(ctx context.Context) ([]Node, error) {

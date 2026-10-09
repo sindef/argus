@@ -51,8 +51,17 @@ func (s *Server) gather(ctx context.Context) ([]nodeVMs, error) {
 
 func (s *Server) centerData(r *http.Request) map[string]any {
 	nodes, err := s.gather(r.Context())
+	ps, perr := s.center.Protected(r.Context())
+	if err == nil {
+		err = perr
+	}
+	protected := map[string]center.Protected{}
+	for _, p := range ps {
+		protected[p.VM] = p
+	}
 	return map[string]any{
 		"Nodes":      nodes,
+		"Protected":  protected,
 		"Jobs":       s.center.Jobs(),
 		"CanOperate": session(r).Role.Can(auth.Operator),
 		"IsAdmin":    session(r).Role.Can(auth.Admin),
@@ -186,4 +195,27 @@ func (s *Server) centerMigrationSettings(w http.ResponseWriter, r *http.Request)
 	}
 	log.Printf("%s: migration network vlan %d %s", session(r).User, vlan, r.FormValue("subnet"))
 	http.Redirect(w, r, "/nodes", http.StatusSeeOther)
+}
+
+func (s *Server) centerProtect(w http.ResponseWriter, r *http.Request) {
+	var interval int
+	err := intField(r, "interval", 5, 1440, &interval)
+	if err == nil {
+		err = s.center.Protect(r.Context(), r.PathValue("node"), r.PathValue("name"), r.FormValue("replica"), interval)
+	}
+	if err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: protect %s on %s, replica on %s", session(r).User, r.PathValue("name"), r.PathValue("node"), r.FormValue("replica"))
+	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) centerUnprotect(w http.ResponseWriter, r *http.Request) {
+	if err := s.center.Unprotect(r.Context(), r.PathValue("name")); err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: unprotect %s", session(r).User, r.PathValue("name"))
+	w.Header().Set("HX-Refresh", "true")
 }
