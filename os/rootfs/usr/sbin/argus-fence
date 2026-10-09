@@ -1,0 +1,21 @@
+#!/bin/sh
+set -u
+
+f=/run/argus/ha-fence
+[ -f "$f" ] || exit 0
+{ read -r last; read -r peers; read -r vms; } < "$f" || exit 0
+[ -n "${vms:-}" ] || exit 0
+[ $(( $(date +%s) - last )) -gt 60 ] || exit 0
+
+for p in $peers; do
+    curl -sk --max-time 3 -o /dev/null "$p/ca.pem" && exit 0
+done
+
+for vm in $vms; do
+    case "$vm" in
+        *[!a-z0-9-]*) continue ;;
+    esac
+    if pkill -9 -f "guest=default_${vm},"; then
+        logger -t argus-fence "isolated from peers and manager: killed $vm"
+    fi
+done

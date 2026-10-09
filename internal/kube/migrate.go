@@ -16,7 +16,7 @@ import (
 
 const exportLabel = "argus.io/export"
 
-var vmExportGVR = schema.GroupVersionResource{Group: "export.kubevirt.io", Version: "v1beta1", Resource: "virtualmachineexports"}
+var vmExportGVR = schema.GroupVersionResource{Group: "export.kubevirt.io", Version: "v1", Resource: "virtualmachineexports"}
 
 type Export struct {
 	Spec  obj          `json:"spec"`
@@ -49,6 +49,10 @@ func (c *Client) ExportVM(ctx context.Context, ns, name, baseURL, caPEM string) 
 	if err := migratable(vm); err != nil {
 		return Export{}, err
 	}
+	return c.export(ctx, ns, name, baseURL, caPEM, vm, obj{"apiGroup": "kubevirt.io", "kind": "VirtualMachine", "name": name})
+}
+
+func (c *Client) export(ctx context.Context, ns, name, baseURL, caPEM string, vm *unstructured.Unstructured, source obj) (Export, error) {
 	b := make([]byte, 24)
 	rand.Read(b)
 	token := hex.EncodeToString(b)
@@ -57,11 +61,11 @@ func (c *Client) ExportVM(ctx context.Context, ns, name, baseURL, caPEM string) 
 		return Export{}, err
 	}
 	ve := &unstructured.Unstructured{Object: obj{
-		"apiVersion": "export.kubevirt.io/v1beta1",
+		"apiVersion": "export.kubevirt.io/v1",
 		"kind":       "VirtualMachineExport",
 		"metadata":   obj{"name": exp, "labels": obj{exportLabel: "true"}},
 		"spec": obj{
-			"source":         obj{"apiGroup": "kubevirt.io", "kind": "VirtualMachine", "name": name},
+			"source":         source,
 			"tokenSecretRef": exp,
 			"ttlDuration":    "4h",
 		},
@@ -155,10 +159,10 @@ func (c *Client) DeleteExport(ctx context.Context, ns, name string) error {
 		return err
 	}
 	err = c.dyn.Resource(secGVR).Namespace(ns).Delete(ctx, exp, metav1.DeleteOptions{})
-	if apierrors.IsNotFound(err) {
-		return nil
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
 	}
-	return err
+	return c.deleteSnapshot(ctx, ns, name)
 }
 
 func importName(vm string) string { return "argus-import-" + vm }

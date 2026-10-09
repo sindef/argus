@@ -24,6 +24,7 @@ type Server struct {
 	caPEM       []byte
 	nodeName    string
 	center      *center.Center
+	ha          haState
 	pages       map[string]*template.Template
 	mux         *http.ServeMux
 }
@@ -99,6 +100,10 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/imported", s.require(auth.Admin, s.apiImported))
 	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/{action}", s.require(auth.Admin, s.apiAction))
 	s.mux.HandleFunc("POST /api/import", s.require(auth.Admin, s.apiImport))
+	s.mux.HandleFunc("POST /api/heartbeat", s.require(auth.Admin, s.apiHeartbeat))
+	s.mux.HandleFunc("GET /api/probe", s.require(auth.Admin, s.apiProbe))
+	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/ha", s.require(auth.Admin, s.apiSetHA))
+	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/snapshot-export", s.require(auth.Admin, s.apiSnapshotExport))
 	s.mux.HandleFunc("GET /api/kubevirt-ca", s.require(auth.Admin, s.apiKubeVirtCA))
 	s.mux.HandleFunc("POST /api/kubevirt-external-ca", s.require(auth.Admin, s.apiExternalCA))
 	s.mux.HandleFunc("POST /api/migration-network", s.require(auth.Admin, s.apiMigrationNetwork))
@@ -121,6 +126,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/{action}", s.require(auth.Operator, s.action))
 	s.mux.HandleFunc("GET /vms/{ns}/{name}/console", s.require(auth.Operator, s.console))
 	s.mux.HandleFunc("GET /ws/{ns}/{name}/{kind}", s.require(auth.Operator, s.consoleWS))
+	go s.haLoop()
 	return s, nil
 }
 

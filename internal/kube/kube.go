@@ -17,6 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -178,6 +179,26 @@ func ValidAction(action string) bool {
 }
 
 func (c *Client) Action(ctx context.Context, ns, name, action string) error {
+	if err := c.Power(ctx, ns, name, action); err != nil {
+		return err
+	}
+	if action == "restart" {
+		return nil
+	}
+	vm, err := c.dyn.Resource(vmGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil || vm.GetLabels()[haLabel] != "true" {
+		return err
+	}
+	value := "null"
+	if action == "stop" {
+		value = `"true"`
+	}
+	patch := []byte(`{"metadata":{"annotations":{"` + haStoppedAnnotation + `":` + value + `}}}`)
+	_, err = c.dyn.Resource(vmGVR).Namespace(ns).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	return err
+}
+
+func (c *Client) Power(ctx context.Context, ns, name, action string) error {
 	if !ValidAction(action) {
 		return fmt.Errorf("unknown action %q", action)
 	}
@@ -328,5 +349,11 @@ func (c *Client) RunningVMs(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return len(list.Items), nil
+	n := 0
+	for _, i := range list.Items {
+		if phase, _, _ := unstructured.NestedString(i.Object, "status", "phase"); phase != "Failed" && phase != "Succeeded" {
+			n++
+		}
+	}
+	return n, nil
 }

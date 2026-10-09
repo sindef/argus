@@ -16,7 +16,7 @@ metadata:
 rules:
   - apiGroups: [kubevirt.io]
     resources: [virtualmachines]
-    verbs: [get, list, watch, create, update, delete]
+    verbs: [get, list, watch, create, update, patch, delete]
   - apiGroups: [kubevirt.io]
     resources: [virtualmachineinstances]
     verbs: [get, list, watch]

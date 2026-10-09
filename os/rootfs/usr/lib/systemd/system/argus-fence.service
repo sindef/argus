@@ -1,0 +1,6 @@
+[Unit]
+Description=Fence protected VMs when isolated
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/argus-fence
