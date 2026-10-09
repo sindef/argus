@@ -1,0 +1,10 @@
+{{define "content"}}
+<form method="post" action="/setup" class="card narrow">
+  <h1>Create admin</h1>
+  {{with .Error}}<p class="error">{{.}}</p>{{end}}
+  <label>Username <input name="username" value="admin" autocomplete="username" required></label>
+  <label>Password <input name="password" type="password" minlength="12" autocomplete="new-password" required autofocus></label>
+  <label>Confirm <input name="confirm" type="password" minlength="12" autocomplete="new-password" required></label>
+  <button type="submit">Create</button>
+</form>
+{{end}}

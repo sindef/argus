@@ -1,0 +1,27 @@
+{{define "content"}}
+<h1>Virtual machines</h1>
+<div id="vms" hx-get="/vms" hx-trigger="every 5s">{{template "table" .}}</div>
+{{end}}
+
+{{define "table"}}
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+{{if .VMs}}
+<table>
+  <thead><tr><th>Name</th><th>Namespace</th><th>Status</th><th>CPU</th><th>Memory</th><th>IP</th></tr></thead>
+  <tbody>
+  {{range .VMs}}
+  <tr>
+    <td><a href="/vms/{{.Namespace}}/{{.Name}}">{{.Name}}</a></td>
+    <td>{{.Namespace}}</td>
+    <td><span class="status {{.Status}}">{{.Status}}</span></td>
+    <td>{{.Cores}}</td>
+    <td>{{.Memory}}</td>
+    <td>{{range .NICs}}{{range .IPs}}{{.}} {{end}}{{end}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{else if not .Error}}
+<p class="muted">No virtual machines.</p>
+{{end}}
+{{end}}

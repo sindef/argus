@@ -1,0 +1,42 @@
+{{define "content"}}
+<p><a href="/">Virtual machines</a> / {{.VM.Namespace}}</p>
+<p id="flash" class="error"></p>
+<div id="detail" hx-get="/vms/{{.VM.Namespace}}/{{.VM.Name}}" hx-trigger="every 5s">{{template "detail" .}}</div>
+{{end}}
+
+{{define "detail"}}
+{{with .VM}}
+<div class="title">
+  <h1>{{.Name}}</h1>
+  <span class="status {{.Status}}">{{.Status}}</span>
+  {{if $.CanOperate}}
+  <div class="actions" hx-target="#flash">
+    {{if .Running}}
+    <a class="button" href="/vms/{{.Namespace}}/{{.Name}}/console">Console</a>
+    <button hx-post="/vms/{{.Namespace}}/{{.Name}}/restart" hx-confirm="Restart {{.Name}}?">Restart</button>
+    <button hx-post="/vms/{{.Namespace}}/{{.Name}}/stop" hx-confirm="Power off {{.Name}}?">Power off</button>
+    {{else}}
+    <button hx-post="/vms/{{.Namespace}}/{{.Name}}/start">Power on</button>
+    {{end}}
+  </div>
+  {{end}}
+</div>
+<dl>
+  <dt>CPU</dt><dd>{{.Cores}}</dd>
+  <dt>Memory</dt><dd>{{.Memory}}</dd>
+  {{with .Node}}<dt>Host</dt><dd>{{.}}</dd>{{end}}
+</dl>
+
+<h2>Disks</h2>
+<table>
+  <thead><tr><th>Name</th><th>Bus</th><th>Source</th></tr></thead>
+  <tbody>{{range .Disks}}<tr><td>{{.Name}}</td><td>{{.Bus}}</td><td>{{.Source}}</td></tr>{{end}}</tbody>
+</table>
+
+<h2>Network</h2>
+<table>
+  <thead><tr><th>Name</th><th>Network</th><th>MAC</th><th>IP</th></tr></thead>
+  <tbody>{{range .NICs}}<tr><td>{{.Name}}</td><td>{{.Network}}</td><td>{{.MAC}}</td><td>{{range .IPs}}{{.}} {{end}}</td></tr>{{end}}</tbody>
+</table>
+{{end}}
+{{end}}

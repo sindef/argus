@@ -1,0 +1,22 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>argus</title>
+<link rel="stylesheet" href="/static/argus.css">
+<script src="/static/vendor/htmx/htmx.min.js"></script>
+</head>
+<body>
+<header>
+  <a class="brand" href="/">argus</a>
+  {{with .Session}}{{if .User}}
+  <form method="post" action="/logout" class="user">
+    <span>{{.User}}</span>
+    <button type="submit" class="link">Log out</button>
+  </form>
+  {{end}}{{end}}
+</header>
+<main>{{template "content" .}}</main>
+</body>
+</html>{{end}}

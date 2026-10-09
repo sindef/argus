@@ -1,0 +1,37 @@
+{{define "content"}}
+<div class="title">
+  <p><a href="/">Virtual machines</a> / <a href="/vms/{{.Namespace}}/{{.Name}}">{{.Name}}</a></p>
+  <nav class="tabs">
+    <a href="?type=vnc"{{if eq .Kind "vnc"}} class="active"{{end}}>Display</a>
+    <a href="?type=serial"{{if eq .Kind "console"}} class="active"{{end}}>Serial</a>
+  </nav>
+</div>
+<p id="state" class="muted">Connecting…</p>
+<div id="screen" class="screen"></div>
+{{if eq .Kind "vnc"}}
+<script type="module">
+import RFB from "/static/vendor/novnc/core/rfb.js";
+const state = document.getElementById("state");
+const url = "wss://" + location.host + "/ws/" + {{.Namespace}} + "/" + {{.Name}} + "/vnc";
+const rfb = new RFB(document.getElementById("screen"), url);
+rfb.scaleViewport = true;
+rfb.addEventListener("connect", () => state.textContent = "");
+rfb.addEventListener("disconnect", () => state.textContent = "Disconnected");
+</script>
+{{else}}
+<link rel="stylesheet" href="/static/vendor/xterm/xterm.css">
+<script type="module">
+import { Terminal } from "/static/vendor/xterm/xterm.mjs";
+const state = document.getElementById("state");
+const term = new Terminal();
+term.open(document.getElementById("screen"));
+const ws = new WebSocket("wss://" + location.host + "/ws/" + {{.Namespace}} + "/" + {{.Name}} + "/console");
+ws.binaryType = "arraybuffer";
+const enc = new TextEncoder();
+ws.onopen = () => { state.textContent = ""; term.focus(); ws.send(enc.encode("\r")); };
+ws.onclose = () => state.textContent = "Disconnected";
+ws.onmessage = (e) => term.write(new Uint8Array(e.data));
+term.onData((d) => ws.send(enc.encode(d)));
+</script>
+{{end}}
+{{end}}
