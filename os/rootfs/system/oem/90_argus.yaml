@@ -1,0 +1,9 @@
+name: argus
+stages:
+  boot:
+    - name: Unattended install when install.auto is set
+      if: '[ -f /run/cos/live_mode ] && [ "$(kairos-agent config get install.auto 2>/dev/null)" = "true" ]'
+      only_service_manager: systemd
+      commands:
+        - systemctl stop --no-block kairos-interactive
+        - systemctl start --no-block kairos-installer
