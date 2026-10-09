@@ -68,9 +68,8 @@ func (c *Client) CreateImage(ctx context.Context, name, size, url string) error 
 		"apiVersion": "cdi.kubevirt.io/v1beta1",
 		"kind":       "DataVolume",
 		"metadata": map[string]interface{}{
-			"name":        name,
-			"labels":      map[string]interface{}{imageLabel: "true"},
-			"annotations": map[string]interface{}{"cdi.kubevirt.io/storage.bind.immediate.requested": "true"},
+			"name":   name,
+			"labels": map[string]interface{}{imageLabel: "true"},
 		},
 		"spec": map[string]interface{}{
 			"source":  source,

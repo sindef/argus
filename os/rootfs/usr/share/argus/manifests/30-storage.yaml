@@ -6,7 +6,7 @@ metadata:
     storageclass.kubernetes.io/is-default-class: "true"
 provisioner: zfs.csi.openebs.io
 allowVolumeExpansion: true
-volumeBindingMode: WaitForFirstConsumer
+volumeBindingMode: Immediate
 parameters:
   poolname: argus
   fstype: ext4
