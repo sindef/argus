@@ -7,7 +7,7 @@ Lightweight KubeVirt hypervisor. One node = one standalone single-node k3s clust
 | | Floor | Sane |
 |---|---|---|
 | CPU | 2 cores, VT-x/AMD-V | 4 cores |
-| RAM (idle, no VMs) | ~2.1GB used, incl. 256MiB ZFS ARC (measured, 4GiB node) | 8GB+ |
+| RAM (idle, no VMs) | 2.07GiB MemTotal−MemAvailable (fresh 1.71–2.16, post-activity 2.05–2.09; gate ≤2.2GiB; 4GiB node, ARC ≤256MiB) | 8GB+ |
 | Disk | 10GiB OS + 10GiB ZFS datastore | NVMe |
 | Per-VM overhead | ~150-250MB (virt-launcher) | |
 
