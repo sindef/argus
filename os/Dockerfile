@@ -43,6 +43,8 @@ RUN cd /usr/share/argus/manifests \
     && grep -q '^            memory: 256Mi$' 10-kubevirt-operator.yaml \
     && grep -q '^            memory: 80Mi$' 10-cdi-operator.yaml
 COPY rootfs/ /
+COPY images/ /usr/share/argus/images/
+RUN sed -i "s/argus:VERSION/argus:${VERSION}/" /usr/share/argus/manifests/40-argus.yaml
 
 RUN --mount=type=bind,from=kairos-init,src=/kairos-init,dst=/kairos-init \
     /kairos-init -s init -m generic -p k3s --provider-k3s-version "${K3S_VERSION}" --version "${VERSION}"
