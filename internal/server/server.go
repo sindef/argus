@@ -30,7 +30,7 @@ type reqAuth struct {
 
 func New(k *kube.Client, a *auth.Store, banner func(string)) (*Server, error) {
 	s := &Server{kube: k, auth: a, banner: banner, pages: map[string]*template.Template{}, mux: http.NewServeMux()}
-	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "vm.html", "console.html"} {
+	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "vm.html", "console.html", "images.html"} {
 		t, err := template.ParseFS(web.FS, "templates/layout.html", "templates/"+p)
 		if err != nil {
 			return nil, err
@@ -49,6 +49,10 @@ func New(k *kube.Client, a *auth.Store, banner func(string)) (*Server, error) {
 	s.mux.HandleFunc("POST /users/{name}/role", s.require(auth.Admin, s.setRole))
 	s.mux.HandleFunc("POST /users/{name}/reset", s.require(auth.Admin, s.resetPassword))
 	s.mux.HandleFunc("POST /users/{name}/delete", s.require(auth.Admin, s.deleteUser))
+	s.mux.HandleFunc("GET /images", s.require(auth.ReadOnly, s.images))
+	s.mux.HandleFunc("POST /images", s.require(auth.Operator, s.importImage))
+	s.mux.HandleFunc("POST /images/upload", s.require(auth.Operator, s.uploadImage))
+	s.mux.HandleFunc("POST /images/{name}/delete", s.require(auth.Operator, s.deleteImage))
 	s.mux.HandleFunc("GET /{$}", s.require(auth.ReadOnly, s.vms))
 	s.mux.HandleFunc("GET /vms", s.require(auth.ReadOnly, s.vmTable))
 	s.mux.HandleFunc("GET /vms/{ns}/{name}", s.require(auth.ReadOnly, s.vm))
@@ -109,6 +113,10 @@ func redirect(w http.ResponseWriter, r *http.Request, to string) {
 		return
 	}
 	http.Redirect(w, r, to, http.StatusSeeOther)
+}
+
+func flash(w http.ResponseWriter, err error) {
+	w.Write([]byte(template.HTMLEscapeString(err.Error())))
 }
 
 func errText(err error) string {

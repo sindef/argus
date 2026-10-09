@@ -1,7 +1,6 @@
 package server
 
 import (
-	"html/template"
 	"log"
 	"net/http"
 
@@ -42,7 +41,7 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.kube.Action(r.Context(), ns, name, act); err != nil {
 		log.Printf("%s: %v", session(r).User, err)
-		w.Write([]byte(template.HTMLEscapeString(err.Error())))
+		flash(w, err)
 		return
 	}
 	log.Printf("%s: %s %s/%s", session(r).User, act, ns, name)

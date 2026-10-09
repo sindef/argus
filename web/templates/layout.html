@@ -13,6 +13,7 @@
     <a class="brand" href="/">argus</a>
     {{with .Session}}{{if and .User (not .MustChange)}}
     <a href="/">Virtual machines</a>
+    <a href="/images">Images</a>
     {{if eq .Role "admin"}}<a href="/users">Users</a>{{end}}
     {{end}}{{end}}
   </nav>

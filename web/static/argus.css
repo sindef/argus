@@ -61,7 +61,14 @@ button.link { background: none; border: none; color: var(--accent); padding: 0; 
 header nav { display: flex; gap: 20px; align-items: center; }
 .notice { padding: 8px 12px; border: 1px solid var(--accent); border-radius: 4px; margin: 0 0 12px; font-family: ui-monospace, monospace; }
 .inline { display: flex; gap: 8px; align-items: center; }
-.row-actions { display: flex; gap: 16px; justify-content: flex-end; }
-.row-actions form, td form { margin: 0; }
+.row-actions { text-align: right; white-space: nowrap; }
+.row-actions form { display: inline; margin-left: 16px; }
+td > form { margin: 0; }
 .danger { color: var(--bad) !important; }
 select { padding: 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--fg); font: inherit; }
+.grow { flex: 1; min-width: 0; }
+.num { width: 80px; }
+.clip { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status.Succeeded { color: var(--ok); }
+.status.ImportInProgress, .status.UploadReady, .status.UploadScheduled, .status.ImportScheduled, .status.Pending, .status.PendingPopulation, .status.CloneInProgress { color: var(--warn); }
+.status.Failed { color: var(--bad); }

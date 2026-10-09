@@ -1,0 +1,51 @@
+{{define "content"}}
+<h1>Images</h1>
+<p id="flash" class="error"></p>
+<div hx-get="/images" hx-trigger="every 5s">{{template "table" .}}</div>
+{{if .CanOperate}}
+<h2>Import from URL</h2>
+<form hx-post="/images" hx-target="#flash" class="inline">
+  <input name="name" placeholder="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required>
+  <input name="url" type="url" placeholder="https://…/image.qcow2" required class="grow">
+  <input name="size" type="number" min="1" max="4096" value="10" required class="num"> GiB
+  <button type="submit">Import</button>
+</form>
+<h2>Upload</h2>
+<form hx-post="/images/upload" hx-target="#flash" hx-encoding="multipart/form-data" class="inline">
+  <input name="name" placeholder="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required>
+  <input name="size" type="number" min="1" max="4096" value="10" required class="num"> GiB
+  <input name="file" type="file" required class="grow">
+  <button type="submit">Upload</button>
+  <progress id="upload" value="0" max="100" hidden></progress>
+</form>
+<script>
+htmx.on("htmx:xhr:progress", (e) => {
+  const p = document.getElementById("upload");
+  p.hidden = false;
+  p.value = e.detail.loaded / e.detail.total * 100;
+});
+</script>
+{{end}}
+{{end}}
+
+{{define "table"}}
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+{{if .Images}}
+<table>
+  <thead><tr><th>Name</th><th>Size</th><th>Status</th><th>Source</th><th></th></tr></thead>
+  <tbody>
+  {{range .Images}}
+  <tr>
+    <td>{{.Name}}</td>
+    <td>{{.Size}}</td>
+    <td><span class="status {{.Phase}}">{{.Phase}}</span>{{if and .Progress (ne .Phase "Succeeded")}} {{.Progress}}{{end}}</td>
+    <td class="clip">{{.Source}}</td>
+    <td class="row-actions">{{if $.CanOperate}}<button class="link danger" hx-post="/images/{{.Name}}/delete" hx-target="#flash" hx-confirm="Delete image {{.Name}}?">Delete</button>{{end}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{else if not .Error}}
+<p class="muted">No images.</p>
+{{end}}
+{{end}}
