@@ -1,0 +1,50 @@
+{{define "content"}}
+<h1>Virtual machines</h1>
+<p id="flash" class="error"></p>
+<div hx-get="/vms" hx-trigger="every 5s">{{template "table" .}}</div>
+{{end}}
+
+{{define "table"}}
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+{{if .Jobs}}
+<h2>Migrations</h2>
+<table>
+  <thead><tr><th>VM</th><th>From</th><th>To</th><th>Started</th><th>Status</th></tr></thead>
+  <tbody>{{range .Jobs}}<tr><td>{{.VM}}</td><td>{{.From}}</td><td>{{.To}}</td><td>{{.Started.Local.Format "15:04"}}</td>
+    <td><span class="status {{if .Failed}}Failed{{else if .Done}}Succeeded{{else}}Pending{{end}}">{{.Status}}</span></td></tr>{{end}}</tbody>
+</table>
+<h2>All nodes</h2>
+{{end}}
+<table>
+  <thead><tr><th>Name</th><th>Node</th><th>Status</th><th>CPU</th><th>Memory</th><th></th></tr></thead>
+  <tbody>
+  {{range $n := .Nodes}}
+  {{with .Error}}<tr><td colspan="6" class="error">{{$n.Node.Name}}: {{.}}</td></tr>{{end}}
+  {{range .VMs}}
+  <tr>
+    <td><a href="{{$n.Node.URL}}/vms/{{.Namespace}}/{{.Name}}" target="_blank">{{.Name}}</a></td>
+    <td>{{$n.Node.Name}}</td>
+    <td><span class="status {{.Status}}">{{.Status}}</span></td>
+    <td>{{.Cores}}</td>
+    <td>{{.Memory}}</td>
+    <td class="row-actions">
+      {{if $.CanOperate}}
+      {{if .Running}}
+      <button class="link" hx-post="/nodes/{{$n.Node.Name}}/vms/{{.Namespace}}/{{.Name}}/stop" hx-target="#flash" hx-confirm="Power off {{.Name}}?">Power off</button>
+      {{else}}
+      <button class="link" hx-post="/nodes/{{$n.Node.Name}}/vms/{{.Namespace}}/{{.Name}}/start" hx-target="#flash">Power on</button>
+      {{if $.IsAdmin}}
+      <form hx-post="/nodes/{{$n.Node.Name}}/vms/{{.Namespace}}/{{.Name}}/migrate" hx-target="#flash" hx-confirm="Move {{.Name}}?">
+        <select name="to">{{range $.Nodes}}{{if ne .Node.Name $n.Node.Name}}<option value="{{.Node.Name}}">{{.Node.Name}}</option>{{end}}{{end}}</select>
+        <button type="submit" class="link">Move</button>
+      </form>
+      {{end}}
+      {{end}}
+      {{end}}
+    </td>
+  </tr>
+  {{end}}
+  {{end}}
+  </tbody>
+</table>
+{{end}}

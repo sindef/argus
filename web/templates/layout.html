@@ -11,12 +11,17 @@
 <header>
   <nav>
     <a class="brand" href="/">argus</a>
-    {{with .Session}}{{if and .User (not .MustChange)}}
+    {{if and .Session.User (not .Session.MustChange)}}
     <a href="/">Virtual machines</a>
+    {{if .Center}}
+    <a href="/nodes">Nodes</a>
+    {{if eq .Session.Role "admin"}}<a href="/users">Users</a>{{end}}
+    {{else}}
     <a href="/images">Images</a>
     <a href="/networks">Networks</a>
-    {{if eq .Role "admin"}}<a href="/users">Users</a><a href="/host">Host</a>{{end}}
-    {{end}}{{end}}
+    {{if eq .Session.Role "admin"}}<a href="/users">Users</a><a href="/host">Host</a>{{end}}
+    {{end}}
+    {{end}}
   </nav>
   {{with .Session}}{{if .User}}
   <form method="post" action="/logout" class="user">

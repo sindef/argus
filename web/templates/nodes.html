@@ -1,0 +1,27 @@
+{{define "content"}}
+<h1>Nodes</h1>
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+<table>
+  <thead><tr><th>Name</th><th>Address</th><th>Version</th><th>Running VMs</th><th>Status</th><th></th></tr></thead>
+  <tbody>{{range .Nodes}}<tr>
+    <td>{{.Node.Name}}</td>
+    <td><a href="{{.Node.URL}}" target="_blank">{{.Node.URL}}</a></td>
+    <td>{{.Info.Version}}</td>
+    <td>{{if not .Error}}{{.Info.RunningVMs}}{{end}}</td>
+    <td>{{if .Error}}<span class="status Failed" title="{{.Error}}">Unreachable</span>{{else}}<span class="status Running">Connected</span>{{end}}</td>
+    <td class="row-actions">{{if $.IsAdmin}}<form method="post" action="/nodes/{{.Node.Name}}/delete" onsubmit="return confirm('Remove {{.Node.Name}}?')"><button type="submit" class="link danger">Remove</button></form>{{end}}</td>
+  </tr>{{end}}</tbody>
+</table>
+{{if .IsAdmin}}
+<h2>Add node</h2>
+<form method="post" action="/nodes" class="card form">
+  <div class="row">
+    <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
+    <label>Address <input name="url" type="url" placeholder="https://192.168.1.10" required></label>
+  </div>
+  <label>API token <input name="token" required autocomplete="off"></label>
+  <label>CA fingerprint <input name="fingerprint" required autocomplete="off"></label>
+  <button type="submit">Add</button>
+</form>
+{{end}}
+{{end}}

@@ -1,0 +1,325 @@
+package center
+
+import (
+	"bytes"
+	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"argus/internal/auth"
+	"argus/internal/kube"
+	"argus/internal/tlscert"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+)
+
+const nodesKey = "argus-nodes"
+
+type Node struct {
+	Name  string `json:"name"`
+	URL   string `json:"url"`
+	Token string `json:"token"`
+	CA    string `json:"ca"`
+}
+
+type NodeInfo struct {
+	Name          string `json:"name"`
+	Version       string `json:"version"`
+	CAFingerprint string `json:"caFingerprint"`
+	RunningVMs    int    `json:"runningVMs"`
+}
+
+type Center struct {
+	store auth.Secrets
+
+	mu   sync.Mutex
+	jobs []*Job
+}
+
+type Job struct {
+	VM       string
+	From, To string
+	Started  time.Time
+	Status   string
+	Done     bool
+	Failed   bool
+}
+
+func New(store auth.Secrets) *Center {
+	return &Center{store: store}
+}
+
+func (c *Center) Nodes(ctx context.Context) ([]Node, error) {
+	ns, _, err := c.load(ctx)
+	return ns, err
+}
+
+func (c *Center) Node(ctx context.Context, name string) (Node, error) {
+	ns, _, err := c.load(ctx)
+	if err != nil {
+		return Node{}, err
+	}
+	for _, n := range ns {
+		if n.Name == name {
+			return n, nil
+		}
+	}
+	return Node{}, fmt.Errorf("node %s not found", name)
+}
+
+func (c *Center) load(ctx context.Context) ([]Node, string, error) {
+	data, rv, err := c.store.Get(ctx, nodesKey)
+	if apierrors.IsNotFound(err) {
+		return nil, "", nil
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	var ns []Node
+	return ns, rv, json.Unmarshal(data["nodes"], &ns)
+}
+
+func (c *Center) save(ctx context.Context, ns []Node, rv string) error {
+	sort.Slice(ns, func(i, j int) bool { return ns[i].Name < ns[j].Name })
+	b, err := json.Marshal(ns)
+	if err != nil {
+		return err
+	}
+	data := map[string][]byte{"nodes": b}
+	if rv == "" {
+		return c.store.Create(ctx, nodesKey, "Opaque", data)
+	}
+	return c.store.Update(ctx, nodesKey, rv, data)
+}
+
+func (c *Center) AddNode(ctx context.Context, name, url, token, fingerprint string) error {
+	url = strings.TrimRight(url, "/")
+	ca, err := fetchCA(ctx, url)
+	if err != nil {
+		return err
+	}
+	if got := tlscert.Fingerprint(ca); !strings.EqualFold(got, strings.ReplaceAll(strings.TrimSpace(fingerprint), ":", "")) {
+		return fmt.Errorf("CA fingerprint mismatch: node presents %s", got)
+	}
+	n := Node{Name: name, URL: url, Token: token, CA: string(ca)}
+	if _, err := n.Info(ctx); err != nil {
+		return err
+	}
+	ns, rv, err := c.load(ctx)
+	if err != nil {
+		return err
+	}
+	for _, x := range ns {
+		if x.Name == name || x.URL == url {
+			return errors.New("node already registered")
+		}
+	}
+	return c.save(ctx, append(ns, n), rv)
+}
+
+func (c *Center) RemoveNode(ctx context.Context, name string) error {
+	ns, rv, err := c.load(ctx)
+	if err != nil {
+		return err
+	}
+	out := ns[:0]
+	for _, n := range ns {
+		if n.Name != name {
+			out = append(out, n)
+		}
+	}
+	return c.save(ctx, out, rv)
+}
+
+func fetchCA(ctx context.Context, url string) ([]byte, error) {
+	hc := &http.Client{Timeout: 15 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/ca.pem", nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := hc.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetch CA: %s", resp.Status)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+}
+
+func (n Node) client() *http.Client {
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM([]byte(n.CA))
+	return &http.Client{Timeout: 10 * time.Minute, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}}
+}
+
+func (n Node) do(ctx context.Context, method, path string, in, out any) error {
+	var body io.Reader
+	if in != nil {
+		b, err := json.Marshal(in)
+		if err != nil {
+			return err
+		}
+		body = bytes.NewReader(b)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, n.URL+path, body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+n.Token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := n.client().Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		var e struct{ Error string }
+		json.NewDecoder(resp.Body).Decode(&e)
+		if e.Error == "" {
+			e.Error = resp.Status
+		}
+		return fmt.Errorf("%s: %s", n.Name, e.Error)
+	}
+	if out != nil {
+		return json.NewDecoder(resp.Body).Decode(out)
+	}
+	return nil
+}
+
+func (n Node) Info(ctx context.Context) (NodeInfo, error) {
+	var info NodeInfo
+	return info, n.do(ctx, http.MethodGet, "/api/node", nil, &info)
+}
+
+func (n Node) VMs(ctx context.Context) ([]kube.VM, error) {
+	var vms []kube.VM
+	return vms, n.do(ctx, http.MethodGet, "/api/vms", nil, &vms)
+}
+
+func (n Node) Action(ctx context.Context, ns, vm, action string) error {
+	return n.do(ctx, http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/%s", ns, vm, action), nil, nil)
+}
+
+func (c *Center) Jobs() []Job {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]Job, 0, len(c.jobs))
+	for i := len(c.jobs) - 1; i >= 0; i-- {
+		out = append(out, *c.jobs[i])
+	}
+	return out
+}
+
+func (c *Center) update(j *Job, status string, done, failed bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	j.Status, j.Done, j.Failed = status, done, failed
+}
+
+func (c *Center) Migrate(src, dst Node, ns, vm string) {
+	j := &Job{VM: vm, From: src.Name, To: dst.Name, Started: time.Now(), Status: "Starting"}
+	c.mu.Lock()
+	c.jobs = append(c.jobs, j)
+	c.mu.Unlock()
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
+		defer cancel()
+		if err := c.migrate(ctx, j, src, dst, ns, vm); err != nil {
+			c.update(j, "Failed: "+err.Error(), true, true)
+			return
+		}
+		c.update(j, "Completed", true, false)
+	}()
+}
+
+func (c *Center) migrate(ctx context.Context, j *Job, src, dst Node, ns, vm string) error {
+	vms, err := src.VMs(ctx)
+	if err != nil {
+		return err
+	}
+	var source *kube.VM
+	for i := range vms {
+		if vms[i].Namespace == ns && vms[i].Name == vm {
+			source = &vms[i]
+		}
+	}
+	if source == nil {
+		return fmt.Errorf("%s not found on %s", vm, src.Name)
+	}
+	var nets []kube.Network
+	if err := dst.do(ctx, http.MethodGet, "/api/networks", nil, &nets); err != nil {
+		return err
+	}
+	have := map[string]bool{}
+	for _, n := range nets {
+		have[n.Name] = true
+		have[kube.Namespace+"/"+n.Name] = true
+	}
+	for _, nic := range source.NICs {
+		if nic.Network != "" && nic.Network != "pod" && !have[nic.Network] {
+			return fmt.Errorf("network %s missing on %s", nic.Network, dst.Name)
+		}
+	}
+
+	c.update(j, "Exporting", false, false)
+	var ex kube.Export
+	if err := src.do(ctx, http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/export", ns, vm), map[string]string{"baseURL": src.URL}, &ex); err != nil {
+		return err
+	}
+	unexport := func() { src.do(context.Background(), http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/unexport", ns, vm), nil, nil) }
+
+	c.update(j, "Importing", false, false)
+	if err := dst.do(ctx, http.MethodPost, "/api/import", map[string]any{"name": vm, "export": ex}, nil); err != nil {
+		unexport()
+		return err
+	}
+	rollback := func() {
+		dst.do(context.Background(), http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/delete", kube.Namespace, vm), nil, nil)
+		dst.do(context.Background(), http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/imported", kube.Namespace, vm), nil, nil)
+		unexport()
+	}
+	for {
+		var disks []kube.DiskStatus
+		if err := dst.do(ctx, http.MethodGet, fmt.Sprintf("/api/vms/%s/%s/disks", kube.Namespace, vm), nil, &disks); err != nil {
+			rollback()
+			return err
+		}
+		done, progress := true, []string{}
+		for _, d := range disks {
+			if d.Phase == "Failed" {
+				rollback()
+				return fmt.Errorf("disk %s failed to copy", d.Name)
+			}
+			if d.Phase != "Succeeded" {
+				done = false
+			}
+			progress = append(progress, d.Name+" "+d.Progress)
+		}
+		if done {
+			break
+		}
+		c.update(j, "Copying "+strings.Join(progress, ", "), false, false)
+		select {
+		case <-ctx.Done():
+			rollback()
+			return ctx.Err()
+		case <-time.After(5 * time.Second):
+		}
+	}
+
+	c.update(j, "Cleaning up", false, false)
+	dst.do(ctx, http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/imported", kube.Namespace, vm), nil, nil)
+	unexport()
+	return src.do(ctx, http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/delete", ns, vm), nil, nil)
+}

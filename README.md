@@ -38,12 +38,22 @@ See [docs/architecture.drawio](docs/architecture.drawio).
 - Console: proxy KubeVirt `vnc` / `console` subresource websockets.
 - Scope: VMs (CRUD, power, console), disks (DataVolume), images (upload/import), networks (NAD), snapshots, node stats.
 
-### Manager (later)
+### Manager (`argus-center`)
 
-- Separate binary. Holds kubeconfig per node, aggregates inventory, reuses UI components.
-- Cold migrate: `VirtualMachineExport` on source -> DataVolume import on target.
-- Template/image library pushed to nodes.
-- No shared storage. Live migration only if KubeVirt cross-cluster migration matures.
+- Separate binary/container, own local users, state in a data dir (`ARGUS_DATA`). Never touches Kubernetes.
+- Talks to each node's argus over HTTPS (`/api/...`) with a per-node API token, trusting only that node's CA (pinned by fingerprint at registration, like a host thumbprint).
+- Node certs are issued by a per-node CA and include the node IP (`HOST_IP`), so nodes can verify each other during migration.
+- Aggregated VM view with power actions; links into each node's UI for detail and console.
+- Cold migrate (VM off, no CD-ROM): source exports via KubeVirt `VirtualMachineExport`, argus streams it at `/export/...` guarded by the export token; target imports with CDI straight from the source. Disks never pass through the manager. Source VM is deleted after the target has all disks. VMs keep their MAC.
+- Target needs the same network names (VLANs) as the source.
+
+```
+make center
+docker run -d -p 443:8443 -e ARGUS_DATA=/home/nonroot/data -v argus-center:/home/nonroot argus-center:0.1.0
+docker logs <container>    # initial admin password
+```
+
+Add a node: on the node's Host page create a token and copy the CA fingerprint; in the manager, Nodes → Add node.
 
 ## Plan
 
@@ -54,7 +64,7 @@ See [docs/architecture.drawio](docs/architecture.drawio).
 | 2 | UI: create VM, disks, images upload/import, networks, snapshots | No kubectl needed for day-to-day |
 | 3 | Footprint pass: measure, trim requests/limits, reserved resources | Idle RAM documented on real hardware |
 | 4 | Host page: OS update from a registry image, reboot, shutdown | Node updates itself from the UI, data intact |
-| 5 | `cmd/argus-center`: node registry, aggregated view, cold migrate, templates | Move VM between two nodes from UI |
+| 5 | `cmd/argus-center`: node registry, aggregated view, cold migrate, image library | Move VM between two nodes from UI |
 | 6 | Live migration between nodes (KubeVirt decentralized migration, migration VLAN) | Running VM moves between nodes |
 | 7 | HA restart (backup/replication based) | Open |
 
