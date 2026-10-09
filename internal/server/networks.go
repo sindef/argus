@@ -30,7 +30,7 @@ func (s *Server) createNetwork(w http.ResponseWriter, r *http.Request) {
 		err = s.kube.CreateNetwork(r.Context(), name, vlan)
 	}
 	if err != nil {
-		flash(w, err)
+		flash(w, r, err)
 		return
 	}
 	log.Printf("%s: create network %s vlan %d", session(r).User, name, vlan)
@@ -40,7 +40,7 @@ func (s *Server) createNetwork(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteNetwork(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := s.kube.DeleteNetwork(r.Context(), name); err != nil {
-		flash(w, err)
+		flash(w, r, err)
 		return
 	}
 	log.Printf("%s: delete network %s", session(r).User, name)

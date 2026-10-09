@@ -44,8 +44,7 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.kube.Action(r.Context(), ns, name, act); err != nil {
-		log.Printf("%s: %v", session(r).User, err)
-		flash(w, err)
+		flash(w, r, err)
 		return
 	}
 	log.Printf("%s: %s %s/%s", session(r).User, act, ns, name)
@@ -130,7 +129,7 @@ func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {
 		err = s.kube.CreateVM(r.Context(), spec)
 	}
 	if err != nil {
-		flash(w, err)
+		flash(w, r, err)
 		return
 	}
 	log.Printf("%s: create vm %s", session(r).User, spec.Name)
@@ -140,7 +139,7 @@ func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteVM(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
 	if err := s.kube.DeleteVM(r.Context(), ns, name); err != nil {
-		flash(w, err)
+		flash(w, r, err)
 		return
 	}
 	log.Printf("%s: delete vm %s/%s", session(r).User, ns, name)
@@ -164,7 +163,7 @@ func (s *Server) addDisk(w http.ResponseWriter, r *http.Request) {
 		err = s.kube.AddDisk(r.Context(), ns, name, size)
 	}
 	if err != nil {
-		flash(w, err)
+		flash(w, r, err)
 		return
 	}
 	log.Printf("%s: add %dGi disk to %s/%s", session(r).User, size, ns, name)
@@ -174,7 +173,7 @@ func (s *Server) addDisk(w http.ResponseWriter, r *http.Request) {
 func (s *Server) removeDisk(w http.ResponseWriter, r *http.Request) {
 	ns, name, disk := r.PathValue("ns"), r.PathValue("name"), r.PathValue("disk")
 	if err := s.kube.RemoveDisk(r.Context(), ns, name, disk); err != nil {
-		flash(w, err)
+		flash(w, r, err)
 		return
 	}
 	log.Printf("%s: remove disk %s from %s/%s", session(r).User, disk, ns, name)
@@ -185,7 +184,7 @@ func (s *Server) snapshot(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
 	snap, err := s.kube.CreateSnapshot(r.Context(), ns, name)
 	if err != nil {
-		flash(w, err)
+		flash(w, r, err)
 		return
 	}
 	log.Printf("%s: snapshot %s/%s as %s", session(r).User, ns, name, snap)
@@ -195,7 +194,7 @@ func (s *Server) snapshot(w http.ResponseWriter, r *http.Request) {
 func (s *Server) restoreSnapshot(w http.ResponseWriter, r *http.Request) {
 	ns, name, snap := r.PathValue("ns"), r.PathValue("name"), r.PathValue("snap")
 	if err := s.kube.RestoreSnapshot(r.Context(), ns, name, snap); err != nil {
-		flash(w, err)
+		flash(w, r, err)
 		return
 	}
 	log.Printf("%s: restore %s/%s from %s", session(r).User, ns, name, snap)
@@ -205,7 +204,7 @@ func (s *Server) restoreSnapshot(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 	ns, snap := r.PathValue("ns"), r.PathValue("snap")
 	if err := s.kube.DeleteSnapshot(r.Context(), ns, snap); err != nil {
-		flash(w, err)
+		flash(w, r, err)
 		return
 	}
 	log.Printf("%s: delete snapshot %s/%s", session(r).User, ns, snap)

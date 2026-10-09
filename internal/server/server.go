@@ -126,7 +126,8 @@ func redirect(w http.ResponseWriter, r *http.Request, to string) {
 	http.Redirect(w, r, to, http.StatusSeeOther)
 }
 
-func flash(w http.ResponseWriter, err error) {
+func flash(w http.ResponseWriter, r *http.Request, err error) {
+	log.Printf("%s: %s %s: %v", session(r).User, r.Method, r.URL.Path, err)
 	w.Write([]byte(template.HTMLEscapeString(err.Error())))
 }
 

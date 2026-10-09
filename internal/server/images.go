@@ -46,7 +46,7 @@ func (s *Server) importImage(w http.ResponseWriter, r *http.Request) {
 		err = s.kube.CreateImage(r.Context(), name, size, src)
 	}
 	if err != nil {
-		flash(w, err)
+		flash(w, r, err)
 		return
 	}
 	log.Printf("%s: import image %s from %s", session(r).User, name, src)
@@ -56,8 +56,7 @@ func (s *Server) importImage(w http.ResponseWriter, r *http.Request) {
 func (s *Server) uploadImage(w http.ResponseWriter, r *http.Request) {
 	err := s.streamUpload(r)
 	if err != nil {
-		log.Printf("%s: %v", session(r).User, err)
-		flash(w, err)
+		flash(w, r, err)
 		return
 	}
 	w.Header().Set("HX-Refresh", "true")
@@ -105,7 +104,7 @@ func (s *Server) streamUpload(r *http.Request) error {
 func (s *Server) deleteImage(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := s.kube.DeleteImage(r.Context(), name); err != nil {
-		flash(w, err)
+		flash(w, r, err)
 		return
 	}
 	log.Printf("%s: delete image %s", session(r).User, name)
