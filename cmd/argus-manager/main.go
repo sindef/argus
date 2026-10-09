@@ -9,15 +9,15 @@ import (
 	"time"
 
 	"argus/internal/auth"
-	"argus/internal/center"
 	"argus/internal/filestore"
+	"argus/internal/manager"
 	"argus/internal/server"
 	"argus/internal/tlscert"
 )
 
 func main() {
 	addr := env("ARGUS_ADDR", ":8443")
-	fs, err := filestore.New(env("ARGUS_DATA", "/var/lib/argus-center"))
+	fs, err := filestore.New(env("ARGUS_DATA", "/var/lib/argus-manager"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -35,9 +35,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	ctr := center.New(fs)
-	ctr.Start()
-	srv, err := server.New(nil, store, server.Options{Banner: func(string) {}, Center: ctr})
+	mgr := manager.New(fs)
+	mgr.Start()
+	srv, err := server.New(nil, store, server.Options{Banner: func(string) {}, Manager: mgr})
 	if err != nil {
 		log.Fatal(err)
 	}

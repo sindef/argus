@@ -10,19 +10,19 @@ import (
 	"time"
 
 	"argus/internal/auth"
-	"argus/internal/center"
 	"argus/internal/kube"
+	"argus/internal/manager"
 )
 
 type nodeVMs struct {
-	Node  center.Node
-	Info  center.NodeInfo
+	Node  manager.Node
+	Info  manager.NodeInfo
 	VMs   []kube.VM
 	Error string
 }
 
 func (s *Server) gather(ctx context.Context) ([]nodeVMs, error) {
-	nodes, err := s.center.Nodes(ctx)
+	nodes, err := s.manager.Nodes(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +32,7 @@ func (s *Server) gather(ctx context.Context) ([]nodeVMs, error) {
 	var wg sync.WaitGroup
 	for i, n := range nodes {
 		wg.Add(1)
-		go func(i int, n center.Node) {
+		go func(i int, n manager.Node) {
 			defer wg.Done()
 			out[i].Node = n
 			info, err := n.Info(ctx)
@@ -49,41 +49,41 @@ func (s *Server) gather(ctx context.Context) ([]nodeVMs, error) {
 	return out, nil
 }
 
-func (s *Server) centerData(r *http.Request) map[string]any {
+func (s *Server) managerData(r *http.Request) map[string]any {
 	nodes, err := s.gather(r.Context())
-	ps, perr := s.center.Protected(r.Context())
+	ps, perr := s.manager.Protected(r.Context())
 	if err == nil {
 		err = perr
 	}
-	protected := map[string]center.Protected{}
+	protected := map[string]manager.Protected{}
 	for _, p := range ps {
 		protected[p.VM] = p
 	}
 	return map[string]any{
 		"Nodes":      nodes,
 		"Protected":  protected,
-		"Jobs":       s.center.Jobs(),
+		"Jobs":       s.manager.Jobs(),
 		"CanOperate": session(r).Role.Can(auth.Operator),
 		"IsAdmin":    session(r).Role.Can(auth.Admin),
 		"Error":      errText(err),
 	}
 }
 
-func (s *Server) centerVMs(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, "center.html", "layout", s.centerData(r))
+func (s *Server) managerVMs(w http.ResponseWriter, r *http.Request) {
+	s.render(w, r, "manager.html", "layout", s.managerData(r))
 }
 
-func (s *Server) centerTable(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, "center.html", "table", s.centerData(r))
+func (s *Server) managerTable(w http.ResponseWriter, r *http.Request) {
+	s.render(w, r, "manager.html", "table", s.managerData(r))
 }
 
-func (s *Server) centerAction(w http.ResponseWriter, r *http.Request) {
+func (s *Server) managerAction(w http.ResponseWriter, r *http.Request) {
 	act := r.PathValue("action")
 	if !kube.ValidAction(act) {
 		http.Error(w, "unknown action", http.StatusBadRequest)
 		return
 	}
-	n, err := s.center.Node(r.Context(), r.PathValue("node"))
+	n, err := s.manager.Node(r.Context(), r.PathValue("node"))
 	if err == nil {
 		err = n.Action(r.Context(), r.PathValue("ns"), r.PathValue("name"), act)
 	}
@@ -95,11 +95,11 @@ func (s *Server) centerAction(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("HX-Refresh", "true")
 }
 
-func (s *Server) centerMigrate(w http.ResponseWriter, r *http.Request) {
-	src, err := s.center.Node(r.Context(), r.PathValue("node"))
-	var dst center.Node
+func (s *Server) managerMigrate(w http.ResponseWriter, r *http.Request) {
+	src, err := s.manager.Node(r.Context(), r.PathValue("node"))
+	var dst manager.Node
 	if err == nil {
-		dst, err = s.center.Node(r.Context(), r.FormValue("to"))
+		dst, err = s.manager.Node(r.Context(), r.FormValue("to"))
 	}
 	if err == nil && src.Name == dst.Name {
 		err = errors.New("pick a different node")
@@ -119,15 +119,15 @@ func (s *Server) centerMigrate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if running {
-		s.center.LiveMigrate(src, dst, r.PathValue("ns"), r.PathValue("name"))
+		s.manager.LiveMigrate(src, dst, r.PathValue("ns"), r.PathValue("name"))
 	} else {
-		s.center.Migrate(src, dst, r.PathValue("ns"), r.PathValue("name"))
+		s.manager.Migrate(src, dst, r.PathValue("ns"), r.PathValue("name"))
 	}
 	log.Printf("%s: migrate %s/%s from %s to %s", session(r).User, r.PathValue("ns"), r.PathValue("name"), src.Name, dst.Name)
 	w.Header().Set("HX-Refresh", "true")
 }
 
-func (s *Server) centerNodes(w http.ResponseWriter, r *http.Request) {
+func (s *Server) managerNodes(w http.ResponseWriter, r *http.Request) {
 	s.renderNodes(w, r, nil)
 }
 
@@ -139,20 +139,20 @@ func (s *Server) renderNodes(w http.ResponseWriter, r *http.Request, err error) 
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 	}
-	mig, merr := s.center.MigrationSettings(r.Context())
+	mig, merr := s.manager.MigrationSettings(r.Context())
 	if err == nil {
 		err = merr
 	}
 	ranges := map[string]string{}
 	for _, n := range nodes {
-		if start, end, rerr := center.SlotRange(mig.Subnet, n.Node.Slot); mig.Subnet != "" && rerr == nil {
+		if start, end, rerr := manager.SlotRange(mig.Subnet, n.Node.Slot); mig.Subnet != "" && rerr == nil {
 			ranges[n.Node.Name] = start + " – " + end
 		}
 	}
 	s.render(w, r, "nodes.html", "layout", map[string]any{"Nodes": nodes, "Migration": mig, "Ranges": ranges, "IsAdmin": session(r).Role.Can(auth.Admin), "Error": errText(err)})
 }
 
-func (s *Server) centerAddNode(w http.ResponseWriter, r *http.Request) {
+func (s *Server) managerAddNode(w http.ResponseWriter, r *http.Request) {
 	name, addr := r.FormValue("name"), r.FormValue("url")
 	u, err := url.Parse(addr)
 	if err != nil || u.Scheme != "https" || u.Host == "" {
@@ -161,7 +161,7 @@ func (s *Server) centerAddNode(w http.ResponseWriter, r *http.Request) {
 		err = errors.New("invalid node name")
 	}
 	if err == nil {
-		err = s.center.AddNode(r.Context(), name, u.Scheme+"://"+u.Host, r.FormValue("token"), r.FormValue("fingerprint"))
+		err = s.manager.AddNode(r.Context(), name, u.Scheme+"://"+u.Host, r.FormValue("token"), r.FormValue("fingerprint"))
 	}
 	if err != nil {
 		s.renderNodes(w, r, err)
@@ -171,9 +171,9 @@ func (s *Server) centerAddNode(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/nodes", http.StatusSeeOther)
 }
 
-func (s *Server) centerRemoveNode(w http.ResponseWriter, r *http.Request) {
+func (s *Server) managerRemoveNode(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("node")
-	if err := s.center.RemoveNode(r.Context(), name); err != nil {
+	if err := s.manager.RemoveNode(r.Context(), name); err != nil {
 		s.renderNodes(w, r, err)
 		return
 	}
@@ -181,7 +181,7 @@ func (s *Server) centerRemoveNode(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/nodes", http.StatusSeeOther)
 }
 
-func (s *Server) centerMigrationSettings(w http.ResponseWriter, r *http.Request) {
+func (s *Server) managerMigrationSettings(w http.ResponseWriter, r *http.Request) {
 	vlan := 0
 	if v := r.FormValue("vlan"); v != "" {
 		if err := intField(r, "vlan", 0, 4094, &vlan); err != nil {
@@ -189,7 +189,7 @@ func (s *Server) centerMigrationSettings(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	if err := s.center.SetMigrationSettings(r.Context(), center.MigrationSettings{VLAN: vlan, Subnet: r.FormValue("subnet")}); err != nil {
+	if err := s.manager.SetMigrationSettings(r.Context(), manager.MigrationSettings{VLAN: vlan, Subnet: r.FormValue("subnet")}); err != nil {
 		s.renderNodes(w, r, err)
 		return
 	}
@@ -197,11 +197,11 @@ func (s *Server) centerMigrationSettings(w http.ResponseWriter, r *http.Request)
 	http.Redirect(w, r, "/nodes", http.StatusSeeOther)
 }
 
-func (s *Server) centerProtect(w http.ResponseWriter, r *http.Request) {
+func (s *Server) managerProtect(w http.ResponseWriter, r *http.Request) {
 	var interval int
 	err := intField(r, "interval", 5, 1440, &interval)
 	if err == nil {
-		err = s.center.Protect(r.Context(), r.PathValue("node"), r.PathValue("name"), r.FormValue("replica"), interval)
+		err = s.manager.Protect(r.Context(), r.PathValue("node"), r.PathValue("name"), r.FormValue("replica"), interval)
 	}
 	if err != nil {
 		flash(w, r, err)
@@ -211,8 +211,8 @@ func (s *Server) centerProtect(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("HX-Refresh", "true")
 }
 
-func (s *Server) centerUnprotect(w http.ResponseWriter, r *http.Request) {
-	if err := s.center.Unprotect(r.Context(), r.PathValue("name")); err != nil {
+func (s *Server) managerUnprotect(w http.ResponseWriter, r *http.Request) {
+	if err := s.manager.Unprotect(r.Context(), r.PathValue("name")); err != nil {
 		flash(w, r, err)
 		return
 	}

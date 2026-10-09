@@ -1,4 +1,4 @@
-package center
+package manager
 
 import (
 	"bytes"
@@ -39,7 +39,7 @@ type NodeInfo struct {
 	RunningVMs    int    `json:"runningVMs"`
 }
 
-type Center struct {
+type Manager struct {
 	store auth.Secrets
 
 	mu       sync.Mutex
@@ -60,16 +60,16 @@ type Job struct {
 	Live     bool
 }
 
-func New(store auth.Secrets) *Center {
-	return &Center{store: store, lastSeen: map[string]time.Time{}, syncing: map[string]bool{}, started: time.Now()}
+func New(store auth.Secrets) *Manager {
+	return &Manager{store: store, lastSeen: map[string]time.Time{}, syncing: map[string]bool{}, started: time.Now()}
 }
 
-func (c *Center) Nodes(ctx context.Context) ([]Node, error) {
+func (c *Manager) Nodes(ctx context.Context) ([]Node, error) {
 	ns, _, err := c.load(ctx)
 	return ns, err
 }
 
-func (c *Center) Node(ctx context.Context, name string) (Node, error) {
+func (c *Manager) Node(ctx context.Context, name string) (Node, error) {
 	ns, _, err := c.load(ctx)
 	if err != nil {
 		return Node{}, err
@@ -82,7 +82,7 @@ func (c *Center) Node(ctx context.Context, name string) (Node, error) {
 	return Node{}, fmt.Errorf("node %s not found", name)
 }
 
-func (c *Center) load(ctx context.Context) ([]Node, string, error) {
+func (c *Manager) load(ctx context.Context) ([]Node, string, error) {
 	data, rv, err := c.store.Get(ctx, nodesKey)
 	if apierrors.IsNotFound(err) {
 		return nil, "", nil
@@ -94,7 +94,7 @@ func (c *Center) load(ctx context.Context) ([]Node, string, error) {
 	return ns, rv, json.Unmarshal(data["nodes"], &ns)
 }
 
-func (c *Center) save(ctx context.Context, ns []Node, rv string) error {
+func (c *Manager) save(ctx context.Context, ns []Node, rv string) error {
 	sort.Slice(ns, func(i, j int) bool { return ns[i].Name < ns[j].Name })
 	b, err := json.Marshal(ns)
 	if err != nil {
@@ -107,7 +107,7 @@ func (c *Center) save(ctx context.Context, ns []Node, rv string) error {
 	return c.store.Update(ctx, nodesKey, rv, data)
 }
 
-func (c *Center) AddNode(ctx context.Context, name, url, token, fingerprint string) error {
+func (c *Manager) AddNode(ctx context.Context, name, url, token, fingerprint string) error {
 	url = strings.TrimRight(url, "/")
 	ca, err := fetchCA(ctx, url)
 	if err != nil {
@@ -135,7 +135,7 @@ func (c *Center) AddNode(ctx context.Context, name, url, token, fingerprint stri
 	return c.PushMigrationNetwork(ctx)
 }
 
-func (c *Center) RemoveNode(ctx context.Context, name string) error {
+func (c *Manager) RemoveNode(ctx context.Context, name string) error {
 	ns, rv, err := c.load(ctx)
 	if err != nil {
 		return err
@@ -220,7 +220,7 @@ func (n Node) Action(ctx context.Context, ns, vm, action string) error {
 	return n.do(ctx, http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/%s", ns, vm, action), nil, nil)
 }
 
-func (c *Center) checkNetworks(ctx context.Context, src, dst Node, ns, vm string) error {
+func (c *Manager) checkNetworks(ctx context.Context, src, dst Node, ns, vm string) error {
 	vms, err := src.VMs(ctx)
 	if err != nil {
 		return err
@@ -251,7 +251,7 @@ func (c *Center) checkNetworks(ctx context.Context, src, dst Node, ns, vm string
 	return nil
 }
 
-func (c *Center) Jobs() []Job {
+func (c *Manager) Jobs() []Job {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	out := make([]Job, 0, len(c.jobs))
@@ -261,13 +261,13 @@ func (c *Center) Jobs() []Job {
 	return out
 }
 
-func (c *Center) update(j *Job, status string, done, failed bool) {
+func (c *Manager) update(j *Job, status string, done, failed bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	j.Status, j.Done, j.Failed = status, done, failed
 }
 
-func (c *Center) Migrate(src, dst Node, ns, vm string) {
+func (c *Manager) Migrate(src, dst Node, ns, vm string) {
 	j := &Job{VM: vm, From: src.Name, To: dst.Name, Started: time.Now(), Status: "Starting"}
 	c.mu.Lock()
 	c.jobs = append(c.jobs, j)
@@ -283,7 +283,7 @@ func (c *Center) Migrate(src, dst Node, ns, vm string) {
 	}()
 }
 
-func (c *Center) migrate(ctx context.Context, j *Job, src, dst Node, ns, vm string) error {
+func (c *Manager) migrate(ctx context.Context, j *Job, src, dst Node, ns, vm string) error {
 	if err := c.checkNetworks(ctx, src, dst, ns, vm); err != nil {
 		return err
 	}
@@ -293,7 +293,9 @@ func (c *Center) migrate(ctx context.Context, j *Job, src, dst Node, ns, vm stri
 	if err := src.do(ctx, http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/export", ns, vm), map[string]string{"baseURL": src.URL}, &ex); err != nil {
 		return err
 	}
-	unexport := func() { src.do(context.Background(), http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/unexport", ns, vm), nil, nil) }
+	unexport := func() {
+		src.do(context.Background(), http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/unexport", ns, vm), nil, nil)
+	}
 
 	c.update(j, "Importing", false, false)
 	if err := dst.do(ctx, http.MethodPost, "/api/import", map[string]any{"name": vm, "export": ex}, nil); err != nil {

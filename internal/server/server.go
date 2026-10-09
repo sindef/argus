@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"argus/internal/auth"
-	"argus/internal/center"
 	"argus/internal/kube"
+	"argus/internal/manager"
 	"argus/web"
 )
 
@@ -23,7 +23,7 @@ type Server struct {
 	releaseFile string
 	caPEM       []byte
 	nodeName    string
-	center      *center.Center
+	manager     *manager.Manager
 	ha          haState
 	pages       map[string]*template.Template
 	mux         *http.ServeMux
@@ -35,7 +35,7 @@ type Options struct {
 	ReleaseFile string
 	CAPEM       []byte
 	NodeName    string
-	Center      *center.Center
+	Manager     *manager.Manager
 }
 
 type ctxKey struct{}
@@ -46,8 +46,8 @@ type reqAuth struct {
 }
 
 func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
-	s := &Server{kube: k, auth: a, banner: o.Banner, runDir: o.RunDir, releaseFile: o.ReleaseFile, caPEM: o.CAPEM, nodeName: o.NodeName, center: o.Center, pages: map[string]*template.Template{}, mux: http.NewServeMux()}
-	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "vm.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "center.html", "nodes.html"} {
+	s := &Server{kube: k, auth: a, banner: o.Banner, runDir: o.RunDir, releaseFile: o.ReleaseFile, caPEM: o.CAPEM, nodeName: o.NodeName, manager: o.Manager, pages: map[string]*template.Template{}, mux: http.NewServeMux()}
+	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "vm.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "nodes.html"} {
 		t, err := template.ParseFS(web.FS, "templates/layout.html", "templates/"+p)
 		if err != nil {
 			return nil, err
@@ -66,17 +66,17 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /users/{name}/role", s.require(auth.Admin, s.setRole))
 	s.mux.HandleFunc("POST /users/{name}/reset", s.require(auth.Admin, s.resetPassword))
 	s.mux.HandleFunc("POST /users/{name}/delete", s.require(auth.Admin, s.deleteUser))
-	if s.center != nil {
-		s.mux.HandleFunc("GET /{$}", s.require(auth.ReadOnly, s.centerVMs))
-		s.mux.HandleFunc("GET /vms", s.require(auth.ReadOnly, s.centerTable))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/migrate", s.require(auth.Admin, s.centerMigrate))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/protect", s.require(auth.Admin, s.centerProtect))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/unprotect", s.require(auth.Admin, s.centerUnprotect))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/{action}", s.require(auth.Operator, s.centerAction))
-		s.mux.HandleFunc("GET /nodes", s.require(auth.ReadOnly, s.centerNodes))
-		s.mux.HandleFunc("POST /nodes", s.require(auth.Admin, s.centerAddNode))
-		s.mux.HandleFunc("POST /nodes/{node}/delete", s.require(auth.Admin, s.centerRemoveNode))
-		s.mux.HandleFunc("POST /settings/migration", s.require(auth.Admin, s.centerMigrationSettings))
+	if s.manager != nil {
+		s.mux.HandleFunc("GET /{$}", s.require(auth.ReadOnly, s.managerVMs))
+		s.mux.HandleFunc("GET /vms", s.require(auth.ReadOnly, s.managerTable))
+		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/migrate", s.require(auth.Admin, s.managerMigrate))
+		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/protect", s.require(auth.Admin, s.managerProtect))
+		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/unprotect", s.require(auth.Admin, s.managerUnprotect))
+		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/{action}", s.require(auth.Operator, s.managerAction))
+		s.mux.HandleFunc("GET /nodes", s.require(auth.ReadOnly, s.managerNodes))
+		s.mux.HandleFunc("POST /nodes", s.require(auth.Admin, s.managerAddNode))
+		s.mux.HandleFunc("POST /nodes/{node}/delete", s.require(auth.Admin, s.managerRemoveNode))
+		s.mux.HandleFunc("POST /settings/migration", s.require(auth.Admin, s.managerMigrationSettings))
 		return s, nil
 	}
 	s.mux.HandleFunc("GET /images", s.require(auth.ReadOnly, s.images))
@@ -143,7 +143,7 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page, tmpl strin
 		data = map[string]any{}
 	}
 	data["Session"] = session(r)
-	data["Center"] = s.center != nil
+	data["Manager"] = s.manager != nil
 	if err := s.pages[page].ExecuteTemplate(w, tmpl, data); err != nil {
 		log.Printf("render %s: %v", page, err)
 	}

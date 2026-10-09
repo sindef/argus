@@ -1,4 +1,4 @@
-package center
+package manager
 
 import (
 	"context"
@@ -31,12 +31,12 @@ type Protected struct {
 	LastError string    `json:"lastError"`
 }
 
-func (c *Center) Protected(ctx context.Context) ([]Protected, error) {
+func (c *Manager) Protected(ctx context.Context) ([]Protected, error) {
 	ps, _, err := c.loadHA(ctx)
 	return ps, err
 }
 
-func (c *Center) loadHA(ctx context.Context) ([]Protected, string, error) {
+func (c *Manager) loadHA(ctx context.Context) ([]Protected, string, error) {
 	data, rv, err := c.store.Get(ctx, haKey)
 	if apierrors.IsNotFound(err) {
 		return nil, "", nil
@@ -48,7 +48,7 @@ func (c *Center) loadHA(ctx context.Context) ([]Protected, string, error) {
 	return ps, rv, json.Unmarshal(data["vms"], &ps)
 }
 
-func (c *Center) updateHA(ctx context.Context, fn func([]Protected) ([]Protected, error)) error {
+func (c *Manager) updateHA(ctx context.Context, fn func([]Protected) ([]Protected, error)) error {
 	c.haMu.Lock()
 	defer c.haMu.Unlock()
 	ps, rv, err := c.loadHA(ctx)
@@ -73,7 +73,7 @@ func vmPath(vm, suffix string) string {
 	return fmt.Sprintf("/api/vms/%s/%s/%s", kube.Namespace, vm, suffix)
 }
 
-func (c *Center) Protect(ctx context.Context, owner, vm, replica string, interval int) error {
+func (c *Manager) Protect(ctx context.Context, owner, vm, replica string, interval int) error {
 	if owner == replica {
 		return errors.New("replica must be on another node")
 	}
@@ -102,7 +102,7 @@ func (c *Center) Protect(ctx context.Context, owner, vm, replica string, interva
 	return o.do(ctx, http.MethodPost, vmPath(vm, "ha"), map[string]bool{"enabled": true}, nil)
 }
 
-func (c *Center) Unprotect(ctx context.Context, vm string) error {
+func (c *Manager) Unprotect(ctx context.Context, vm string) error {
 	var p Protected
 	err := c.updateHA(ctx, func(ps []Protected) ([]Protected, error) {
 		out := ps[:0]
@@ -130,7 +130,7 @@ func (c *Center) Unprotect(ctx context.Context, vm string) error {
 	return nil
 }
 
-func (c *Center) Start() {
+func (c *Manager) Start() {
 	c.started = time.Now()
 	go func() {
 		for range time.Tick(heartbeatEvery) {
@@ -147,13 +147,13 @@ func (c *Center) Start() {
 	}()
 }
 
-func (c *Center) LastSeen(node string) time.Time {
+func (c *Manager) LastSeen(node string) time.Time {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.lastSeen[node]
 }
 
-func (c *Center) heartbeat(ctx context.Context) {
+func (c *Manager) heartbeat(ctx context.Context) {
 	nodes, err := c.Nodes(ctx)
 	if err != nil {
 		return
@@ -189,7 +189,7 @@ func (c *Center) heartbeat(ctx context.Context) {
 	wg.Wait()
 }
 
-func (c *Center) down(node string) bool {
+func (c *Manager) down(node string) bool {
 	seen := c.LastSeen(node)
 	if seen.IsZero() {
 		seen = c.started
@@ -197,7 +197,7 @@ func (c *Center) down(node string) bool {
 	return time.Since(seen) > failoverAfter
 }
 
-func (c *Center) failover(ctx context.Context) {
+func (c *Manager) failover(ctx context.Context) {
 	ps, err := c.Protected(ctx)
 	if err != nil {
 		return
@@ -235,7 +235,7 @@ func (c *Center) failover(ctx context.Context) {
 	}
 }
 
-func (c *Center) replicate() {
+func (c *Manager) replicate() {
 	ctx := context.Background()
 	ps, err := c.Protected(ctx)
 	if err != nil {
@@ -281,7 +281,7 @@ func (c *Center) replicate() {
 	}
 }
 
-func (c *Center) sync(ctx context.Context, p Protected) error {
+func (c *Manager) sync(ctx context.Context, p Protected) error {
 	owner, err := c.Node(ctx, p.Owner)
 	if err != nil {
 		return err

@@ -1,4 +1,4 @@
-# argus
+# Argus
 
 Lightweight KubeVirt hypervisor. One node = one standalone single-node k3s cluster (sqlite via kine), ESXi-style. Clustering is an optional manager on top, not a property of the nodes.
 
@@ -38,7 +38,7 @@ See [docs/architecture.drawio](docs/architecture.drawio).
 - Console: proxy KubeVirt `vnc` / `console` subresource websockets.
 - Scope: VMs (CRUD, power, console), disks (DataVolume), images (upload/import), networks (NAD), snapshots, node stats.
 
-### Manager (`argus-center`)
+### Argus Manager (`argus-manager`)
 
 - Separate binary/container, own local users, state in a data dir (`ARGUS_DATA`). Never touches Kubernetes.
 - Talks to each node's argus over HTTPS (`/api/...`) with a per-node API token, trusting only that node's CA (pinned by fingerprint at registration, like a host thumbprint).
@@ -58,8 +58,8 @@ HA (per VM, opt-in from the manager):
 - VM names must be unique across nodes.
 
 ```
-make center
-docker run -d -p 443:8443 -e ARGUS_DATA=/home/nonroot/data -v argus-center:/home/nonroot argus-center:0.1.0
+make manager
+docker run -d -p 443:8443 -e ARGUS_DATA=/home/nonroot/data -v argus-manager:/home/nonroot argus-manager:0.1.0
 docker logs <container>    # initial admin password
 ```
 
@@ -74,7 +74,7 @@ Add a node: on the node's Host page create a token and copy the CA fingerprint; 
 | 2 | UI: create VM, disks, images upload/import, networks, snapshots | No kubectl needed for day-to-day |
 | 3 | Footprint pass: measure, trim requests/limits, reserved resources | Idle RAM documented on real hardware |
 | 4 | Host page: OS update from a registry image, reboot, shutdown | Node updates itself from the UI, data intact |
-| 5 | `cmd/argus-center`: node registry, aggregated view, cold migrate, image library | Move VM between two nodes from UI |
+| 5 | `cmd/argus-manager`: node registry, aggregated view, cold migrate, image library | Move VM between two nodes from UI |
 | 6 | Live migration between nodes (KubeVirt decentralized migration, migration VLAN) | Running VM moves between nodes |
 | 7 | HA restart: replication, heartbeats, failover, host fencing | VM restarts on another node after host failure |
 
@@ -83,7 +83,7 @@ Add a node: on the node's Host page create a token and copy the CA fingerprint; 
 ```
 os/                Kairos image (Dockerfile, rootfs overlay, cloud-config example)
 cmd/argus/         node UI binary
-cmd/argus-center/  manager (stage 4)
+cmd/argus-manager/  manager (stage 4)
 internal/          shared Go packages
 web/               templates, static assets
 docs/              architecture.drawio

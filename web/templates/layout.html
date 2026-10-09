@@ -3,17 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>argus</title>
+<title>{{if .Manager}}Argus Manager{{else}}Argus{{end}}</title>
 <link rel="stylesheet" href="/static/argus.css">
 <script src="/static/vendor/htmx/htmx.min.js"></script>
 </head>
 <body>
 <header>
   <nav>
-    <a class="brand" href="/">argus</a>
+    <a class="brand" href="/">{{if .Manager}}Argus Manager{{else}}Argus{{end}}</a>
     {{if and .Session.User (not .Session.MustChange)}}
     <a href="/">Virtual machines</a>
-    {{if .Center}}
+    {{if .Manager}}
     <a href="/nodes">Nodes</a>
     {{if eq .Session.Role "admin"}}<a href="/users">Users</a>{{end}}
     {{else}}

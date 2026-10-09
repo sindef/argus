@@ -1,4 +1,4 @@
-package center
+package manager
 
 import (
 	"context"
@@ -25,7 +25,7 @@ type MigrationSettings struct {
 	Subnet string `json:"subnet"`
 }
 
-func (c *Center) MigrationSettings(ctx context.Context) (MigrationSettings, error) {
+func (c *Manager) MigrationSettings(ctx context.Context) (MigrationSettings, error) {
 	var m MigrationSettings
 	data, _, err := c.store.Get(ctx, settingsKey)
 	if apierrors.IsNotFound(err) {
@@ -37,7 +37,7 @@ func (c *Center) MigrationSettings(ctx context.Context) (MigrationSettings, erro
 	return m, json.Unmarshal(data["migration"], &m)
 }
 
-func (c *Center) SetMigrationSettings(ctx context.Context, m MigrationSettings) error {
+func (c *Manager) SetMigrationSettings(ctx context.Context, m MigrationSettings) error {
 	_, n, err := net.ParseCIDR(m.Subnet)
 	if err != nil || n.IP.To4() == nil {
 		return errors.New("subnet must be an IPv4 CIDR")
@@ -67,7 +67,7 @@ func (c *Center) SetMigrationSettings(ctx context.Context, m MigrationSettings) 
 	return c.PushMigrationNetwork(ctx)
 }
 
-func (c *Center) PushMigrationNetwork(ctx context.Context) error {
+func (c *Manager) PushMigrationNetwork(ctx context.Context) error {
 	m, err := c.MigrationSettings(ctx)
 	if err != nil || m.Subnet == "" {
 		return err
@@ -129,7 +129,7 @@ func SlotRange(subnet string, slot int) (string, string, error) {
 	return ip(slot * 16), ip(slot*16 + 15), nil
 }
 
-func (c *Center) syncCAs(ctx context.Context) error {
+func (c *Manager) syncCAs(ctx context.Context) error {
 	ns, err := c.Nodes(ctx)
 	if err != nil {
 		return err
@@ -156,7 +156,7 @@ func (c *Center) syncCAs(ctx context.Context) error {
 	return nil
 }
 
-func (c *Center) LiveMigrate(src, dst Node, ns, vm string) {
+func (c *Manager) LiveMigrate(src, dst Node, ns, vm string) {
 	j := &Job{VM: vm, From: src.Name, To: dst.Name, Started: time.Now(), Status: "Starting", Live: true}
 	c.mu.Lock()
 	c.jobs = append(c.jobs, j)
@@ -172,7 +172,7 @@ func (c *Center) LiveMigrate(src, dst Node, ns, vm string) {
 	}()
 }
 
-func (c *Center) liveMigrate(ctx context.Context, j *Job, src, dst Node, ns, vm string) error {
+func (c *Manager) liveMigrate(ctx context.Context, j *Job, src, dst Node, ns, vm string) error {
 	if err := c.checkNetworks(ctx, src, dst, ns, vm); err != nil {
 		return err
 	}
