@@ -12,6 +12,12 @@
     <a class="nav-link sub{{if eq .Nav "volumes"}} active{{end}}" href="/volumes">Volumes</a>
   </div>
 </div>
+<div class="nav-section" id="networking">
+  <button class="nav-head">{{template "icon" "network"}}Networking<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-up"/></svg></button>
+  <div class="nav-items">
+    <a class="nav-link sub{{if eq .Nav "networks"}} active{{end}}" href="/networks">Networks</a>
+  </div>
+</div>
 {{if eq .Session.Role "admin"}}
 <div class="nav-sep"></div>
 <div class="nav-section" id="admin">
