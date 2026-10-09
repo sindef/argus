@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"strings"
 
 	"argus/internal/auth"
 	"argus/internal/kube"
@@ -19,6 +20,8 @@ type Server struct {
 	banner      func(password string)
 	runDir      string
 	releaseFile string
+	caPEM       []byte
+	nodeName    string
 	pages       map[string]*template.Template
 	mux         *http.ServeMux
 }
@@ -27,6 +30,8 @@ type Options struct {
 	Banner      func(password string)
 	RunDir      string
 	ReleaseFile string
+	CAPEM       []byte
+	NodeName    string
 }
 
 type ctxKey struct{}
@@ -37,7 +42,7 @@ type reqAuth struct {
 }
 
 func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
-	s := &Server{kube: k, auth: a, banner: o.Banner, runDir: o.RunDir, releaseFile: o.ReleaseFile, pages: map[string]*template.Template{}, mux: http.NewServeMux()}
+	s := &Server{kube: k, auth: a, banner: o.Banner, runDir: o.RunDir, releaseFile: o.ReleaseFile, caPEM: o.CAPEM, nodeName: o.NodeName, pages: map[string]*template.Template{}, mux: http.NewServeMux()}
 	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "vm.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html"} {
 		t, err := template.ParseFS(web.FS, "templates/layout.html", "templates/"+p)
 		if err != nil {
@@ -66,6 +71,20 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /networks/{name}/delete", s.require(auth.Admin, s.deleteNetwork))
 	s.mux.HandleFunc("GET /host", s.require(auth.Admin, s.host))
 	s.mux.HandleFunc("POST /host/{action}", s.require(auth.Admin, s.hostRequest))
+	s.mux.HandleFunc("POST /tokens", s.require(auth.Admin, s.createToken))
+	s.mux.HandleFunc("POST /tokens/{name}/delete", s.require(auth.Admin, s.deleteToken))
+	s.mux.HandleFunc("GET /ca.pem", s.caCert)
+	s.mux.HandleFunc("GET /export/{ns}/{export}/{volume}", s.exportPassthrough)
+	s.mux.HandleFunc("GET /api/node", s.require(auth.Admin, s.apiNode))
+	s.mux.HandleFunc("GET /api/vms", s.require(auth.Admin, s.apiVMs))
+	s.mux.HandleFunc("GET /api/networks", s.require(auth.Admin, s.apiNetworks))
+	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/disks", s.require(auth.Admin, s.apiDisks))
+	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/export", s.require(auth.Admin, s.apiExport))
+	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/unexport", s.require(auth.Admin, s.apiUnexport))
+	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/delete", s.require(auth.Admin, s.apiDelete))
+	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/imported", s.require(auth.Admin, s.apiImported))
+	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/{action}", s.require(auth.Admin, s.apiAction))
+	s.mux.HandleFunc("POST /api/import", s.require(auth.Admin, s.apiImport))
 	s.mux.HandleFunc("GET /{$}", s.require(auth.ReadOnly, s.vms))
 	s.mux.HandleFunc("GET /vms", s.require(auth.ReadOnly, s.vmTable))
 	s.mux.HandleFunc("GET /vms/new", s.require(auth.Operator, s.newVM))
@@ -106,6 +125,20 @@ func session(r *http.Request) reqAuth {
 
 func (s *Server) require(min auth.Role, h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
+			name, valid := s.auth.CheckToken(r.Context(), tok)
+			if !valid || !strings.HasPrefix(r.URL.Path, "/api/") {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			sess := auth.Session{User: "token:" + name, Role: auth.Admin}
+			h(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, reqAuth{Session: sess})))
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
 		c, err := r.Cookie(cookieName)
 		if err != nil {
 			redirect(w, r, "/login")

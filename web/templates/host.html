@@ -16,6 +16,22 @@
 {{else}}
 <p class="muted">Host control is not available.</p>
 {{end}}
+
+<h2>Manager access</h2>
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+{{with .Notice}}<p class="notice">{{.}}</p>{{end}}
+<dl><dt>CA fingerprint</dt><dd class="mono">{{.CAFingerprint}}</dd></dl>
+{{if .Tokens}}
+<table class="spaced">
+  <thead><tr><th>Token</th><th>Created</th><th></th></tr></thead>
+  <tbody>{{range .Tokens}}<tr><td>{{.Name}}</td><td>{{.Created.Local.Format "2006-01-02 15:04"}}</td>
+    <td class="row-actions"><form method="post" action="/tokens/{{.Name}}/delete" onsubmit="return confirm('Revoke {{.Name}}?')"><button type="submit" class="link danger">Revoke</button></form></td></tr>{{end}}</tbody>
+</table>
+{{end}}
+<form method="post" action="/tokens" class="inline spaced">
+  <input name="name" placeholder="token name" pattern="[a-z][a-z0-9._-]{0,31}" required>
+  <button type="submit">Create token</button>
+</form>
 {{end}}
 
 {{define "state"}}

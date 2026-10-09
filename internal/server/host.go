@@ -10,22 +10,22 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"argus/internal/tlscert"
 )
 
 var validImage = regexp.MustCompile(`^[A-Za-z0-9./:@_-]+$`)
 
 func (s *Server) host(w http.ResponseWriter, r *http.Request) {
-	tmpl := "layout"
-	if r.Header.Get("HX-Request") != "" {
-		tmpl = "state"
+	if r.Header.Get("HX-Request") == "" {
+		s.renderHost(w, r, "", nil)
+		return
 	}
-	data := map[string]any{"Available": s.runDir != ""}
-	if s.runDir != "" {
-		data["Release"] = readEnv(s.releaseFile)
-		data["Status"] = strings.TrimSpace(readFile(filepath.Join(s.runDir, "status")))
-		data["Log"] = tail(readFile(filepath.Join(s.runDir, "upgrade.log")), 15)
-	}
-	s.render(w, r, "host.html", tmpl, data)
+	s.render(w, r, "host.html", "state", map[string]any{
+		"Release": readEnv(s.releaseFile),
+		"Status":  strings.TrimSpace(readFile(filepath.Join(s.runDir, "status"))),
+		"Log":     tail(readFile(filepath.Join(s.runDir, "upgrade.log")), 15),
+	})
 }
 
 func (s *Server) hostRequest(w http.ResponseWriter, r *http.Request) {
@@ -85,4 +85,49 @@ func tail(s string, n int) string {
 		lines = lines[len(lines)-n:]
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (s *Server) renderHost(w http.ResponseWriter, r *http.Request, notice string, err error) {
+	tokens, terr := s.auth.Tokens(r.Context())
+	if err == nil {
+		err = terr
+	}
+	data := map[string]any{
+		"Available":     s.runDir != "",
+		"Tokens":        tokens,
+		"CAFingerprint": tlscert.Fingerprint(s.caPEM),
+		"Notice":        notice,
+		"Error":         errText(err),
+	}
+	if s.runDir != "" {
+		data["Release"] = readEnv(s.releaseFile)
+		data["Status"] = strings.TrimSpace(readFile(filepath.Join(s.runDir, "status")))
+		data["Log"] = tail(readFile(filepath.Join(s.runDir, "upgrade.log")), 15)
+	}
+	s.render(w, r, "host.html", "layout", data)
+}
+
+func (s *Server) createToken(w http.ResponseWriter, r *http.Request) {
+	name := r.FormValue("name")
+	if !validName.MatchString(name) {
+		s.renderHost(w, r, "", errors.New("invalid token name"))
+		return
+	}
+	tok, err := s.auth.CreateToken(r.Context(), name)
+	if err != nil {
+		s.renderHost(w, r, "", err)
+		return
+	}
+	log.Printf("%s: created API token %s", session(r).User, name)
+	s.renderHost(w, r, "Token "+name+": "+tok, nil)
+}
+
+func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if err := s.auth.DeleteToken(r.Context(), name); err != nil {
+		s.renderHost(w, r, "", err)
+		return
+	}
+	log.Printf("%s: revoked API token %s", session(r).User, name)
+	http.Redirect(w, r, "/host", http.StatusSeeOther)
 }

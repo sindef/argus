@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -28,9 +29,13 @@ func main() {
 	runDir := os.Getenv("ARGUS_RUN_DIR")
 	banner := consoleBanner(runDir)
 
-	var cert tls.Certificate
+	var ips []net.IP
+	if ip := net.ParseIP(os.Getenv("HOST_IP")); ip != nil {
+		ips = append(ips, ip)
+	}
+	var pki tlscert.PKI
 	retry(func(ctx context.Context) (err error) {
-		cert, err = tlscert.Load(ctx, kc.Secrets(ns))
+		pki, err = tlscert.Load(ctx, kc.Secrets(ns), ips)
 		return err
 	})
 	retry(func(ctx context.Context) error {
@@ -41,14 +46,20 @@ func main() {
 		return err
 	})
 
-	srv, err := server.New(kc, store, server.Options{Banner: banner, RunDir: runDir, ReleaseFile: os.Getenv("ARGUS_RELEASE_FILE")})
+	srv, err := server.New(kc, store, server.Options{
+		Banner:      banner,
+		RunDir:      runDir,
+		ReleaseFile: os.Getenv("ARGUS_RELEASE_FILE"),
+		CAPEM:       pki.CAPEM,
+		NodeName:    os.Getenv("NODE_NAME"),
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
 	hs := &http.Server{
 		Addr:              addr,
 		Handler:           srv,
-		TLSConfig:         &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12},
+		TLSConfig:         &tls.Config{Certificates: []tls.Certificate{pki.Cert}, MinVersion: tls.VersionTLS12},
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	log.Printf("listening on %s", addr)

@@ -82,3 +82,4 @@ summary { cursor: pointer; color: var(--muted); }
 .spaced { margin-top: 10px; }
 .row-actions button + button, .row-actions form + form { margin-left: 16px; }
 .log { background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 10px; font-size: 12px; overflow-x: auto; max-height: 320px; }
+.mono { font-family: ui-monospace, monospace; font-size: 12px; word-break: break-all; }
