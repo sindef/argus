@@ -1,0 +1,35 @@
+{{define "content"}}
+<h1>Users</h1>
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+{{with .Notice}}<p class="notice">{{.}}</p>{{end}}
+<table>
+  <thead><tr><th>Name</th><th>Role</th><th></th></tr></thead>
+  <tbody>
+  {{range .Users}}
+  <tr>
+    <td>{{.Name}}{{if .MustChange}} <span class="muted">(password change pending)</span>{{end}}</td>
+    <td>
+      <form method="post" action="/users/{{.Name}}/role">
+        <select name="role" onchange="this.form.submit()">
+          {{$r := .Role}}{{range $.Roles}}<option value="{{.}}"{{if eq . $r}} selected{{end}}>{{.}}</option>{{end}}
+        </select>
+      </form>
+    </td>
+    <td class="row-actions">
+      {{if ne .Name $.Session.User}}
+      <form method="post" action="/users/{{.Name}}/reset"><button type="submit" class="link">Reset password</button></form>
+      <form method="post" action="/users/{{.Name}}/delete" onsubmit="return confirm('Delete {{.Name}}?')"><button type="submit" class="link danger">Delete</button></form>
+      {{end}}
+    </td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+
+<h2>Add user</h2>
+<form method="post" action="/users" class="inline">
+  <input name="name" placeholder="username" pattern="[a-z][a-z0-9._-]{0,31}" required>
+  <select name="role">{{range .Roles}}<option value="{{.}}"{{if eq . "read-only"}} selected{{end}}>{{.}}</option>{{end}}</select>
+  <button type="submit">Add</button>
+</form>
+{{end}}

@@ -91,35 +91,47 @@ func (c *Client) Secrets(ns string) Secrets {
 	return Secrets{r: c.dyn.Resource(secGVR).Namespace(ns)}
 }
 
-func (s Secrets) Get(ctx context.Context, name string) (map[string][]byte, error) {
+func (s Secrets) Get(ctx context.Context, name string) (map[string][]byte, string, error) {
 	u, err := s.r.Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	raw, _, _ := unstructured.NestedStringMap(u.Object, "data")
 	data := make(map[string][]byte, len(raw))
 	for k, v := range raw {
 		if data[k], err = base64.StdEncoding.DecodeString(v); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
-	return data, nil
+	return data, u.GetResourceVersion(), nil
 }
 
 func (s Secrets) Create(ctx context.Context, name, typ string, data map[string][]byte) error {
+	_, err := s.r.Create(ctx, secret(name, typ, "", data), metav1.CreateOptions{})
+	return err
+}
+
+func (s Secrets) Update(ctx context.Context, name, resourceVersion string, data map[string][]byte) error {
+	_, err := s.r.Update(ctx, secret(name, "Opaque", resourceVersion, data), metav1.UpdateOptions{})
+	return err
+}
+
+func secret(name, typ, resourceVersion string, data map[string][]byte) *unstructured.Unstructured {
 	enc := make(map[string]interface{}, len(data))
 	for k, v := range data {
 		enc[k] = base64.StdEncoding.EncodeToString(v)
 	}
-	u := &unstructured.Unstructured{Object: map[string]interface{}{
+	meta := map[string]interface{}{"name": name}
+	if resourceVersion != "" {
+		meta["resourceVersion"] = resourceVersion
+	}
+	return &unstructured.Unstructured{Object: map[string]interface{}{
 		"apiVersion": "v1",
 		"kind":       "Secret",
-		"metadata":   map[string]interface{}{"name": name},
+		"metadata":   meta,
 		"type":       typ,
 		"data":       enc,
 	}}
-	_, err := s.r.Create(ctx, u, metav1.CreateOptions{})
-	return err
 }
 
 func (c *Client) ListVMs(ctx context.Context) ([]VM, error) {

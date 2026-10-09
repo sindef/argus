@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"argus/internal/auth"
@@ -22,18 +23,19 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	store := auth.NewStore(kc.Secrets(ns))
+	banner := consoleBanner(os.Getenv("ARGUS_BANNER"))
+
 	var cert tls.Certificate
-	for {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	retry(func(ctx context.Context) (err error) {
 		cert, err = tlscert.Load(ctx, kc.Secrets(ns))
-		cancel()
-		if err == nil {
-			break
-		}
-		log.Print(err)
-		time.Sleep(5 * time.Second)
-	}
-	srv, err := server.New(kc, auth.NewStore(kc.Secrets(ns)))
+		return err
+	})
+	retry(func(ctx context.Context) error {
+		return initialAdmin(ctx, store, os.Getenv("ARGUS_ADMIN_PASSWORD_FILE"), banner)
+	})
+
+	srv, err := server.New(kc, store, banner)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -45,6 +47,82 @@ func main() {
 	}
 	log.Printf("listening on %s", addr)
 	log.Fatal(hs.ListenAndServeTLS("", ""))
+}
+
+func initialAdmin(ctx context.Context, store *auth.Store, seedFile string, banner func(string)) error {
+	seed := ""
+	if seedFile != "" {
+		if b, err := os.ReadFile(seedFile); err == nil {
+			seed = strings.TrimSpace(string(b))
+		}
+	}
+	users, err := store.Users(ctx)
+	if err != nil {
+		return err
+	}
+	pw := seed
+	if pw == "" {
+		pw = auth.RandomPassword()
+	}
+	switch {
+	case len(users) == 0:
+		if _, err := store.Bootstrap(ctx, pw); err != nil {
+			return err
+		}
+	case seed == "" && pendingAdmin(users):
+		if err := store.ResetPassword(ctx, "admin", pw); err != nil {
+			return err
+		}
+	default:
+		banner("")
+		return nil
+	}
+	if seed != "" {
+		banner("")
+		return nil
+	}
+	banner(pw)
+	return nil
+}
+
+func pendingAdmin(users []auth.User) bool {
+	for _, u := range users {
+		if u.Name == "admin" && u.MustChange {
+			return true
+		}
+	}
+	return false
+}
+
+func consoleBanner(path string) func(string) {
+	return func(password string) {
+		if path == "" {
+			if password != "" {
+				log.Printf("initial admin password: %s", password)
+			}
+			return
+		}
+		text := "argus: https://\\4{br0}/\n"
+		if password != "" {
+			text += "initial login: admin / " + password + "\n"
+		}
+		if err := os.WriteFile(path, []byte(text+"\n"), 0o644); err != nil {
+			log.Printf("banner: %v", err)
+		}
+	}
+}
+
+func retry(fn func(context.Context) error) {
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		err := fn(ctx)
+		cancel()
+		if err == nil {
+			return
+		}
+		log.Print(err)
+		time.Sleep(5 * time.Second)
+	}
 }
 
 func env(k, def string) string {

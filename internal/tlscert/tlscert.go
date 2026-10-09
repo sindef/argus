@@ -20,7 +20,7 @@ import (
 const secretName = "argus-tls"
 
 func Load(ctx context.Context, secrets kube.Secrets) (tls.Certificate, error) {
-	data, err := secrets.Get(ctx, secretName)
+	data, _, err := secrets.Get(ctx, secretName)
 	if err == nil {
 		return tls.X509KeyPair(data["tls.crt"], data["tls.key"])
 	}

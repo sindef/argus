@@ -58,3 +58,10 @@ button.link { background: none; border: none; color: var(--accent); padding: 0; 
 .tabs { margin-left: auto; display: flex; gap: 16px; }
 .tabs a.active { color: var(--fg); font-weight: 600; }
 .screen { background: #000; height: calc(100vh - 170px); min-height: 400px; border-radius: 4px; overflow: hidden; }
+header nav { display: flex; gap: 20px; align-items: center; }
+.notice { padding: 8px 12px; border: 1px solid var(--accent); border-radius: 4px; margin: 0 0 12px; font-family: ui-monospace, monospace; }
+.inline { display: flex; gap: 8px; align-items: center; }
+.row-actions { display: flex; gap: 16px; justify-content: flex-end; }
+.row-actions form, td form { margin: 0; }
+.danger { color: var(--bad) !important; }
+select { padding: 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--fg); font: inherit; }
