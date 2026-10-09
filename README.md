@@ -32,6 +32,7 @@ See [docs/architecture.drawio](docs/architecture.drawio).
 
 - Go binary, embedded static assets. Server-rendered HTML + htmx. noVNC + xterm.js for console.
 - Auth: local users (bcrypt, Secret `argus-system/argus-users`), roles admin/operator/read-only. Initial `admin` password: from `/etc/argus/admin-password` if cloud-config writes it, otherwise random and shown on the node console. Change forced on first login. Admins manage users at `/users`; new and reset users get a one-time password. Binary uses its own scoped ServiceAccount; users never see Kubernetes. Later: OIDC, LDAP bind. SAML via OIDC broker.
+- Host: OS updates, reboot and shutdown are requested through `/run/argus/request`; a host unit (`argus-host`) runs `kairos-agent upgrade` and reboots. Refused while VMs run. Insecure registries via `upgrade.allow-insecure-registries` in cloud-config.
 - Serves HTTPS on node port 443. Self-signed cert generated on first start, kept in Secret `argus-system/argus-tls`.
 - Image baked into the OS image and imported by k3s at boot; no registry needed.
 - Console: proxy KubeVirt `vnc` / `console` subresource websockets.
@@ -52,8 +53,10 @@ See [docs/architecture.drawio](docs/architecture.drawio).
 | 1 | `cmd/argus`: auth, VM list/detail/power, console | Manage VM lifecycle + console from browser |
 | 2 | UI: create VM, disks, images upload/import, networks, snapshots | No kubectl needed for day-to-day |
 | 3 | Footprint pass: measure, trim requests/limits, reserved resources | Idle RAM documented on real hardware |
-| 4 | `cmd/argus-center`: node registry, aggregated view, cold migrate, templates | Move VM between two nodes from UI |
-| 5 | HA restart (backup/replication based) | Open |
+| 4 | Host page: OS update from a registry image, reboot, shutdown | Node updates itself from the UI, data intact |
+| 5 | `cmd/argus-center`: node registry, aggregated view, cold migrate, templates | Move VM between two nodes from UI |
+| 6 | Live migration between nodes (KubeVirt decentralized migration, migration VLAN) | Running VM moves between nodes |
+| 7 | HA restart (backup/replication based) | Open |
 
 ## Layout
 

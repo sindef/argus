@@ -14,11 +14,19 @@ import (
 const cookieName = "argus_session"
 
 type Server struct {
-	kube   *kube.Client
-	auth   *auth.Store
-	banner func(password string)
-	pages  map[string]*template.Template
-	mux    *http.ServeMux
+	kube        *kube.Client
+	auth        *auth.Store
+	banner      func(password string)
+	runDir      string
+	releaseFile string
+	pages       map[string]*template.Template
+	mux         *http.ServeMux
+}
+
+type Options struct {
+	Banner      func(password string)
+	RunDir      string
+	ReleaseFile string
 }
 
 type ctxKey struct{}
@@ -28,9 +36,9 @@ type reqAuth struct {
 	Token string
 }
 
-func New(k *kube.Client, a *auth.Store, banner func(string)) (*Server, error) {
-	s := &Server{kube: k, auth: a, banner: banner, pages: map[string]*template.Template{}, mux: http.NewServeMux()}
-	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "vm.html", "console.html", "images.html", "networks.html", "vmnew.html"} {
+func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
+	s := &Server{kube: k, auth: a, banner: o.Banner, runDir: o.RunDir, releaseFile: o.ReleaseFile, pages: map[string]*template.Template{}, mux: http.NewServeMux()}
+	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "vm.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html"} {
 		t, err := template.ParseFS(web.FS, "templates/layout.html", "templates/"+p)
 		if err != nil {
 			return nil, err
@@ -56,6 +64,8 @@ func New(k *kube.Client, a *auth.Store, banner func(string)) (*Server, error) {
 	s.mux.HandleFunc("GET /networks", s.require(auth.ReadOnly, s.networks))
 	s.mux.HandleFunc("POST /networks", s.require(auth.Admin, s.createNetwork))
 	s.mux.HandleFunc("POST /networks/{name}/delete", s.require(auth.Admin, s.deleteNetwork))
+	s.mux.HandleFunc("GET /host", s.require(auth.Admin, s.host))
+	s.mux.HandleFunc("POST /host/{action}", s.require(auth.Admin, s.hostRequest))
 	s.mux.HandleFunc("GET /{$}", s.require(auth.ReadOnly, s.vms))
 	s.mux.HandleFunc("GET /vms", s.require(auth.ReadOnly, s.vmTable))
 	s.mux.HandleFunc("GET /vms/new", s.require(auth.Operator, s.newVM))

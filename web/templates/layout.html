@@ -15,7 +15,7 @@
     <a href="/">Virtual machines</a>
     <a href="/images">Images</a>
     <a href="/networks">Networks</a>
-    {{if eq .Role "admin"}}<a href="/users">Users</a>{{end}}
+    {{if eq .Role "admin"}}<a href="/users">Users</a><a href="/host">Host</a>{{end}}
     {{end}}{{end}}
   </nav>
   {{with .Session}}{{if .User}}

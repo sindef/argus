@@ -130,8 +130,10 @@ spec:
           image: argus:VERSION
           imagePullPolicy: Never
           env:
-            - name: ARGUS_BANNER
-              value: /host/run/argus/console.issue
+            - name: ARGUS_RUN_DIR
+              value: /host/run/argus
+            - name: ARGUS_RELEASE_FILE
+              value: /host/etc/kairos-release
             - name: ARGUS_ADMIN_PASSWORD_FILE
               value: /host/etc/argus/admin-password
           ports:
@@ -154,6 +156,9 @@ spec:
             - name: etc
               mountPath: /host/etc/argus
               readOnly: true
+            - name: release
+              mountPath: /host/etc/kairos-release
+              readOnly: true
       volumes:
         - name: run
           hostPath:
@@ -163,3 +168,7 @@ spec:
           hostPath:
             path: /etc/argus
             type: DirectoryOrCreate
+        - name: release
+          hostPath:
+            path: /etc/kairos-release
+            type: File

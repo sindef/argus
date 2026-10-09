@@ -1,0 +1,29 @@
+{{define "content"}}
+<h1>Host</h1>
+<p id="flash" class="error"></p>
+{{if .Available}}
+<div hx-get="/host" hx-trigger="every 5s">{{template "state" .}}</div>
+<h2>Update</h2>
+<form hx-post="/host/upgrade" hx-target="#flash" hx-confirm="Update the OS and reboot?" class="inline">
+  <input name="image" placeholder="registry/argus-os:tag" required class="grow">
+  <button type="submit">Update and reboot</button>
+</form>
+<h2>Power</h2>
+<div class="inline">
+  <button hx-post="/host/reboot" hx-target="#flash" hx-confirm="Reboot the host?">Reboot</button>
+  <button class="danger" hx-post="/host/poweroff" hx-target="#flash" hx-confirm="Shut down the host?">Shut down</button>
+</div>
+{{else}}
+<p class="muted">Host control is not available.</p>
+{{end}}
+{{end}}
+
+{{define "state"}}
+<dl>
+  <dt>OS version</dt><dd>{{index .Release "KAIROS_VERSION"}}</dd>
+  <dt>Base</dt><dd>{{index .Release "KAIROS_FLAVOR"}} {{index .Release "KAIROS_FLAVOR_RELEASE"}}</dd>
+  <dt>k3s</dt><dd>{{index .Release "KAIROS_SOFTWARE_VERSION"}}</dd>
+  {{with .Status}}<dt>Status</dt><dd>{{.}}</dd>{{end}}
+</dl>
+{{with .Log}}<pre class="log">{{.}}</pre>{{end}}
+{{end}}

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -24,7 +25,8 @@ func main() {
 		log.Fatal(err)
 	}
 	store := auth.NewStore(kc.Secrets(ns))
-	banner := consoleBanner(os.Getenv("ARGUS_BANNER"))
+	runDir := os.Getenv("ARGUS_RUN_DIR")
+	banner := consoleBanner(runDir)
 
 	var cert tls.Certificate
 	retry(func(ctx context.Context) (err error) {
@@ -35,7 +37,7 @@ func main() {
 		return initialAdmin(ctx, store, os.Getenv("ARGUS_ADMIN_PASSWORD_FILE"), banner)
 	})
 
-	srv, err := server.New(kc, store, banner)
+	srv, err := server.New(kc, store, server.Options{Banner: banner, RunDir: runDir, ReleaseFile: os.Getenv("ARGUS_RELEASE_FILE")})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -94,9 +96,9 @@ func pendingAdmin(users []auth.User) bool {
 	return false
 }
 
-func consoleBanner(path string) func(string) {
+func consoleBanner(dir string) func(string) {
 	return func(password string) {
-		if path == "" {
+		if dir == "" {
 			if password != "" {
 				log.Printf("initial admin password: %s", password)
 			}
@@ -106,7 +108,7 @@ func consoleBanner(path string) func(string) {
 		if password != "" {
 			text += "initial login: admin / " + password + "\n"
 		}
-		if err := os.WriteFile(path, []byte(text+"\n"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "console.issue"), []byte(text+"\n"), 0o644); err != nil {
 			log.Printf("banner: %v", err)
 		}
 	}

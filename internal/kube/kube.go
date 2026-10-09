@@ -322,3 +322,11 @@ func toVM(v, vmi *unstructured.Unstructured) VM {
 	}
 	return vm
 }
+
+func (c *Client) RunningVMs(ctx context.Context) (int, error) {
+	list, err := c.dyn.Resource(vmiGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return 0, err
+	}
+	return len(list.Items), nil
+}
