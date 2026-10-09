@@ -13,6 +13,8 @@ RUN --mount=type=bind,from=kairos-init,src=/kairos-init,dst=/kairos-init \
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends zfsutils-linux \
+    && apt-get install -y --allow-remove-essential coreutils-from-gnu coreutils-from-uutils- \
+    && dpkg --purge --force-depends rust-coreutils \
     && apt-get purge -y --auto-remove \
         linux-firmware \
         linux-firmware-amd-graphics \
