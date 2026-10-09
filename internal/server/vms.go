@@ -1,8 +1,11 @@
 package server
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
 	"argus/internal/auth"
 	"argus/internal/kube"
@@ -89,4 +92,65 @@ func pipe(dst, src *websocket.Conn, done chan<- struct{}) {
 			return
 		}
 	}
+}
+
+func (s *Server) newVM(w http.ResponseWriter, r *http.Request) {
+	imgs, err := s.kube.ListImages(r.Context())
+	nets, nerr := s.kube.ListNetworks(r.Context())
+	if err == nil {
+		err = nerr
+	}
+	s.render(w, r, "vmnew.html", "layout", map[string]any{"Images": imgs, "Networks": nets, "Error": errText(err)})
+}
+
+func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {
+	spec := kube.VMSpec{
+		Name:     r.FormValue("name"),
+		Image:    r.FormValue("image"),
+		CDROM:    r.FormValue("cdrom"),
+		Network:  r.FormValue("network"),
+		UserData: r.FormValue("userdata"),
+		Start:    r.FormValue("start") != "",
+	}
+	err := intField(r, "cores", 1, 64, &spec.Cores)
+	if err == nil {
+		err = intField(r, "memory", 128, 262144, &spec.MemoryMiB)
+	}
+	if err == nil {
+		err = intField(r, "disk", 1, 4096, &spec.DiskGiB)
+	}
+	if err == nil && !validObject.MatchString(spec.Name) {
+		err = errors.New("invalid name")
+	}
+	if err == nil && spec.Network == "" {
+		err = errors.New("network required")
+	}
+	if err == nil {
+		err = s.kube.CreateVM(r.Context(), spec)
+	}
+	if err != nil {
+		flash(w, err)
+		return
+	}
+	log.Printf("%s: create vm %s", session(r).User, spec.Name)
+	redirect(w, r, "/vms/"+kube.Namespace+"/"+spec.Name)
+}
+
+func (s *Server) deleteVM(w http.ResponseWriter, r *http.Request) {
+	ns, name := r.PathValue("ns"), r.PathValue("name")
+	if err := s.kube.DeleteVM(r.Context(), ns, name); err != nil {
+		flash(w, err)
+		return
+	}
+	log.Printf("%s: delete vm %s/%s", session(r).User, ns, name)
+	redirect(w, r, "/")
+}
+
+func intField(r *http.Request, field string, min, max int, dst *int) error {
+	n, err := strconv.Atoi(r.FormValue(field))
+	if err != nil || n < min || n > max {
+		return fmt.Errorf("%s must be %d-%d", field, min, max)
+	}
+	*dst = n
+	return nil
 }

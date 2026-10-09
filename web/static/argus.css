@@ -72,3 +72,10 @@ select { padding: 6px; border: 1px solid var(--line); border-radius: 4px; backgr
 .status.Succeeded { color: var(--ok); }
 .status.ImportInProgress, .status.UploadReady, .status.UploadScheduled, .status.ImportScheduled, .status.Pending, .status.PendingPopulation, .status.CloneInProgress { color: var(--warn); }
 .status.Failed { color: var(--bad); }
+.form { display: flex; flex-direction: column; gap: 14px; max-width: 720px; }
+.form .row { display: flex; gap: 12px; flex-wrap: wrap; }
+.form .row label { flex: 1; min-width: 160px; }
+.form button[type=submit] { align-self: flex-start; }
+textarea { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--fg); font: 13px ui-monospace, monospace; margin-top: 8px; }
+summary { cursor: pointer; color: var(--muted); }
+.check { flex-direction: row; align-items: center; gap: 8px; color: var(--fg); }

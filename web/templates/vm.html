@@ -17,6 +17,7 @@
     <button hx-post="/vms/{{.Namespace}}/{{.Name}}/stop" hx-confirm="Power off {{.Name}}?">Power off</button>
     {{else}}
     <button hx-post="/vms/{{.Namespace}}/{{.Name}}/start">Power on</button>
+    <button class="danger" hx-post="/vms/{{.Namespace}}/{{.Name}}/delete" hx-confirm="Delete {{.Name}} and its disks?">Delete</button>
     {{end}}
   </div>
   {{end}}

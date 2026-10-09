@@ -15,7 +15,10 @@ metadata:
   name: argus
 rules:
   - apiGroups: [kubevirt.io]
-    resources: [virtualmachines, virtualmachineinstances]
+    resources: [virtualmachines]
+    verbs: [get, list, watch, create, delete]
+  - apiGroups: [kubevirt.io]
+    resources: [virtualmachineinstances]
     verbs: [get, list, watch]
   - apiGroups: [subresources.kubevirt.io]
     resources: [virtualmachines/start, virtualmachines/stop, virtualmachines/restart]
@@ -26,6 +29,9 @@ rules:
   - apiGroups: [cdi.kubevirt.io]
     resources: [datavolumes]
     verbs: [get, list, watch, create, delete]
+  - apiGroups: [cdi.kubevirt.io]
+    resources: [datavolumes/source]
+    verbs: [create]
   - apiGroups: [upload.cdi.kubevirt.io]
     resources: [uploadtokenrequests]
     verbs: [create]

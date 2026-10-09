@@ -1,5 +1,8 @@
 {{define "content"}}
-<h1>Virtual machines</h1>
+<div class="title">
+  <h1>Virtual machines</h1>
+  {{if ne .Session.Role "read-only"}}<div class="actions"><a class="button" href="/vms/new">New VM</a></div>{{end}}
+</div>
 <div id="vms" hx-get="/vms" hx-trigger="every 5s">{{template "table" .}}</div>
 {{end}}
 

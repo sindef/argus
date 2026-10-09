@@ -18,6 +18,7 @@ kind: StorageProfile
 metadata:
   name: zfs
 spec:
+  cloneStrategy: csi-clone
   claimPropertySets:
     - accessModes:
         - ReadWriteOnce

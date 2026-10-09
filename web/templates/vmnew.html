@@ -1,0 +1,31 @@
+{{define "content"}}
+<p><a href="/">Virtual machines</a></p>
+<h1>New virtual machine</h1>
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+<p id="flash" class="error"></p>
+<form hx-post="/vms" hx-target="#flash" class="card form">
+  <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required autofocus></label>
+  <div class="row">
+    <label>CPU cores <input name="cores" type="number" min="1" max="64" value="2" required></label>
+    <label>Memory (MiB) <input name="memory" type="number" min="128" max="262144" step="128" value="2048" required></label>
+    <label>Disk (GiB) <input name="disk" type="number" min="1" max="4096" value="20" required></label>
+  </div>
+  <div class="row">
+    <label>Disk source
+      <select name="image"><option value="">Empty disk</option>{{range .Images}}<option value="{{.Name}}">{{.Name}}</option>{{end}}</select>
+    </label>
+    <label>CD-ROM
+      <select name="cdrom"><option value="">None</option>{{range .Images}}<option value="{{.Name}}">{{.Name}}</option>{{end}}</select>
+    </label>
+    <label>Network
+      <select name="network" required>{{range .Networks}}<option value="{{.Name}}">{{.Name}}{{if .VLAN}} (VLAN {{.VLAN}}){{end}}</option>{{end}}</select>
+    </label>
+  </div>
+  <details>
+    <summary>Cloud-init</summary>
+    <textarea name="userdata" rows="8" placeholder="#cloud-config"></textarea>
+  </details>
+  <label class="check"><input name="start" type="checkbox" checked> Power on after creation</label>
+  <button type="submit">Create</button>
+</form>
+{{end}}
