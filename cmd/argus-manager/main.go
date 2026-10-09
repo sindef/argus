@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"argus/internal/auth"
@@ -17,13 +18,14 @@ import (
 
 func main() {
 	addr := env("ARGUS_ADDR", ":8443")
-	fs, err := filestore.New(env("ARGUS_DATA", "/var/lib/argus-manager"))
+	data := env("ARGUS_DATA", "/var/lib/argus-manager")
+	fs, err := filestore.New(data)
 	if err != nil {
 		log.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	mgr := manager.New(fs)
+	mgr := manager.New(fs, filepath.Join(data, "metrics.gob"))
 	if err := mgr.EnsureDefaultOrg(ctx); err != nil {
 		log.Fatal(err)
 	}

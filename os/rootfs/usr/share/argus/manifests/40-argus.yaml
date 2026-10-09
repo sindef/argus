@@ -121,7 +121,7 @@ rules:
     verbs: [get, create, update]
   - apiGroups: [""]
     resources: [pods]
-    verbs: [deletecollection]
+    verbs: [list, deletecollection]
   - apiGroups: [coordination.k8s.io]
     resources: [leases]
     resourceNames: [virt-synchronization-controller]

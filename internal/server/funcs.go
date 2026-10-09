@@ -63,6 +63,8 @@ func num(v any) float64 {
 		return float64(n)
 	case float64:
 		return n
+	case float32:
+		return float64(n)
 	}
 	return 0
 }

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"argus/internal/auth"
 	"argus/internal/kube"
@@ -34,6 +35,7 @@ type hostRow struct {
 	Running   int
 	CoresUsed int64
 	MemUsed   int64
+	Util      *manager.Point
 }
 
 type clusterView struct {
@@ -91,6 +93,9 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 	hostCount, vmCount := map[string]int{}, map[string]int{}
 	for _, st := range states {
 		h := hostRow{NodeState: st, Status: hostStatus(st)}
+		if p, ok := s.manager.HostLatest(st.Node.Name); ok {
+			h.Util = &p
+		}
 		hostCount[h.Status]++
 		if h.Status != "Unreachable" {
 			cores += st.Info.CPUCores
@@ -190,6 +195,7 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 func (s *Server) managerHome(w http.ResponseWriter, r *http.Request) {
 	data := s.managerData(r)
 	data["Nav"] = "home"
+	data["Range"] = r.URL.Query().Get("range")
 	s.render(w, r, "manager.html", "layout", data)
 }
 
@@ -606,4 +612,68 @@ func (s *Server) managerMigrationSettings(w http.ResponseWriter, r *http.Request
 func parseBytes(q string) (int64, error) {
 	v, err := resource.ParseQuantity(q)
 	return v.Value(), err
+}
+
+func (s *Server) managerVMMetrics(w http.ResponseWriter, r *http.Request) {
+	n, err := s.orgNode(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	ns, name := r.PathValue("ns"), r.PathValue("name")
+	cores := float32(1)
+	if st, ok := s.manager.NodeState(n.Name); ok {
+		for _, v := range st.VMs {
+			if v.Namespace == ns && v.Name == name && v.Cores > 0 {
+				cores = float32(v.Cores)
+			}
+		}
+	}
+	ps := s.manager.VMSeries(n.Name, ns, name)
+	cols := map[string][]float32{}
+	t := make([]int64, len(ps))
+	for i, p := range ps {
+		t[i] = p.T
+		cols["cpu"] = append(cols["cpu"], min(100, p.V[0]/cores*100))
+		cols["mem"] = append(cols["mem"], p.V[1])
+		cols["rd"] = append(cols["rd"], p.V[2])
+		cols["wr"] = append(cols["wr"], p.V[3])
+		cols["rx"] = append(cols["rx"], p.V[4])
+		cols["tx"] = append(cols["tx"], p.V[5])
+	}
+	writeJSON(w, map[string]any{"t": t, "cols": cols})
+}
+
+func (s *Server) managerFleetMetrics(w http.ResponseWriter, r *http.Request) {
+	since := time.Now().Add(-24 * time.Hour)
+	if r.URL.Query().Get("range") == "7d" {
+		since = time.Now().Add(-7 * 24 * time.Hour)
+	}
+	var nodes []string
+	if n := r.URL.Query().Get("node"); n != "" {
+		if _, err := s.manager.NodeIn(r.Context(), session(r).Org, n); err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		nodes = []string{n}
+	} else {
+		for _, st := range s.manager.Inventory(session(r).Org) {
+			nodes = append(nodes, st.Node.Name)
+		}
+	}
+	ps := s.manager.HostSeries(nodes, since)
+	cols := map[string][]float32{}
+	t := make([]int64, len(ps))
+	for i, p := range ps {
+		t[i] = p.T
+		cols["cpu"] = append(cols["cpu"], p.V[0])
+		mem := float32(0)
+		if p.V[2] > 0 {
+			mem = p.V[1] / p.V[2] * 100
+		}
+		cols["mem"] = append(cols["mem"], mem)
+		cols["poolUsed"] = append(cols["poolUsed"], p.V[4])
+		cols["poolFree"] = append(cols["poolFree"], p.V[5])
+	}
+	writeJSON(w, map[string]any{"t": t, "cols": cols})
 }

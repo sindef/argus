@@ -1,3 +1,4 @@
+{{define "scripts"}}<link rel="stylesheet" href="/static/vendor/uplot/uPlot.min.css"><script src="/static/vendor/uplot/uPlot.iife.min.js"></script><script src="/static/charts.js"></script>{{end}}
 {{define "content"}}{{$p := .Ctx.Page}}
 {{with .VM}}
 <div class="page-head">
@@ -59,6 +60,12 @@
     </div>
     {{end}}
   </div>
+  <div class="grid charts">
+    <div class="card"><div class="card-head">{{template "icon" "cpu"}}<h2>CPU</h2><span class="right big" data-last></span></div><div class="chart" data-src="{{$p}}/metrics" data-cols="cpu" data-unit="%"></div></div>
+    <div class="card"><div class="card-head">{{template "icon" "memory-stick"}}<h2>Memory</h2><span class="right big" data-last></span></div><div class="chart" data-src="{{$p}}/metrics" data-cols="mem" data-unit="B"></div></div>
+    <div class="card"><div class="card-head">{{template "icon" "hard-drive"}}<h2>Disk I/O</h2></div><div class="chart" data-src="{{$p}}/metrics" data-cols="rd,wr" data-labels="Read,Write" data-unit="B/s"></div></div>
+    <div class="card"><div class="card-head">{{template "icon" "network"}}<h2>Network</h2></div><div class="chart" data-src="{{$p}}/metrics" data-cols="rx,tx" data-labels="In,Out" data-unit="B/s"></div></div>
+  </div>
   <div class="card">
     <div class="card-head">{{template "icon" "hard-drive"}}<h2>Disks</h2></div>
     {{template "disks" .}}
@@ -74,7 +81,8 @@
 </div>
 {{else if eq $.Tab "hardware"}}
 <div class="grid vm-summary">
-  <div class="card"><div class="card-head">{{template "icon" "hard-drive"}}<h2>Disks</h2></div>{{template "disks" .}}</div>
+  <div class="card"><div class="card-head">{{template "icon" "hard-drive"}}<h2>Disks</h2></div>{{template "disks" .}}
+  </div>
   <div class="card"><div class="card-head">{{template "icon" "network"}}<h2>Network</h2></div>{{template "nics" .}}</div>
 </div>
 {{else if eq $.Tab "snapshots"}}

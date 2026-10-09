@@ -48,6 +48,7 @@ type Manager struct {
 	started  time.Time
 	haMu     sync.Mutex
 	inv      inventory
+	tel      *telemetry
 }
 
 type Job struct {
@@ -61,8 +62,8 @@ type Job struct {
 	Live     bool
 }
 
-func New(store auth.Secrets) *Manager {
-	return &Manager{store: store, lastSeen: map[string]time.Time{}, syncing: map[string]bool{}, started: time.Now(), inv: inventory{nodes: map[string]NodeState{}}}
+func New(store auth.Secrets, metricsPath string) *Manager {
+	return &Manager{store: store, lastSeen: map[string]time.Time{}, syncing: map[string]bool{}, started: time.Now(), inv: inventory{nodes: map[string]NodeState{}}, tel: newTelemetry(metricsPath)}
 }
 
 func (c *Manager) Nodes(ctx context.Context) ([]Node, error) {

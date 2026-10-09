@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 
 	"argus/internal/kube"
@@ -36,14 +38,8 @@ func (s *Server) apiNode(w http.ResponseWriter, r *http.Request) {
 		apiError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, kube.NodeInfo{Name: s.nodeName, Version: s.version, CAFingerprint: tlscert.Fingerprint(s.caPEM), RunningVMs: n, CPUCores: int64(runtime.NumCPU()), MemoryBytes: memTotal(), BootTime: bootTime()})
-}
-
-func memTotal() int64 {
-	b, _ := os.ReadFile("/proc/meminfo")
-	var kb int64
-	fmt.Sscanf(string(b), "MemTotal: %d kB", &kb)
-	return kb * 1024
+	mem, _ := memInfo()
+	writeJSON(w, kube.NodeInfo{Name: s.nodeName, Version: s.version, CAFingerprint: tlscert.Fingerprint(s.caPEM), RunningVMs: n, CPUCores: int64(runtime.NumCPU()), MemoryBytes: mem, BootTime: bootTime()})
 }
 
 func bootTime() time.Time {
@@ -375,4 +371,48 @@ func (s *Server) apiRenameClone(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("%s: %s %s/%s %s", session(r).User, r.PathValue("op"), ns, name, req.Value)
 	writeJSON(w, map[string]string{})
+}
+
+func (s *Server) apiMetrics(w http.ResponseWriter, r *http.Request) {
+	vms, err := s.kube.VMMetrics(r.Context())
+	if err != nil {
+		apiError(w, r, http.StatusBadGateway, err)
+		return
+	}
+	m := kube.MetricsSample{Time: time.Now(), VMs: vms}
+	m.CPUTotal, m.CPUIdle = cpuTimes()
+	m.MemTotal, m.MemUsed = memInfo()
+	writeJSON(w, m)
+}
+
+func cpuTimes() (total, idle float64) {
+	b, _ := os.ReadFile("/proc/stat")
+	line, _, _ := strings.Cut(string(b), "\n")
+	for i, f := range strings.Fields(line)[1:] {
+		v, _ := strconv.ParseFloat(f, 64)
+		total += v
+		if i == 3 || i == 4 {
+			idle += v
+		}
+	}
+	return total / 100, idle / 100
+}
+
+func memInfo() (total, used int64) {
+	b, _ := os.ReadFile("/proc/meminfo")
+	var avail int64
+	for _, line := range strings.Split(string(b), "\n") {
+		f := strings.Fields(line)
+		if len(f) < 2 {
+			continue
+		}
+		v, _ := strconv.ParseInt(f[1], 10, 64)
+		switch f[0] {
+		case "MemTotal:":
+			total = v * 1024
+		case "MemAvailable:":
+			avail = v * 1024
+		}
+	}
+	return total, total - avail
 }

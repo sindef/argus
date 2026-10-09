@@ -1,3 +1,4 @@
+{{define "scripts"}}<link rel="stylesheet" href="/static/vendor/uplot/uPlot.min.css"><script src="/static/vendor/uplot/uPlot.iife.min.js"></script><script src="/static/charts.js"></script>{{end}}
 {{define "content"}}
 <div class="page-head">
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-layers"/></svg>
@@ -33,7 +34,13 @@
     <div class="bar"><span style="width:{{min100 (pct .MemUsed .Mem)}}%"></span></div>
   </div></div>
 </div>
-<div class="grid overview">
+<div class="card">
+  <div class="card-head"><h2>Resource Utilization</h2>
+    <nav class="seg right"><a href="?range=24h"{{if ne .Range "7d"}} class="active"{{end}}>24h</a><a href="?range=7d"{{if eq .Range "7d"}} class="active"{{end}}>7d</a></nav>
+  </div>
+  <div class="chart" data-src="/metrics?range={{.Range}}" data-window="{{if eq .Range "7d"}}604800{{else}}86400{{end}}" data-cols="cpu,mem" data-labels="CPU,Memory" data-unit="%" data-height="220"></div>
+</div>
+<div class="grid overview spaced">
   <div class="card">
     <div class="card-head"><h2>Cluster Status</h2></div>
     {{range .Clusters}}
@@ -62,14 +69,17 @@
 <div class="card spaced">
   <div class="card-head"><h2>Hosts</h2>{{if .IsAdmin}}<a class="right" href="/hosts">View all hosts</a>{{end}}</div>
   <div class="table-wrap"><table>
-    <thead><tr><th>Name</th><th>Cluster</th><th>Status</th><th>vCPU</th><th>Memory</th><th>VMs</th><th>Uptime</th></tr></thead>
+    <thead><tr><th>Name</th><th>Cluster</th><th>Status</th><th>CPU</th><th>Memory</th><th>vCPU allocated</th><th>VMs</th><th>Uptime</th></tr></thead>
     <tbody>{{range .Hosts}}<tr>
       <td>{{template "icon" "server"}}{{.Node.Name}}</td>
       <td>{{if .Node.Cluster}}{{.Node.Cluster}}{{else}}<span class="muted">—</span>{{end}}</td>
       <td><span class="dot {{.Status}}" title="{{.Error}}">{{.Status}}</span></td>
-      {{if eq .Status "Unreachable"}}<td colspan="4" class="muted">{{.Error}}</td>{{else}}
-      <td class="meter">{{.CoresUsed}} / {{.Info.CPUCores}}<div class="bar ok"><span style="width:{{min100 (pct .CoresUsed .Info.CPUCores)}}%"></span></div></td>
-      <td class="meter">{{bytes .MemUsed}} / {{bytes .Info.MemoryBytes}}<div class="bar"><span style="width:{{min100 (pct .MemUsed .Info.MemoryBytes)}}%"></span></div></td>
+      {{if eq .Status "Unreachable"}}<td colspan="5" class="muted">{{.Error}}</td>{{else}}
+      {{with .Util}}{{$c := pct (index .V 0) 100}}{{$m := pct (index .V 1) (index .V 2)}}
+      <td class="meter">{{$c}}%<div class="bar {{if ge $c 90}}bad{{else if ge $c 70}}warn{{else}}ok{{end}}"><span style="width:{{min100 $c}}%"></span></div></td>
+      <td class="meter">{{$m}}%<div class="bar {{if ge $m 90}}bad{{else if ge $m 75}}warn{{end}}"><span style="width:{{min100 $m}}%"></span></div></td>
+      {{else}}<td class="muted">—</td><td class="muted">—</td>{{end}}
+      <td>{{.CoresUsed}} / {{.Info.CPUCores}}</td>
       <td>{{.Running}} / {{.VMs}}</td>
       <td>{{since .Info.BootTime}}</td>{{end}}
     </tr>{{end}}</tbody>

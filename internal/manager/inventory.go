@@ -56,6 +56,7 @@ func (m *Manager) NodeState(name string) (NodeState, bool) {
 func (m *Manager) pollLoop() {
 	for {
 		m.PollAll(context.Background())
+		m.tel.save()
 		time.Sleep(pollEvery + time.Duration(rand.Intn(5000))*time.Millisecond)
 	}
 }
@@ -109,6 +110,10 @@ func (m *Manager) poll(ctx context.Context, n Node) {
 		st.Error = err.Error()
 	} else {
 		st.Info, st.VMs, st.Error, st.Observed = info, vms, "", time.Now()
+		var sample kube.MetricsSample
+		if n.Call(ctx, "GET", "/api/metrics", nil, &sample) == nil {
+			m.tel.record(n.Name, info.CPUCores, sample)
+		}
 	}
 	m.inv.mu.Lock()
 	m.inv.nodes[n.Name] = st

@@ -237,3 +237,13 @@ td.meter { min-width: 140px; }
 td.meter .bar { margin-top: 4px; }
 h1.inline { display: flex; align-items: center; gap: 14px; }
 h1 .dot { font-size: 14px; font-weight: 400; }
+.charts { grid-template-columns: 1fr 1fr; grid-column: span 1; }
+.vm-summary > .charts { grid-row: span 2; }
+.chart { min-height: 120px; }
+.big { font-size: 22px; font-weight: 600; }
+.seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 6px; overflow: hidden; }
+.seg a { padding: 5px 12px; color: var(--muted); }
+.seg a.active { background: var(--accent-bg); color: var(--fg); }
+.u-legend { color: var(--muted); font-size: 12px; }
+.u-legend .u-marker { border-radius: 50%; }
+.u-legend th { font-weight: 400; }
