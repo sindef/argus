@@ -10,7 +10,7 @@
 <h2>Migrations</h2>
 <table>
   <thead><tr><th>VM</th><th>From</th><th>To</th><th>Started</th><th>Status</th></tr></thead>
-  <tbody>{{range .Jobs}}<tr><td>{{.VM}}</td><td>{{.From}}</td><td>{{.To}}</td><td>{{.Started.Local.Format "15:04"}}</td>
+  <tbody>{{range .Jobs}}<tr><td>{{.VM}}{{if .Live}} <span class="muted">(live)</span>{{end}}</td><td>{{.From}}</td><td>{{.To}}</td><td>{{.Started.Local.Format "15:04"}}</td>
     <td><span class="status {{if .Failed}}Failed{{else if .Done}}Succeeded{{else}}Pending{{end}}">{{.Status}}</span></td></tr>{{end}}</tbody>
 </table>
 <h2>All nodes</h2>
@@ -33,12 +33,12 @@
       <button class="link" hx-post="/nodes/{{$n.Node.Name}}/vms/{{.Namespace}}/{{.Name}}/stop" hx-target="#flash" hx-confirm="Power off {{.Name}}?">Power off</button>
       {{else}}
       <button class="link" hx-post="/nodes/{{$n.Node.Name}}/vms/{{.Namespace}}/{{.Name}}/start" hx-target="#flash">Power on</button>
+      {{end}}
       {{if $.IsAdmin}}
-      <form hx-post="/nodes/{{$n.Node.Name}}/vms/{{.Namespace}}/{{.Name}}/migrate" hx-target="#flash" hx-confirm="Move {{.Name}}?">
+      <form hx-post="/nodes/{{$n.Node.Name}}/vms/{{.Namespace}}/{{.Name}}/migrate" hx-target="#flash" hx-confirm="Move {{.Name}}{{if .Running}} while running{{end}}?">
         <select name="to">{{range $.Nodes}}{{if ne .Node.Name $n.Node.Name}}<option value="{{.Node.Name}}">{{.Node.Name}}</option>{{end}}{{end}}</select>
         <button type="submit" class="link">Move</button>
       </form>
-      {{end}}
       {{end}}
       {{end}}
     </td>

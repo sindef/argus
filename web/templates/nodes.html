@@ -2,17 +2,24 @@
 <h1>Nodes</h1>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
 <table>
-  <thead><tr><th>Name</th><th>Address</th><th>Version</th><th>Running VMs</th><th>Status</th><th></th></tr></thead>
+  <thead><tr><th>Name</th><th>Address</th><th>Version</th><th>Running VMs</th><th>Migration IPs</th><th>Status</th><th></th></tr></thead>
   <tbody>{{range .Nodes}}<tr>
     <td>{{.Node.Name}}</td>
     <td><a href="{{.Node.URL}}" target="_blank">{{.Node.URL}}</a></td>
     <td>{{.Info.Version}}</td>
     <td>{{if not .Error}}{{.Info.RunningVMs}}{{end}}</td>
+    <td>{{index $.Ranges .Node.Name}}</td>
     <td>{{if .Error}}<span class="status Failed" title="{{.Error}}">Unreachable</span>{{else}}<span class="status Running">Connected</span>{{end}}</td>
     <td class="row-actions">{{if $.IsAdmin}}<form method="post" action="/nodes/{{.Node.Name}}/delete" onsubmit="return confirm('Remove {{.Node.Name}}?')"><button type="submit" class="link danger">Remove</button></form>{{end}}</td>
   </tr>{{end}}</tbody>
 </table>
 {{if .IsAdmin}}
+<h2>Migration network</h2>
+<form method="post" action="/settings/migration" class="inline">
+  <input name="subnet" placeholder="10.99.0.0/24" value="{{.Migration.Subnet}}" required>
+  <input name="vlan" type="number" min="0" max="4094" placeholder="VLAN" value="{{if .Migration.VLAN}}{{.Migration.VLAN}}{{end}}" class="num">
+  <button type="submit">Apply to all nodes</button>
+</form>
 <h2>Add node</h2>
 <form method="post" action="/nodes" class="card form">
   <div class="row">

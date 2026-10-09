@@ -73,6 +73,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("GET /nodes", s.require(auth.ReadOnly, s.centerNodes))
 		s.mux.HandleFunc("POST /nodes", s.require(auth.Admin, s.centerAddNode))
 		s.mux.HandleFunc("POST /nodes/{node}/delete", s.require(auth.Admin, s.centerRemoveNode))
+		s.mux.HandleFunc("POST /settings/migration", s.require(auth.Admin, s.centerMigrationSettings))
 		return s, nil
 	}
 	s.mux.HandleFunc("GET /images", s.require(auth.ReadOnly, s.images))

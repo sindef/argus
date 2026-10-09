@@ -29,6 +29,7 @@ type Node struct {
 	URL   string `json:"url"`
 	Token string `json:"token"`
 	CA    string `json:"ca"`
+	Slot  int    `json:"slot,omitempty"`
 }
 
 type NodeInfo struct {
@@ -52,6 +53,7 @@ type Job struct {
 	Status   string
 	Done     bool
 	Failed   bool
+	Live     bool
 }
 
 func New(store auth.Secrets) *Center {
@@ -123,7 +125,10 @@ func (c *Center) AddNode(ctx context.Context, name, url, token, fingerprint stri
 			return errors.New("node already registered")
 		}
 	}
-	return c.save(ctx, append(ns, n), rv)
+	if err := c.save(ctx, append(ns, n), rv); err != nil {
+		return err
+	}
+	return c.PushMigrationNetwork(ctx)
 }
 
 func (c *Center) RemoveNode(ctx context.Context, name string) error {
@@ -211,6 +216,37 @@ func (n Node) Action(ctx context.Context, ns, vm, action string) error {
 	return n.do(ctx, http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/%s", ns, vm, action), nil, nil)
 }
 
+func (c *Center) checkNetworks(ctx context.Context, src, dst Node, ns, vm string) error {
+	vms, err := src.VMs(ctx)
+	if err != nil {
+		return err
+	}
+	var source *kube.VM
+	for i := range vms {
+		if vms[i].Namespace == ns && vms[i].Name == vm {
+			source = &vms[i]
+		}
+	}
+	if source == nil {
+		return fmt.Errorf("%s not found on %s", vm, src.Name)
+	}
+	var nets []kube.Network
+	if err := dst.do(ctx, http.MethodGet, "/api/networks", nil, &nets); err != nil {
+		return err
+	}
+	have := map[string]bool{}
+	for _, n := range nets {
+		have[n.Name] = true
+		have[kube.Namespace+"/"+n.Name] = true
+	}
+	for _, nic := range source.NICs {
+		if nic.Network != "" && nic.Network != "pod" && !have[nic.Network] {
+			return fmt.Errorf("network %s missing on %s", nic.Network, dst.Name)
+		}
+	}
+	return nil
+}
+
 func (c *Center) Jobs() []Job {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -244,32 +280,8 @@ func (c *Center) Migrate(src, dst Node, ns, vm string) {
 }
 
 func (c *Center) migrate(ctx context.Context, j *Job, src, dst Node, ns, vm string) error {
-	vms, err := src.VMs(ctx)
-	if err != nil {
+	if err := c.checkNetworks(ctx, src, dst, ns, vm); err != nil {
 		return err
-	}
-	var source *kube.VM
-	for i := range vms {
-		if vms[i].Namespace == ns && vms[i].Name == vm {
-			source = &vms[i]
-		}
-	}
-	if source == nil {
-		return fmt.Errorf("%s not found on %s", vm, src.Name)
-	}
-	var nets []kube.Network
-	if err := dst.do(ctx, http.MethodGet, "/api/networks", nil, &nets); err != nil {
-		return err
-	}
-	have := map[string]bool{}
-	for _, n := range nets {
-		have[n.Name] = true
-		have[kube.Namespace+"/"+n.Name] = true
-	}
-	for _, nic := range source.NICs {
-		if nic.Network != "" && nic.Network != "pod" && !have[nic.Network] {
-			return fmt.Errorf("network %s missing on %s", nic.Network, dst.Name)
-		}
 	}
 
 	c.update(j, "Exporting", false, false)

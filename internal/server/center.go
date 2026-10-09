@@ -95,11 +95,25 @@ func (s *Server) centerMigrate(w http.ResponseWriter, r *http.Request) {
 	if err == nil && src.Name == dst.Name {
 		err = errors.New("pick a different node")
 	}
+	running := false
+	if err == nil {
+		var vms []kube.VM
+		vms, err = src.VMs(r.Context())
+		for _, v := range vms {
+			if v.Namespace == r.PathValue("ns") && v.Name == r.PathValue("name") {
+				running = v.Running
+			}
+		}
+	}
 	if err != nil {
 		flash(w, r, err)
 		return
 	}
-	s.center.Migrate(src, dst, r.PathValue("ns"), r.PathValue("name"))
+	if running {
+		s.center.LiveMigrate(src, dst, r.PathValue("ns"), r.PathValue("name"))
+	} else {
+		s.center.Migrate(src, dst, r.PathValue("ns"), r.PathValue("name"))
+	}
 	log.Printf("%s: migrate %s/%s from %s to %s", session(r).User, r.PathValue("ns"), r.PathValue("name"), src.Name, dst.Name)
 	w.Header().Set("HX-Refresh", "true")
 }
@@ -116,7 +130,17 @@ func (s *Server) renderNodes(w http.ResponseWriter, r *http.Request, err error) 
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 	}
-	s.render(w, r, "nodes.html", "layout", map[string]any{"Nodes": nodes, "IsAdmin": session(r).Role.Can(auth.Admin), "Error": errText(err)})
+	mig, merr := s.center.MigrationSettings(r.Context())
+	if err == nil {
+		err = merr
+	}
+	ranges := map[string]string{}
+	for _, n := range nodes {
+		if start, end, rerr := center.SlotRange(mig.Subnet, n.Node.Slot); mig.Subnet != "" && rerr == nil {
+			ranges[n.Node.Name] = start + " – " + end
+		}
+	}
+	s.render(w, r, "nodes.html", "layout", map[string]any{"Nodes": nodes, "Migration": mig, "Ranges": ranges, "IsAdmin": session(r).Role.Can(auth.Admin), "Error": errText(err)})
 }
 
 func (s *Server) centerAddNode(w http.ResponseWriter, r *http.Request) {
@@ -145,5 +169,21 @@ func (s *Server) centerRemoveNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("%s: removed node %s", session(r).User, name)
+	http.Redirect(w, r, "/nodes", http.StatusSeeOther)
+}
+
+func (s *Server) centerMigrationSettings(w http.ResponseWriter, r *http.Request) {
+	vlan := 0
+	if v := r.FormValue("vlan"); v != "" {
+		if err := intField(r, "vlan", 0, 4094, &vlan); err != nil {
+			s.renderNodes(w, r, err)
+			return
+		}
+	}
+	if err := s.center.SetMigrationSettings(r.Context(), center.MigrationSettings{VLAN: vlan, Subnet: r.FormValue("subnet")}); err != nil {
+		s.renderNodes(w, r, err)
+		return
+	}
+	log.Printf("%s: migration network vlan %d %s", session(r).User, vlan, r.FormValue("subnet"))
 	http.Redirect(w, r, "/nodes", http.StatusSeeOther)
 }

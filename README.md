@@ -46,6 +46,8 @@ See [docs/architecture.drawio](docs/architecture.drawio).
 - Aggregated VM view with power actions; links into each node's UI for detail and console.
 - Cold migrate (VM off, no CD-ROM): source exports via KubeVirt `VirtualMachineExport`, argus streams it at `/export/...` guarded by the export token; target imports with CDI straight from the source. Disks never pass through the manager. Source VM is deleted after the target has all disks. VMs keep their MAC.
 - Target needs the same network names (VLANs) as the source.
+- Live migrate (VM running): KubeVirt decentralized live migration (feature gate `DecentralizedLiveMigration`, alpha). The manager's migration network setting (VLAN + subnet ≥ /24) gives each node a fixed 16-address block and creates `kubevirt/argus-migration` on `br0`; virt-handler and the sync controller join it as `migration0`. Nodes need L2 on that VLAN. KubeVirt CAs are re-exchanged before each migration. Measured ~1s ping loss for a small VM.
+- argus restarts KubeVirt's sync controller before a live migration if its lease is stale: on lease loss it stops working without exiting.
 
 ```
 make center
