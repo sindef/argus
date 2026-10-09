@@ -1,0 +1,7 @@
+[Unit]
+Description=Handle host request from argus
+
+[Service]
+Type=oneshot
+TimeoutStartSec=infinity
+ExecStart=/usr/sbin/argus-host

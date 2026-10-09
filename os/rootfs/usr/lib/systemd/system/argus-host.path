@@ -1,0 +1,8 @@
+[Unit]
+Description=Handle host requests from argus
+
+[Path]
+PathExists=/run/argus/request
+
+[Install]
+WantedBy=multi-user.target

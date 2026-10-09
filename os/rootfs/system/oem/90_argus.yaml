@@ -1,5 +1,27 @@
 name: argus
 stages:
+  initramfs:
+    - name: Image sizes for install and upgrade
+      directories:
+        - path: /usr/local/cloud-config
+          permissions: 0700
+      files:
+        - path: /usr/local/cloud-config/10-argus.yaml
+          permissions: 0600
+          content: |
+            #cloud-config
+            install:
+              system:
+                size: 1536
+              passive:
+                size: 1536
+              recovery-system:
+                size: 1536
+            upgrade:
+              system:
+                size: 1536
+              recovery-system:
+                size: 1536
   boot:
     - name: Unattended install when install.auto is set
       if: '[ -f /run/cos/live_mode ] && [ "$(kairos-agent config get install.auto 2>/dev/null)" = "true" ]'
