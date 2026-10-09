@@ -11,17 +11,18 @@
   <tbody>
   {{range .Users}}
   <tr>
-    <td>{{template "icon" "user"}}{{.Name}}{{if .MustChange}} <span class="muted">(password change pending)</span>{{end}}</td>
+    <td>{{template "icon" "user"}}{{.Name}}{{if .MustChange}} <span class="muted">(password change pending)</span>{{end}}{{if .SSO}} <span class="badge">SSO</span>{{end}}</td>
     <td>
+      {{if .SSO}}<span title="Mapped from the identity provider's groups at each sign-in">{{.Role}}</span>{{else}}
       <form method="post" action="/users/{{.Name}}/role">
         <select name="role" onchange="this.form.submit()">
           {{$r := .Role}}{{range $.Roles}}<option value="{{.}}"{{if eq . $r}} selected{{end}}>{{.}}</option>{{end}}
         </select>
-      </form>
+      </form>{{end}}
     </td>
     <td class="row-actions">
       {{if ne .Name $.Session.User}}
-      <form method="post" action="/users/{{.Name}}/reset"><button type="submit" class="link">Reset password</button></form>
+      {{if not .SSO}}<form method="post" action="/users/{{.Name}}/reset"><button type="submit" class="link">Reset password</button></form>{{end}}
       <form method="post" action="/users/{{.Name}}/delete" onsubmit="return confirm('Delete {{.Name}}?')"><button type="submit" class="link danger">Delete</button></form>
       {{end}}
     </td>

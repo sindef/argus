@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -39,6 +40,7 @@ type User struct {
 	Hash       string `json:"hash"`
 	Role       Role   `json:"role"`
 	MustChange bool   `json:"mustChange,omitempty"`
+	SSO        bool   `json:"sso,omitempty"`
 }
 
 const (
@@ -196,6 +198,21 @@ func (s *Store) Add(ctx context.Context, name string, role Role, password string
 	})
 }
 
+func (s *Store) UpsertSSO(ctx context.Context, name string, role Role) error {
+	return s.modify(ctx, func(us []User) ([]User, error) {
+		for i := range us {
+			if us[i].Name == name {
+				if !us[i].SSO {
+					return nil, fmt.Errorf("local user %s already exists", name)
+				}
+				us[i].Role = role
+				return us, nil
+			}
+		}
+		return append(us, User{Name: name, Role: role, SSO: true}), nil
+	})
+}
+
 func (s *Store) Delete(ctx context.Context, name string) error {
 	err := s.modify(ctx, func(us []User) ([]User, error) {
 		out := us[:0]
@@ -220,6 +237,9 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 
 func (s *Store) SetRole(ctx context.Context, name string, role Role) error {
 	err := s.update(ctx, name, func(u *User) error {
+		if u.SSO {
+			return ErrSSO
+		}
 		u.Role = role
 		return nil
 	})
@@ -235,6 +255,9 @@ func (s *Store) ResetPassword(ctx context.Context, name, password string) error 
 		return err
 	}
 	err = s.update(ctx, name, func(u *User) error {
+		if u.SSO {
+			return ErrSSO
+		}
 		u.Hash, u.MustChange = h, true
 		return nil
 	})
@@ -289,9 +312,11 @@ func (s *Store) update(ctx context.Context, name string, fn func(*User) error) e
 	})
 }
 
+var ErrSSO = errors.New("single sign-on users are managed by the identity provider")
+
 func checkAdmins(us []User) error {
 	for _, u := range us {
-		if u.Role == Admin {
+		if u.Role == Admin && !u.SSO {
 			return nil
 		}
 	}

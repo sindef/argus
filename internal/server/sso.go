@@ -119,9 +119,17 @@ func (s *Server) ssoCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := firstString(claims, "preferred_username", "email", "sub")
+	if user == "" {
+		fail("Single sign-on failed", errors.New("no username claim"))
+		return
+	}
 	role, ok := mapRole(claims[settings.groupsClaim], settings.roles)
 	if !ok {
 		fail("Your account has no access to this organization", errors.New(user+": no mapped group"))
+		return
+	}
+	if err := s.auth.ForOrg(flow.org).UpsertSSO(r.Context(), user, role); err != nil {
+		fail("Single sign-on failed", err)
 		return
 	}
 	session := s.auth.ForOrg(flow.org).NewSession(auth.Session{User: user, Role: role, SSO: true}, flow.remember)
