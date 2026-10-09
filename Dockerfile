@@ -1,4 +1,4 @@
-FROM golang:1.23 AS build
+FROM golang:1.27.2 AS build
 ARG CMD=argus
 WORKDIR /src
 COPY go.mod go.sum ./
