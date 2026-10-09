@@ -10,3 +10,4 @@ write-kubeconfig-mode: "0600"
 kubelet-arg:
   - system-reserved=cpu=250m,memory=256Mi
   - kube-reserved=cpu=250m,memory=512Mi
+nonroot-devices: true

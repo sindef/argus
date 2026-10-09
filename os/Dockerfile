@@ -7,6 +7,7 @@ ARG VERSION=0.1.0
 ARG K3S_VERSION=v1.35.8+k3s1
 ARG KUBEVIRT_VERSION=v1.9.0
 ARG CDI_VERSION=v1.66.1
+ARG NAD_VERSION=v1.7.7
 
 RUN --mount=type=bind,from=kairos-init,src=/kairos-init,dst=/kairos-init \
     /kairos-init -s install -m generic -p k3s --provider-k3s-version "${K3S_VERSION}" --version "${VERSION}"
@@ -35,6 +36,7 @@ RUN apt-get update \
 
 ADD https://github.com/kubevirt/kubevirt/releases/download/${KUBEVIRT_VERSION}/kubevirt-operator.yaml /usr/share/argus/manifests/10-kubevirt-operator.yaml
 ADD https://github.com/kubevirt/containerized-data-importer/releases/download/${CDI_VERSION}/cdi-operator.yaml /usr/share/argus/manifests/10-cdi-operator.yaml
+ADD https://raw.githubusercontent.com/k8snetworkplumbingwg/network-attachment-definition-client/${NAD_VERSION}/artifacts/networks-crd.yaml /usr/share/argus/manifests/10-nad-crd.yaml
 COPY rootfs/ /
 
 RUN --mount=type=bind,from=kairos-init,src=/kairos-init,dst=/kairos-init \
