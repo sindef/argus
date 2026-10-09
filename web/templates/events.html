@@ -1,0 +1,27 @@
+{{define "content"}}
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-bell"/></svg>
+  <h1>Events</h1>
+</div>
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+{{with .Jobs}}
+<div class="card">
+  <div class="card-head"><h2>Migrations</h2></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>VM</th><th>From</th><th>To</th><th>Started</th><th>Status</th></tr></thead>
+    <tbody>{{range .}}<tr><td>{{.VM}}{{if .Live}} <span class="muted">(live)</span>{{end}}</td><td>{{.From}}</td><td>{{.To}}</td><td>{{.Started.Local.Format "15:04"}}</td>
+      <td><span class="dot {{if .Failed}}Failed{{else if .Done}}Succeeded{{else}}Migrating{{end}}">{{.Status}}</span></td></tr>{{end}}</tbody>
+  </table></div>
+</div>
+{{end}}
+<div class="table-wrap spaced"><table>
+  <thead><tr><th>Time</th>{{if .Manager}}<th>Host</th>{{end}}<th>Event</th><th>Object</th><th>Details</th></tr></thead>
+  <tbody>{{range .Events}}<tr>
+    <td title="{{.Time.Local.Format "2006-01-02 15:04:05"}}">{{since .Time}} ago</td>
+    {{if $.Manager}}<td>{{.Host}}</td>{{end}}
+    <td><span class="dot {{if eq .Type "Warning"}}Warning{{else}}Running{{end}}">{{.Reason}}</span></td>
+    <td>{{.Object}}</td>
+    <td class="clip" title="{{.Message}}">{{.Message}}</td>
+  </tr>{{else}}<tr><td colspan="5" class="muted">No recent events.</td></tr>{{end}}</tbody>
+</table></div>
+{{end}}

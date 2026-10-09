@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"argus/internal/auth"
@@ -676,4 +678,61 @@ func (s *Server) managerFleetMetrics(w http.ResponseWriter, r *http.Request) {
 		cols["poolFree"] = append(cols["poolFree"], p.V[5])
 	}
 	writeJSON(w, map[string]any{"t": t, "cols": cols})
+}
+
+type hostEvent struct {
+	kube.Event
+	Host string
+}
+
+func fanOut(ctx context.Context, states []manager.NodeState, fn func(context.Context, manager.Node) error) string {
+	var (
+		mu   sync.Mutex
+		wg   sync.WaitGroup
+		errs []string
+	)
+	sem := make(chan struct{}, 8)
+	for _, st := range states {
+		if !st.Reachable() {
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(n manager.Node) {
+			defer func() { <-sem; wg.Done() }()
+			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			if err := fn(ctx, n); err != nil {
+				mu.Lock()
+				errs = append(errs, err.Error())
+				mu.Unlock()
+			}
+		}(st.Node)
+	}
+	wg.Wait()
+	return strings.Join(errs, "; ")
+}
+
+func (s *Server) managerEvents(w http.ResponseWriter, r *http.Request) {
+	var (
+		mu  sync.Mutex
+		evs []hostEvent
+	)
+	errs := fanOut(r.Context(), s.manager.Inventory(session(r).Org), func(ctx context.Context, n manager.Node) error {
+		var list []kube.Event
+		if err := n.Call(ctx, http.MethodGet, "/api/events", nil, &list); err != nil {
+			return err
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		for _, e := range list {
+			evs = append(evs, hostEvent{Event: e, Host: n.Name})
+		}
+		return nil
+	})
+	sort.Slice(evs, func(i, j int) bool { return evs[i].Time.After(evs[j].Time) })
+	if len(evs) > 200 {
+		evs = evs[:200]
+	}
+	s.render(w, r, "events.html", "layout", map[string]any{"Events": evs, "Error": errs, "Nav": "events", "Jobs": s.manager.Jobs(session(r).Org)})
 }

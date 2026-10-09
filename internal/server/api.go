@@ -308,7 +308,11 @@ func (s *Server) apiVM(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiEvents(w http.ResponseWriter, r *http.Request) {
-	evs, err := s.kube.Events(r.Context(), r.PathValue("ns"), r.PathValue("name"), 50)
+	ns := r.PathValue("ns")
+	if ns == "" {
+		ns = "default"
+	}
+	evs, err := s.kube.Events(r.Context(), ns, r.PathValue("name"), 50)
 	if err != nil {
 		apiError(w, r, http.StatusBadGateway, err)
 		return

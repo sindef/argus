@@ -325,3 +325,8 @@ func (s *Server) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 	log.Printf("%s: delete snapshot %s/%s", session(r).User, ns, snap)
 	w.Header().Set("HX-Refresh", "true")
 }
+
+func (s *Server) eventsPage(w http.ResponseWriter, r *http.Request) {
+	evs, err := s.kube.Events(r.Context(), "default", "", 200)
+	s.render(w, r, "events.html", "layout", map[string]any{"Events": evs, "Error": errText(err), "Nav": "events"})
+}
