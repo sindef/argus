@@ -7,7 +7,7 @@ Lightweight KubeVirt hypervisor. One node = one standalone single-node k3s clust
 | | Floor | Sane |
 |---|---|---|
 | CPU | 2 cores, VT-x/AMD-V | 4 cores |
-| RAM (idle, no VMs) | ~1.1GB measured, ARC capped at 256MiB | 4GB+ |
+| RAM (idle, no VMs) | ~2.1GB used, incl. 256MiB ZFS ARC (measured, 4GiB node) | 8GB+ |
 | Disk | 10GiB OS + 10GiB ZFS datastore | NVMe |
 | Per-VM overhead | ~150-250MB (virt-launcher) | |
 
@@ -20,7 +20,7 @@ See [docs/architecture.drawio](docs/architecture.drawio).
 | Layer | Component | Notes |
 |---|---|---|
 | OS | Kairos (Ubuntu 26.04 base, k3s provider), KVM, `br0`, ZFS pool | Immutable A/B image built from `os/Dockerfile`. `br0` with VLAN filtering, uplink enslaved |
-| K8s | k3s server, sqlite (kine) | `--disable traefik,servicelb,metrics-server,local-storage --disable-cloud-controller --disable-network-policy --flannel-backend=host-gw --nonroot-devices` |
+| K8s | k3s server, sqlite (kine), `GOMEMLIMIT=512MiB` | `--disable traefik,servicelb,metrics-server,local-storage --disable-cloud-controller --disable-network-policy --flannel-backend=host-gw --nonroot-devices` |
 | Pod network | flannel (in-process) | Infra pods only |
 | VM network | Multus (thin) + bridge CNI | One NAD per VLAN on `br0`, `ipam: {}`, LAN DHCP. VMs `autoattachPodInterface: false` |
 | VM runtime | KubeVirt | `spec.infra.replicas: 1` |
