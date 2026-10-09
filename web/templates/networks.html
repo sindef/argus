@@ -1,0 +1,26 @@
+{{define "content"}}
+<h1>Networks</h1>
+<p id="flash" class="error"></p>
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+<table>
+  <thead><tr><th>Name</th><th>VLAN</th><th>Bridge</th><th></th></tr></thead>
+  <tbody>
+  {{range .Networks}}
+  <tr>
+    <td>{{.Name}}</td>
+    <td>{{if .VLAN}}{{.VLAN}}{{else}}untagged{{end}}</td>
+    <td>{{.Bridge}}</td>
+    <td class="row-actions">{{if $.CanEdit}}<button class="link danger" hx-post="/networks/{{.Name}}/delete" hx-target="#flash" hx-confirm="Delete network {{.Name}}?">Delete</button>{{end}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{if .CanEdit}}
+<h2>Add network</h2>
+<form hx-post="/networks" hx-target="#flash" class="inline">
+  <input name="name" placeholder="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required>
+  <input name="vlan" type="number" min="1" max="4094" placeholder="VLAN" class="num">
+  <button type="submit">Add</button>
+</form>
+{{end}}
+{{end}}

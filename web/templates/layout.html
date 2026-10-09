@@ -14,6 +14,7 @@
     {{with .Session}}{{if and .User (not .MustChange)}}
     <a href="/">Virtual machines</a>
     <a href="/images">Images</a>
+    <a href="/networks">Networks</a>
     {{if eq .Role "admin"}}<a href="/users">Users</a>{{end}}
     {{end}}{{end}}
   </nav>
