@@ -1,0 +1,46 @@
+{{define "manager-nav"}}
+<a class="nav-link{{if eq .Nav "home"}} active{{end}}" href="/">{{template "icon" "house"}}Home</a>
+<div class="nav-section" id="infra">
+  <button class="nav-head">{{template "icon" "layers"}}Infrastructure<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-up"/></svg></button>
+  <div class="nav-items" hx-get="/nav/tree?nav={{.Nav}}" hx-trigger="load, every 30s" hx-swap="innerHTML"></div>
+</div>
+<a class="nav-link{{if eq .Nav "vms"}} active{{end}}" href="/vms">{{template "icon" "monitor"}}Virtual Machines</a>
+{{if eq .Session.Role "admin"}}
+<div class="nav-sep"></div>
+<div class="nav-section" id="admin">
+  <button class="nav-head">{{template "icon" "settings"}}Administration<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-up"/></svg></button>
+  <div class="nav-items">
+    <a class="nav-link sub{{if eq .Nav "hosts"}} active{{end}}" href="/hosts">Hosts</a>
+    <a class="nav-link sub{{if eq .Nav "users"}} active{{end}}" href="/users">Users</a>
+    <a class="nav-link sub{{if eq .Nav "settings"}} active{{end}}" href="/settings">Settings</a>
+  </div>
+</div>
+{{end}}
+{{end}}
+
+{{define "twisty"}}<svg class="i twisty"><use href="/static/vendor/lucide/icons.svg#i-chevron-down"/></svg>{{end}}
+
+{{define "vm-menu"}}{{$v := .V}}
+<div class="menu-list" hidden hx-target="#flash">
+  <a href="{{.Page}}">{{template "icon" "monitor"}}Open</a>
+  {{if .CanOperate}}
+  <hr>
+  {{if $v.Running}}
+  <button hx-post="{{.Page}}/stop" hx-confirm="Shut down {{$v.Label}}?">{{template "icon" "power"}}Shut down</button>
+  <button hx-post="{{.Page}}/restart" hx-confirm="Restart {{$v.Label}}?">{{template "icon" "rotate-cw"}}Restart</button>
+  <button hx-post="{{.Page}}/pause">{{template "icon" "pause"}}Pause</button>
+  <a href="{{.Page}}/console">{{template "icon" "terminal"}}Open Console</a>
+  {{else if eq $v.Status "Paused"}}
+  <button hx-post="{{.Page}}/unpause">{{template "icon" "play"}}Resume</button>
+  {{else}}
+  <button hx-post="{{.Page}}/start">{{template "icon" "play"}}Power on</button>
+  {{end}}
+  <hr>
+  {{if .IsAdmin}}<a href="{{.Page}}#migrate">{{template "icon" "arrow-right-left"}}Migrate</a>{{end}}
+  <button hx-post="{{.Page}}/clone" hx-prompt="Name for the clone">{{template "icon" "copy"}}Clone</button>
+  <button hx-post="{{.Page}}/snapshot">{{template "icon" "camera"}}Snapshot</button>
+  <button hx-post="{{.Page}}/rename" hx-prompt="Display name (empty to clear)">{{template "icon" "pencil"}}Rename</button>
+  {{if .IsAdmin}}<hr><button class="danger" hx-post="{{.Page}}/delete" hx-confirm="Delete {{$v.Label}} and its disks?">{{template "icon" "trash-2"}}Delete</button>{{end}}
+  {{end}}
+</div>
+{{end}}

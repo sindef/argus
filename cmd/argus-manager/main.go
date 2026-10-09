@@ -23,8 +23,12 @@ func main() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	mgr := manager.New(fs)
+	if err := mgr.EnsureDefaultOrg(ctx); err != nil {
+		log.Fatal(err)
+	}
 	store := auth.NewStore(fs)
-	pw, err := store.EnsureAdmin(ctx, "")
+	pw, err := store.ForOrg(manager.DefaultOrg).EnsureAdmin(ctx, "")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -35,7 +39,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	mgr := manager.New(fs)
 	mgr.Start()
 	srv, err := server.New(nil, store, server.Options{Banner: func(string) {}, Manager: mgr})
 	if err != nil {

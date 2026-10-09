@@ -42,9 +42,10 @@ type User struct {
 }
 
 const (
-	secretName = "argus-users"
-	secretKey  = "users.json"
-	sessionTTL = 12 * time.Hour
+	secretName  = "argus-users"
+	secretKey   = "users.json"
+	sessionTTL  = 12 * time.Hour
+	rememberTTL = 30 * 24 * time.Hour
 )
 
 var (
@@ -61,21 +62,58 @@ type Secrets interface {
 }
 
 type Store struct {
-	secrets Secrets
-
-	mu       sync.Mutex
-	sessions map[string]Session
+	secrets  Secrets
+	key      string
+	org      string
+	sessions *Sessions
 }
 
 type Session struct {
 	User       string
+	Org        string
 	Role       Role
 	MustChange bool
+	SSO        bool
 	Expires    time.Time
 }
 
+type Sessions struct {
+	mu sync.Mutex
+	m  map[string]Session
+}
+
 func NewStore(secrets Secrets) *Store {
-	return &Store{secrets: secrets, sessions: map[string]Session{}}
+	return &Store{secrets: secrets, key: secretName, sessions: &Sessions{m: map[string]Session{}}}
+}
+
+func (s *Store) ForOrg(org string) *Store {
+	return &Store{secrets: s.secrets, key: secretName + "-" + org, org: org, sessions: s.sessions}
+}
+
+func (s *Store) NewSession(sess Session, remember bool) string {
+	sess.Org = s.org
+	return s.sessions.add(sess, remember)
+}
+
+func (ss *Sessions) add(sess Session, remember bool) string {
+	b := make([]byte, 32)
+	rand.Read(b)
+	tok := hex.EncodeToString(b)
+	ttl := sessionTTL
+	if remember {
+		ttl = rememberTTL
+	}
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	now := time.Now()
+	for k, v := range ss.m {
+		if now.After(v.Expires) {
+			delete(ss.m, k)
+		}
+	}
+	sess.Expires = now.Add(ttl)
+	ss.m[tok] = sess
+	return tok
 }
 
 func RandomPassword() string {
@@ -85,7 +123,7 @@ func RandomPassword() string {
 }
 
 func (s *Store) load(ctx context.Context) ([]User, string, error) {
-	data, rv, err := s.secrets.Get(ctx, secretName)
+	data, rv, err := s.secrets.Get(ctx, s.key)
 	if apierrors.IsNotFound(err) {
 		return nil, "", nil
 	}
@@ -111,9 +149,9 @@ func (s *Store) modify(ctx context.Context, fn func([]User) ([]User, error)) err
 		}
 		data := map[string][]byte{secretKey: b}
 		if rv == "" {
-			err = s.secrets.Create(ctx, secretName, "Opaque", data)
+			err = s.secrets.Create(ctx, s.key, "Opaque", data)
 		} else {
-			err = s.secrets.Update(ctx, secretName, rv, data)
+			err = s.secrets.Update(ctx, s.key, rv, data)
 		}
 		if (apierrors.IsConflict(err) || apierrors.IsAlreadyExists(err)) && attempt < 3 {
 			continue
@@ -225,15 +263,15 @@ func (s *Store) ChangePassword(ctx context.Context, tok, current, password strin
 	if err != nil {
 		return err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for k, v := range s.sessions {
-		if v.User == sess.User && k != tok {
-			delete(s.sessions, k)
+	s.sessions.mu.Lock()
+	defer s.sessions.mu.Unlock()
+	for k, v := range s.sessions.m {
+		if v.Org == s.org && v.User == sess.User && k != tok {
+			delete(s.sessions.m, k)
 		}
 	}
 	sess.MustChange = false
-	s.sessions[tok] = sess
+	s.sessions.m[tok] = sess
 	return nil
 }
 
@@ -265,39 +303,23 @@ func hash(password string) (string, error) {
 	return string(h), err
 }
 
-func (s *Store) Login(ctx context.Context, name, password string) (string, error) {
+func (s *Store) Login(ctx context.Context, name, password string, remember bool) (string, error) {
 	us, err := s.Users(ctx)
 	if err != nil {
 		return "", err
 	}
 	for _, u := range us {
 		if u.Name == name && bcrypt.CompareHashAndPassword([]byte(u.Hash), []byte(password)) == nil {
-			return s.newSession(u), nil
+			return s.NewSession(Session{User: u.Name, Role: u.Role, MustChange: u.MustChange}, remember), nil
 		}
 	}
 	return "", nil
 }
 
-func (s *Store) newSession(u User) string {
-	b := make([]byte, 32)
-	rand.Read(b)
-	tok := hex.EncodeToString(b)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := time.Now()
-	for k, v := range s.sessions {
-		if now.After(v.Expires) {
-			delete(s.sessions, k)
-		}
-	}
-	s.sessions[tok] = Session{User: u.Name, Role: u.Role, MustChange: u.MustChange, Expires: now.Add(sessionTTL)}
-	return tok
-}
-
 func (s *Store) Session(tok string) (Session, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	v, ok := s.sessions[tok]
+	s.sessions.mu.Lock()
+	defer s.sessions.mu.Unlock()
+	v, ok := s.sessions.m[tok]
 	if !ok || time.Now().After(v.Expires) {
 		return Session{}, false
 	}
@@ -305,17 +327,17 @@ func (s *Store) Session(tok string) (Session, bool) {
 }
 
 func (s *Store) Logout(tok string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.sessions, tok)
+	s.sessions.mu.Lock()
+	defer s.sessions.mu.Unlock()
+	delete(s.sessions.m, tok)
 }
 
 func (s *Store) dropSessions(name string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for k, v := range s.sessions {
-		if v.User == name {
-			delete(s.sessions, k)
+	s.sessions.mu.Lock()
+	defer s.sessions.mu.Unlock()
+	for k, v := range s.sessions.m {
+		if v.Org == s.org && v.User == name {
+			delete(s.sessions.m, k)
 		}
 	}
 }

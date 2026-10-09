@@ -12,8 +12,10 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/gorilla/websocket"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -37,15 +39,34 @@ type Client struct {
 }
 
 type VM struct {
-	Namespace string
-	Name      string
-	Status    string
-	Running   bool
-	Cores     int64
-	Memory    string
-	Node      string
-	Disks     []Disk
-	NICs      []NIC
+	Namespace    string
+	Name         string
+	DisplayName  string
+	Status       string
+	Running      bool
+	Cores        int64
+	Memory       string
+	StorageBytes int64
+	Node         string
+	OS           string
+	Started      time.Time
+	Disks        []Disk
+	NICs         []NIC
+}
+
+func (v VM) Label() string {
+	if v.DisplayName != "" {
+		return v.DisplayName
+	}
+	return v.Name
+}
+
+func (v VM) IPs() []string {
+	var out []string
+	for _, n := range v.NICs {
+		out = append(out, n.IPs...)
+	}
+	return out
 }
 
 type Disk struct {
@@ -175,14 +196,18 @@ func (c *Client) GetVM(ctx context.Context, ns, name string) (VM, error) {
 }
 
 func ValidAction(action string) bool {
-	return action == "start" || action == "stop" || action == "restart"
+	switch action {
+	case "start", "stop", "restart", "pause", "unpause":
+		return true
+	}
+	return false
 }
 
 func (c *Client) Action(ctx context.Context, ns, name, action string) error {
 	if err := c.Power(ctx, ns, name, action); err != nil {
 		return err
 	}
-	if action == "restart" {
+	if action != "start" && action != "stop" {
 		return nil
 	}
 	vm, err := c.dyn.Resource(vmGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
@@ -202,7 +227,11 @@ func (c *Client) Power(ctx context.Context, ns, name, action string) error {
 	if !ValidAction(action) {
 		return fmt.Errorf("unknown action %q", action)
 	}
-	u := c.cfg.Host + subresourcePath(ns, "virtualmachines", name, action)
+	resource := "virtualmachines"
+	if action == "pause" || action == "unpause" {
+		resource = "virtualmachineinstances"
+	}
+	u := c.cfg.Host + subresourcePath(ns, resource, name, action)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, u, bytes.NewBufferString("{}"))
 	if err != nil {
 		return err
@@ -261,8 +290,16 @@ func subresourcePath(ns, resource, name, sub string) string {
 
 func toVM(v, vmi *unstructured.Unstructured) VM {
 	o := v.Object
-	vm := VM{Namespace: v.GetNamespace(), Name: v.GetName()}
+	vm := VM{Namespace: v.GetNamespace(), Name: v.GetName(), DisplayName: v.GetAnnotations()[displayNameAnnotation]}
 	vm.Status, _, _ = unstructured.NestedString(o, "status", "printableStatus")
+	templates, _, _ := unstructured.NestedSlice(o, "spec", "dataVolumeTemplates")
+	for _, t := range templates {
+		if q, ok, _ := unstructured.NestedString(t.(map[string]interface{}), "spec", "storage", "resources", "requests", "storage"); ok {
+			if qty, err := resource.ParseQuantity(q); err == nil {
+				vm.StorageBytes += qty.Value()
+			}
+		}
+	}
 	vm.Running = vm.Status == "Running"
 	vm.Cores, _, _ = unstructured.NestedInt64(o, "spec", "template", "spec", "domain", "cpu", "cores")
 	if vm.Memory, _, _ = unstructured.NestedString(o, "spec", "template", "spec", "domain", "memory", "guest"); vm.Memory == "" {
@@ -328,6 +365,8 @@ func toVM(v, vmi *unstructured.Unstructured) VM {
 		return vm
 	}
 	vm.Node, _, _ = unstructured.NestedString(vmi.Object, "status", "nodeName")
+	vm.OS, _, _ = unstructured.NestedString(vmi.Object, "status", "guestOSInfo", "prettyName")
+	vm.Started = vmi.GetCreationTimestamp().Time
 	st, _, _ := unstructured.NestedSlice(vmi.Object, "status", "interfaces")
 	for _, x := range st {
 		m, _ := x.(map[string]interface{})

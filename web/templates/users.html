@@ -1,13 +1,17 @@
 {{define "content"}}
-<h1>Users</h1>
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-users"/></svg>
+  <div><h1>Users</h1></div>
+</div>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
 {{with .Notice}}<p class="notice">{{.}}</p>{{end}}
+<div class="table-wrap">
 <table>
   <thead><tr><th>Name</th><th>Role</th><th></th></tr></thead>
   <tbody>
   {{range .Users}}
   <tr>
-    <td>{{.Name}}{{if .MustChange}} <span class="muted">(password change pending)</span>{{end}}</td>
+    <td>{{template "icon" "user"}}{{.Name}}{{if .MustChange}} <span class="muted">(password change pending)</span>{{end}}</td>
     <td>
       <form method="post" action="/users/{{.Name}}/role">
         <select name="role" onchange="this.form.submit()">
@@ -25,11 +29,10 @@
   {{end}}
   </tbody>
 </table>
-
-<h2>Add user</h2>
-<form method="post" action="/users" class="inline">
+</div>
+<form method="post" action="/users" class="inline spaced">
   <input name="name" placeholder="username" pattern="[a-z][a-z0-9._-]{0,31}" required>
   <select name="role">{{range .Roles}}<option value="{{.}}"{{if eq . "read-only"}} selected{{end}}>{{.}}</option>{{end}}</select>
-  <button type="submit">Add</button>
+  <button class="btn primary" type="submit">{{template "icon" "plus"}}Add user</button>
 </form>
 {{end}}

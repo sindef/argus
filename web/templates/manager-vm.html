@@ -1,0 +1,138 @@
+{{define "content"}}{{$p := .Ctx.Page}}
+{{with .VM}}
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-monitor"/></svg>
+  <div>
+    <h1 class="inline">{{.Label}} <span class="dot {{.Status}}">{{.Status}}</span></h1>
+    <div class="crumbs">{{with $.Node.Cluster}}{{.}} / {{end}}{{$.Node.Name}} / {{.Name}}</div>
+  </div>
+  {{if $.CanOperate}}
+  <div class="actions" hx-target="#flash">
+    {{if .Running}}
+    <button class="btn" hx-post="{{$p}}/restart" hx-confirm="Restart {{.Label}}?">{{template "icon" "rotate-cw"}}Restart</button>
+    <button class="btn" hx-post="{{$p}}/stop" hx-confirm="Shut down {{.Label}}?">{{template "icon" "power"}}Shut down</button>
+    {{else if eq .Status "Paused"}}
+    <button class="btn primary" hx-post="{{$p}}/unpause">{{template "icon" "play"}}Resume</button>
+    {{else}}
+    <button class="btn primary" hx-post="{{$p}}/start">{{template "icon" "power"}}Power on</button>
+    {{end}}
+    <button class="btn" hx-post="{{$p}}/snapshot">{{template "icon" "camera"}}Snapshot</button>
+    {{if $.IsAdmin}}<button class="btn" data-dialog="migrate">{{template "icon" "arrow-right-left"}}Migrate</button>{{end}}
+    <button class="btn" hx-post="{{$p}}/clone" hx-prompt="Name for the clone">{{template "icon" "copy"}}Clone</button>
+    {{if .Running}}<a class="btn" href="{{$p}}/console">{{template "icon" "terminal"}}Open Console</a>{{end}}
+    <div class="menu">
+      <button class="btn" data-menu aria-label="More">{{template "icon" "ellipsis"}}</button>
+      {{template "vm-menu" $.Ctx}}
+    </div>
+  </div>
+  {{end}}
+</div>
+<nav class="tabs">
+  {{range $t := $.Tabs}}<a href="?tab={{$t}}"{{if eq $t $.Tab}} class="active"{{end}}>{{title $t}}</a>{{end}}
+  {{if and $.CanOperate .Running}}<a href="{{$p}}/console">Console</a>{{end}}
+</nav>
+{{with $.Error}}<p class="error">{{.}}</p>{{end}}
+{{if eq $.Tab "summary"}}
+<div class="grid vm-summary">
+  <div class="card">
+    <div class="card-head"><h2>VM Overview</h2></div>
+    <dl class="kv">
+      <dt>Name</dt><dd>{{.Name}}</dd>
+      <dt>Status</dt><dd><span class="dot {{.Status}}">{{.Status}}</span></dd>
+      <dt>Host</dt><dd>{{$.Node.Name}}</dd>
+      <dt>Cluster</dt><dd>{{with $.Node.Cluster}}{{.}}{{else}}<span class="muted">—</span>{{end}}</dd>
+      <dt>Guest OS</dt><dd>{{with .OS}}{{.}}{{else}}<span class="muted" title="Reported by the guest agent">Unknown</span>{{end}}</dd>
+      <dt>IP Address</dt><dd>{{range .IPs}}{{.}} {{else}}<span class="muted" title="Reported by the guest agent">Unknown</span>{{end}}</dd>
+      <dt>vCPUs</dt><dd>{{.Cores}}</dd>
+      <dt>Memory</dt><dd>{{size .Memory}}</dd>
+      <dt>Storage</dt><dd>{{bytes .StorageBytes}} (thin)</dd>
+      <dt>Uptime</dt><dd>{{if .Running}}{{since .Started}}{{else}}<span class="muted">—</span>{{end}}</dd>
+      <dt>HA</dt><dd>{{with $.HA}}<span class="dot {{if .LastError}}Failed{{else if .LastSync.IsZero}}Pending{{else}}Protected{{end}}" title="{{.LastError}}">Replica on {{.Replica}}{{if not .LastSync.IsZero}}, synced {{since .LastSync}} ago{{end}}</span>{{else}}<span class="muted">Off</span>{{end}}</dd>
+    </dl>
+    {{if $.IsAdmin}}
+    <div class="spaced">
+    {{if $.HA}}
+    <button class="btn sm" hx-post="{{$p}}/unprotect" hx-target="#flash" hx-confirm="Turn off HA for {{.Label}}? The replica is deleted.">{{template "icon" "shield-check"}}Turn off HA</button>
+    {{else}}
+    <button class="btn sm" data-dialog="protect">{{template "icon" "shield-check"}}Protect</button>
+    {{end}}
+    </div>
+    {{end}}
+  </div>
+  <div class="card">
+    <div class="card-head">{{template "icon" "hard-drive"}}<h2>Disks</h2></div>
+    {{template "disks" .}}
+  </div>
+  <div class="card">
+    <div class="card-head">{{template "icon" "network"}}<h2>Network</h2></div>
+    {{template "nics" .}}
+  </div>
+  <div class="card">
+    <div class="card-head">{{template "icon" "list"}}<h2>Recent Events</h2><a class="right" href="?tab=logs">View all</a></div>
+    {{template "events" (limit $.Events 6)}}
+  </div>
+</div>
+{{else if eq $.Tab "hardware"}}
+<div class="grid vm-summary">
+  <div class="card"><div class="card-head">{{template "icon" "hard-drive"}}<h2>Disks</h2></div>{{template "disks" .}}</div>
+  <div class="card"><div class="card-head">{{template "icon" "network"}}<h2>Network</h2></div>{{template "nics" .}}</div>
+</div>
+{{else if eq $.Tab "snapshots"}}
+{{with $.Snapshots}}
+<div class="table-wrap"><table>
+  <thead><tr><th>Created</th><th>Name</th><th>Status</th><th></th></tr></thead>
+  <tbody>{{range .}}<tr><td>{{.Created.Local.Format "2006-01-02 15:04"}}</td><td class="mono">{{.Name}}</td>
+    <td><span class="dot {{if .Ready}}Ready{{else}}{{.Phase}}{{end}}">{{if .Ready}}Ready{{else}}{{.Phase}}{{end}}</span></td>
+    <td class="row-actions">{{if $.CanOperate}}{{if not $.VM.Running}}<button class="link" hx-post="{{$p}}/snapshots/{{.Name}}/restore" hx-target="#flash" hx-confirm="Restore {{$.VM.Label}} to this snapshot? Current disk contents are lost.">Restore</button>{{end}}<button class="link danger" hx-post="{{$p}}/snapshots/{{.Name}}/delete" hx-target="#flash" hx-confirm="Delete this snapshot?">Delete</button>{{end}}</td></tr>{{end}}</tbody>
+</table></div>
+{{else}}<p class="muted">No snapshots.</p>{{end}}
+{{else if eq $.Tab "logs"}}
+<div class="card">{{template "events" $.Events}}</div>
+{{end}}
+{{if $.IsAdmin}}
+<dialog id="migrate" class="card">
+  <form hx-post="{{$p}}/migrate" hx-target="#flash" class="form">
+    <h2>Migrate {{.Label}}</h2>
+    <label>Destination host
+      <select name="to" required>{{range $.Hosts}}{{if and (ne .Node.Name $.Node.Name) (eq .Status "Healthy")}}<option value="{{.Node.Name}}">{{.Node.Name}}{{with .Node.Cluster}} ({{.}}){{end}}</option>{{end}}{{end}}</select>
+    </label>
+    <p class="muted">{{if .Running}}Live migration; the VM keeps running.{{else}}Cold migration; disks are copied.{{end}}</p>
+    <div class="inline"><button class="btn primary" type="submit">Migrate</button><button class="btn" type="button" data-close-dialog>Cancel</button></div>
+  </form>
+</dialog>
+<dialog id="protect" class="card">
+  <form hx-post="{{$p}}/protect" hx-target="#flash" class="form">
+    <h2>Protect {{.Label}}</h2>
+    <label>Replica host
+      <select name="replica" required>{{range $.Hosts}}{{if ne .Node.Name $.Node.Name}}<option value="{{.Node.Name}}">{{.Node.Name}}{{with .Node.Cluster}} ({{.}}){{end}}</option>{{end}}{{end}}</select>
+    </label>
+    <label>Replication interval (minutes) <input name="interval" type="number" min="5" max="1440" value="15" class="num"></label>
+    <div class="inline"><button class="btn primary" type="submit">Protect</button><button class="btn" type="button" data-close-dialog>Cancel</button></div>
+  </form>
+</dialog>
+{{end}}
+{{end}}
+{{end}}
+
+{{define "disks"}}
+<div class="table-wrap"><table>
+  <thead><tr><th>Name</th><th>Bus</th><th>Source</th></tr></thead>
+  <tbody>{{range .Disks}}<tr><td>{{template "icon" "hard-drive"}}{{.Name}}</td><td>{{.Bus}}</td><td class="clip">{{.Source}}</td></tr>{{end}}</tbody>
+</table></div>
+{{end}}
+
+{{define "nics"}}
+<div class="table-wrap"><table>
+  <thead><tr><th>Name</th><th>Network</th><th>MAC Address</th><th>IP</th></tr></thead>
+  <tbody>{{range .NICs}}<tr><td>{{.Name}}</td><td>{{.Network}}</td><td class="mono">{{.MAC}}</td><td>{{range .IPs}}{{.}} {{else}}<span class="muted">—</span>{{end}}</td></tr>{{end}}</tbody>
+</table></div>
+{{end}}
+
+{{define "events"}}
+{{with .}}
+<div class="table-wrap"><table>
+  <thead><tr><th>Time</th><th>Event</th><th>Details</th></tr></thead>
+  <tbody>{{range .}}<tr><td>{{since .Time}} ago</td><td><span class="dot {{if eq .Type "Warning"}}Warning{{else}}Running{{end}}">{{.Reason}}</span></td><td class="clip" title="{{.Message}}">{{.Message}}</td></tr>{{end}}</tbody>
+</table></div>
+{{else}}<p class="muted">No recent events.</p>{{end}}
+{{end}}

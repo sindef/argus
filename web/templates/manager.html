@@ -1,65 +1,106 @@
 {{define "content"}}
-<h1>Virtual machines</h1>
-<p id="flash" class="error"></p>
-<div hx-get="/vms" hx-trigger="every 5s">{{template "table" .}}</div>
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-layers"/></svg>
+  <h1>Infrastructure Overview</h1>
+</div>
+<div class="stats">
+  <div class="stat">{{template "icon" "monitor"}}<div>
+    <div class="label">Virtual Machines</div><div class="value">{{.VMs}}</div>
+    <div class="detail"><span class="dot Running">{{index .VMCount "Running"}} Running</span></div>
+    <div class="detail"><span class="dot Stopped">{{index .VMCount "Stopped"}} Powered off</span></div>
+    <div class="detail"><span class="dot Paused">{{index .VMCount "Paused"}} Paused</span></div>
+  </div></div>
+  <div class="stat">{{template "icon" "server"}}<div>
+    <div class="label">Hosts</div><div class="value">{{len .Hosts}}</div>
+    <div class="detail"><span class="dot Healthy">{{index .HostCount "Healthy"}} Healthy</span></div>
+    <div class="detail"><span class="dot Warning">{{index .HostCount "Warning"}} Warning</span></div>
+    <div class="detail"><span class="dot Unreachable">{{index .HostCount "Unreachable"}} Unreachable</span></div>
+  </div></div>
+  <div class="stat">{{template "icon" "building-2"}}<div>
+    <div class="label">Clusters</div><div class="value">{{len .Clusters}}</div>
+    <div class="detail"><span class="dot Healthy">{{index .ClusterCount "Healthy"}} Healthy</span></div>
+    <div class="detail"><span class="dot Warning">{{index .ClusterCount "Warning"}} Warning</span></div>
+    <div class="detail"><span class="dot Unreachable">{{index .ClusterCount "Unreachable"}} Critical</span></div>
+  </div></div>
+  <div class="stat">{{template "icon" "cpu"}}<div>
+    <div class="label">vCPU allocated</div><div class="value">{{pct .CoresUsed .Cores}}%</div>
+    <div class="detail">{{.CoresUsed}} of {{.Cores}} cores</div>
+    <div class="bar ok"><span style="width:{{min100 (pct .CoresUsed .Cores)}}%"></span></div>
+  </div></div>
+  <div class="stat">{{template "icon" "memory-stick"}}<div>
+    <div class="label">Memory assigned</div><div class="value">{{pct .MemUsed .Mem}}%</div>
+    <div class="detail">{{bytes .MemUsed}} of {{bytes .Mem}}</div>
+    <div class="bar"><span style="width:{{min100 (pct .MemUsed .Mem)}}%"></span></div>
+  </div></div>
+</div>
+<div class="grid overview">
+  <div class="card">
+    <div class="card-head"><h2>Cluster Status</h2></div>
+    {{range .Clusters}}
+    <div class="cluster-row"><span class="dot {{.Status}}"></span><div><div>{{.Name}}</div><div class="muted">{{len .Hosts}} host{{if ne (len .Hosts) 1}}s{{end}} | {{.VMs}} VMs</div></div></div>
+    {{else}}<p class="muted">No hosts registered.</p>{{end}}
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>VM Status</h2></div>
+    <div class="donut-wrap">
+      {{$run := index .VMCount "Running"}}{{$paused := index .VMCount "Paused"}}
+      <div class="donut" style="--a:{{pct $run .VMs}};--b:{{pct (add $run $paused) .VMs}}"><div><b>{{.VMs}}</b><span>VMs</span></div></div>
+      <div class="kv-list">
+        <span class="dot Running">Running {{$run}}</span>
+        <span class="dot Paused">Paused {{$paused}}</span>
+        <span class="dot Stopped">Other {{sub .VMs (add $run $paused)}}</span>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>High Availability</h2></div>
+    {{with .Protected}}
+    {{range .}}<div class="cluster-row"><span class="dot {{if .LastError}}Failed{{else if .LastSync.IsZero}}Pending{{else}}Protected{{end}}" title="{{.LastError}}"></span><div><div>{{.VM}}</div><div class="muted">{{.Owner}} → {{.Replica}}{{if not .LastSync.IsZero}} | synced {{since .LastSync}} ago{{end}}</div></div></div>{{end}}
+    {{else}}<p class="muted">No VMs protected.</p>{{end}}
+  </div>
+</div>
+<div class="card spaced">
+  <div class="card-head"><h2>Hosts</h2>{{if .IsAdmin}}<a class="right" href="/hosts">View all hosts</a>{{end}}</div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Name</th><th>Cluster</th><th>Status</th><th>vCPU</th><th>Memory</th><th>VMs</th><th>Uptime</th></tr></thead>
+    <tbody>{{range .Hosts}}<tr>
+      <td>{{template "icon" "server"}}{{.Node.Name}}</td>
+      <td>{{if .Node.Cluster}}{{.Node.Cluster}}{{else}}<span class="muted">—</span>{{end}}</td>
+      <td><span class="dot {{.Status}}" title="{{.Error}}">{{.Status}}</span></td>
+      {{if eq .Status "Unreachable"}}<td colspan="4" class="muted">{{.Error}}</td>{{else}}
+      <td class="meter">{{.CoresUsed}} / {{.Info.CPUCores}}<div class="bar ok"><span style="width:{{min100 (pct .CoresUsed .Info.CPUCores)}}%"></span></div></td>
+      <td class="meter">{{bytes .MemUsed}} / {{bytes .Info.MemoryBytes}}<div class="bar"><span style="width:{{min100 (pct .MemUsed .Info.MemoryBytes)}}%"></span></div></td>
+      <td>{{.Running}} / {{.VMs}}</td>
+      <td>{{since .Info.BootTime}}</td>{{end}}
+    </tr>{{end}}</tbody>
+  </table></div>
+</div>
+{{with .Jobs}}
+<div class="card spaced">
+  <div class="card-head"><h2>Migrations</h2></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>VM</th><th>From</th><th>To</th><th>Started</th><th>Status</th></tr></thead>
+    <tbody>{{range .}}<tr><td>{{.VM}}{{if .Live}} <span class="muted">(live)</span>{{end}}</td><td>{{.From}}</td><td>{{.To}}</td><td>{{.Started.Local.Format "15:04"}}</td>
+      <td><span class="dot {{if .Failed}}Failed{{else if .Done}}Succeeded{{else}}Migrating{{end}}">{{.Status}}</span></td></tr>{{end}}</tbody>
+  </table></div>
+</div>
+{{end}}
 {{end}}
 
-{{define "table"}}
-{{with .Error}}<p class="error">{{.}}</p>{{end}}
-{{if .Jobs}}
-<h2>Migrations</h2>
-<table>
-  <thead><tr><th>VM</th><th>From</th><th>To</th><th>Started</th><th>Status</th></tr></thead>
-  <tbody>{{range .Jobs}}<tr><td>{{.VM}}{{if .Live}} <span class="muted">(live)</span>{{end}}</td><td>{{.From}}</td><td>{{.To}}</td><td>{{.Started.Local.Format "15:04"}}</td>
-    <td><span class="status {{if .Failed}}Failed{{else if .Done}}Succeeded{{else}}Pending{{end}}">{{.Status}}</span></td></tr>{{end}}</tbody>
-</table>
-<h2>All nodes</h2>
-{{end}}
-<table>
-  <thead><tr><th>Name</th><th>Node</th><th>Status</th><th>CPU</th><th>Memory</th><th>HA</th><th></th></tr></thead>
-  <tbody>
-  {{range $n := .Nodes}}
-  {{with .Error}}<tr><td colspan="7" class="error">{{$n.Node.Name}}: {{.}}</td></tr>{{end}}
-  {{range .VMs}}
-  {{$p := index $.Protected .Name}}
-  {{if and $p.VM (eq $p.Replica $n.Node.Name)}}
-  <tr class="muted"><td>{{.Name}}</td><td>{{$n.Node.Name}}</td><td>Replica</td><td>{{.Cores}}</td><td>{{.Memory}}</td><td></td><td></td></tr>
-  {{else}}
-  <tr>
-    <td><a href="{{$n.Node.URL}}/vms/{{.Namespace}}/{{.Name}}" target="_blank">{{.Name}}</a></td>
-    <td>{{$n.Node.Name}}</td>
-    <td><span class="status {{.Status}}">{{.Status}}</span></td>
-    <td>{{.Cores}}</td>
-    <td>{{.Memory}}</td>
-    <td>{{if $p.VM}}<span title="{{if $p.LastError}}{{$p.LastError}}{{else if $p.LastSync.IsZero}}no replica yet{{else}}replicated {{$p.LastSync.Local.Format "15:04"}}{{end}}" class="status {{if $p.LastError}}Failed{{else if $p.LastSync.IsZero}}Pending{{else}}Succeeded{{end}}">→ {{$p.Replica}}</span>{{end}}</td>
-    <td class="row-actions">
-      {{if $.CanOperate}}
-      {{if .Running}}
-      <button class="link" hx-post="/nodes/{{$n.Node.Name}}/vms/{{.Namespace}}/{{.Name}}/stop" hx-target="#flash" hx-confirm="Power off {{.Name}}?">Power off</button>
-      {{else}}
-      <button class="link" hx-post="/nodes/{{$n.Node.Name}}/vms/{{.Namespace}}/{{.Name}}/start" hx-target="#flash">Power on</button>
-      {{end}}
-      {{if $.IsAdmin}}
-      <form hx-post="/nodes/{{$n.Node.Name}}/vms/{{.Namespace}}/{{.Name}}/migrate" hx-target="#flash" hx-confirm="Move {{.Name}}{{if .Running}} while running{{end}}?">
-        <select name="to">{{range $.Nodes}}{{if ne .Node.Name $n.Node.Name}}<option value="{{.Node.Name}}">{{.Node.Name}}</option>{{end}}{{end}}</select>
-        <button type="submit" class="link">Move</button>
-      </form>
-      {{if $p.VM}}
-      <button class="link" hx-post="/nodes/{{$n.Node.Name}}/vms/{{.Namespace}}/{{.Name}}/unprotect" hx-target="#flash" hx-confirm="Turn off HA for {{.Name}}? The replica is deleted.">Unprotect</button>
-      {{else}}
-      <form hx-post="/nodes/{{$n.Node.Name}}/vms/{{.Namespace}}/{{.Name}}/protect" hx-target="#flash">
-        <select name="replica">{{range $.Nodes}}{{if ne .Node.Name $n.Node.Name}}<option value="{{.Node.Name}}">{{.Node.Name}}</option>{{end}}{{end}}</select>
-        <input name="interval" type="number" min="5" max="1440" value="15" class="num" title="Replication interval (minutes)">
-        <button type="submit" class="link">Protect</button>
-      </form>
-      {{end}}
-      {{end}}
-      {{end}}
-    </td>
-  </tr>
-  {{end}}
-  {{end}}
-  {{end}}
-  </tbody>
-</table>
+{{define "tree"}}
+<ul class="tree">
+  {{range .Tree}}
+  <li data-id="dc:{{.Name}}"><span class="row">{{template "twisty"}}{{template "icon" "building-2"}}{{.Name}}</span>
+    <ul>{{range .Clusters}}{{$c := .}}
+    <li data-id="cl:{{.Name}}"><span class="row">{{template "twisty"}}{{template "icon" "layers"}}{{.Name}}</span>
+      <ul>{{range .Hosts}}{{$h := .}}
+      <li data-id="h:{{.Node.Name}}"><span class="row" title="{{.Error}}">{{template "twisty"}}{{template "icon" "server"}}<span class="dot {{.Status}}"></span>{{.Node.Name}}</span>
+        <ul>{{range index $c.VMsByHost .Node.Name}}
+        <li data-context><a class="row{{if eq $.Nav (printf "vm:%s/%s" .Host .Name)}} active{{end}}" href="/nodes/{{.Host}}/vms/{{.Namespace}}/{{.Name}}">{{template "icon" "monitor"}}<span class="dot {{.Status}}"></span>{{.Label}}</a>{{template "vm-menu" (vmCtx . $)}}</li>
+        {{end}}</ul>
+      </li>{{end}}</ul>
+    </li>{{end}}</ul>
+  </li>
+  {{else}}<li class="muted" style="padding:4px 10px">No hosts</li>{{end}}
+</ul>
 {{end}}

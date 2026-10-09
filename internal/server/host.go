@@ -93,6 +93,7 @@ func (s *Server) renderHost(w http.ResponseWriter, r *http.Request, notice strin
 		err = terr
 	}
 	data := map[string]any{
+		"Nav":           "host",
 		"Available":     s.runDir != "",
 		"Tokens":        tokens,
 		"CAFingerprint": tlscert.Fingerprint(s.caPEM),

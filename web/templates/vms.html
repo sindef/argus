@@ -1,30 +1,138 @@
 {{define "content"}}
-<div class="title">
-  <h1>Virtual machines</h1>
-  {{if ne .Session.Role "read-only"}}<div class="actions"><a class="button" href="/vms/new">New VM</a></div>{{end}}
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-monitor"/></svg>
+  <div><h1>Virtual Machines</h1><div class="sub">Manage and monitor your virtual machines.</div></div>
 </div>
-<div id="vms" hx-get="/vms" hx-trigger="every 5s">{{template "table" .}}</div>
+<div class="toolbar">
+  {{if .CanOperate}}
+  <a class="btn primary" href="/vms/new">{{template "icon" "plus"}}Create VM</a>
+  <div class="menu">
+    <button class="btn" data-menu data-needs-selection>{{template "icon" "power"}}Power{{template "icon" "chevron-down"}}</button>
+    <div class="menu-list" hidden>
+      {{range $a := .PowerActions}}<button hx-post="/vms/bulk/{{index $a 0}}" hx-include="input[name=sel]:checked" hx-target="#flash">{{template "icon" (index $a 2)}}{{index $a 1}}</button>{{end}}
+    </div>
+  </div>
+  <button class="btn" data-needs-selection hx-post="/vms/bulk/snapshot" hx-include="input[name=sel]:checked" hx-target="#flash">{{template "icon" "camera"}}Snapshot</button>
+  <button class="btn" disabled title="Moving VMs between hosts is done from Argus Manager">{{template "icon" "arrow-right-left"}}Migrate</button>
+  <div class="menu">
+    <button class="btn" data-menu data-needs-selection>{{template "icon" "ellipsis"}}More{{template "icon" "chevron-down"}}</button>
+    <div class="menu-list" hidden>
+      <button hx-post="/vms/bulk/clone" hx-include="input[name=sel]:checked" hx-target="#flash" hx-prompt="Name for the clone">{{template "icon" "copy"}}Clone</button>
+      <button hx-post="/vms/bulk/rename" hx-include="input[name=sel]:checked" hx-target="#flash" hx-prompt="Display name (empty to clear)">{{template "icon" "pencil"}}Rename</button>
+      <hr>
+      <button class="danger" hx-post="/vms/bulk/delete" hx-include="input[name=sel]:checked" hx-target="#flash" hx-confirm="Delete the selected VMs and their disks?">{{template "icon" "trash-2"}}Delete</button>
+    </div>
+  </div>
+  {{end}}
+  <form class="grow input-icon" hx-get="/vms" hx-target="#vms" hx-trigger="input changed delay:300ms from:find input, submit">
+    {{template "icon" "search"}}<input name="q" placeholder="Search VMs…" value="{{.Query}}">
+  </form>
+</div>
+<div id="vms" hx-get="/vms?q={{.Query}}" hx-trigger="every 5s" hx-include="[name=sel]:checked">{{template "table" .}}</div>
+{{with .Open}}<div hx-get="/vms/{{.Namespace}}/{{.Name}}/drawer" hx-target="#drawer" hx-trigger="load" hx-on::after-request="document.querySelector('.content').classList.add('with-drawer')"></div>{{end}}
 {{end}}
 
 {{define "table"}}
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
-{{if .VMs}}
+<div class="table-wrap">
 <table>
-  <thead><tr><th>Name</th><th>Namespace</th><th>Status</th><th>CPU</th><th>Memory</th><th>IP</th></tr></thead>
+  <thead><tr>
+    {{if .CanOperate}}<th style="width:40px"><input type="checkbox" data-select-all aria-label="Select all"></th>{{end}}
+    <th>Name</th><th>Status</th><th>IP Address</th><th>Host</th><th>vCPUs</th><th>Memory</th><th>Storage</th>
+  </tr></thead>
   <tbody>
   {{range .VMs}}
-  <tr>
-    <td><a href="/vms/{{.Namespace}}/{{.Name}}">{{.Name}}</a></td>
-    <td>{{.Namespace}}</td>
-    <td><span class="status {{.Status}}">{{.Status}}</span></td>
+  <tr class="clickable{{if $.Selected.Has .Namespace .Name}} selected{{end}}" data-href="/vms/{{.Namespace}}/{{.Name}}/drawer" data-page="/vms/{{.Namespace}}/{{.Name}}">
+    {{if $.CanOperate}}<td><input type="checkbox" name="sel" value="{{.Namespace}}/{{.Name}}"{{if $.Selected.Has .Namespace .Name}} checked{{end}} aria-label="Select {{.Label}}"></td>{{end}}
+    <td>{{template "icon" "monitor"}}{{.Label}}</td>
+    <td><span class="dot {{.Status}}">{{.Status}}</span></td>
+    <td>{{range .IPs}}{{.}} {{else}}<span class="muted">—</span>{{end}}</td>
+    <td>{{if .Node}}{{.Node}}{{else}}<span class="muted">{{$.NodeName}}</span>{{end}}</td>
     <td>{{.Cores}}</td>
-    <td>{{.Memory}}</td>
-    <td>{{range .NICs}}{{range .IPs}}{{.}} {{end}}{{end}}</td>
+    <td>{{size .Memory}}</td>
+    <td>{{bytes .StorageBytes}}</td>
   </tr>
   {{end}}
   </tbody>
 </table>
-{{else if not .Error}}
-<p class="muted">No virtual machines.</p>
+<div class="table-foot">{{with .VMs}}Showing {{len .}} VM{{if ne (len .) 1}}s{{end}}{{else}}No virtual machines{{if $.Query}} match “{{$.Query}}”{{end}}.{{end}}</div>
+</div>
+{{end}}
+
+{{define "nav-vms"}}
+{{range .VMs}}<a class="nav-vm" href="/vms/{{.Namespace}}/{{.Name}}">{{template "icon" "monitor"}}<span>{{.Label}}</span><small><span class="dot {{.Status}}">{{.Status}}</span></small></a>{{end}}
+{{end}}
+
+{{define "drawer"}}
+{{with .VM}}
+<div class="drawer-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-monitor"/></svg>
+  <div><h2>{{.Label}}</h2><span class="dot {{.Status}}">{{.Status}}</span></div>
+  <button class="icon-btn close" data-close-drawer aria-label="Close">{{template "icon" "x"}}</button>
+</div>
+{{if $.CanOperate}}
+<div class="inline" style="margin-bottom:14px" hx-target="#flash">
+  {{if .Running}}
+  <a class="btn sm" href="/vms/{{.Namespace}}/{{.Name}}/console">{{template "icon" "terminal"}}Console</a>
+  <button class="btn sm" hx-post="/vms/{{.Namespace}}/{{.Name}}/restart" hx-confirm="Restart {{.Label}}?">{{template "icon" "rotate-cw"}}Restart</button>
+  <button class="btn sm" hx-post="/vms/{{.Namespace}}/{{.Name}}/stop" hx-confirm="Power off {{.Label}}?">{{template "icon" "power"}}Power off</button>
+  {{else if eq .Status "Paused"}}
+  <button class="btn sm" hx-post="/vms/{{.Namespace}}/{{.Name}}/unpause">{{template "icon" "play"}}Resume</button>
+  {{else}}
+  <button class="btn sm primary" hx-post="/vms/{{.Namespace}}/{{.Name}}/start">{{template "icon" "play"}}Power on</button>
+  {{end}}
+</div>
+{{end}}
+<nav class="tabs">
+  {{range $t := $.Tabs}}<button class="{{if eq $t $.Tab}}active{{end}}" hx-get="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/drawer?tab={{$t}}" hx-target="#drawer">{{title $t}}</button>{{end}}
+</nav>
+{{if eq $.Tab "overview"}}
+<dl class="props">
+  {{template "icon" "monitor"}}<dt>Name</dt><dd>{{.Name}}</dd>
+  {{template "icon" "activity"}}<dt>Status</dt><dd><span class="dot {{.Status}}">{{.Status}}</span></dd>
+  {{template "icon" "globe"}}<dt>IP Address</dt><dd>{{range .IPs}}{{.}} {{else}}<span class="muted" title="Reported by the guest agent">Unknown</span>{{end}}</dd>
+  {{template "icon" "server"}}<dt>Host</dt><dd>{{$.NodeName}}</dd>
+  {{template "icon" "cpu"}}<dt>vCPUs</dt><dd>{{.Cores}}</dd>
+  {{template "icon" "memory-stick"}}<dt>Memory</dt><dd>{{size .Memory}}</dd>
+  {{template "icon" "database"}}<dt>Storage</dt><dd>{{bytes .StorageBytes}} (thin)</dd>
+  {{template "icon" "disc-3"}}<dt>OS</dt><dd>{{with .OS}}{{.}}{{else}}<span class="muted" title="Reported by the guest agent">Unknown</span>{{end}}</dd>
+  {{template "icon" "clock"}}<dt>Running for</dt><dd>{{if .Running}}{{since .Started}}{{else}}<span class="muted">—</span>{{end}}</dd>
+</dl>
+{{else if eq $.Tab "hardware"}}
+<h2>Disks</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Name</th><th>Source</th><th></th></tr></thead>
+  <tbody>{{range .Disks}}<tr><td>{{.Name}}</td><td class="clip">{{.Source}}</td>
+    <td class="row-actions">{{if and $.CanOperate (not $.VM.Running) (ne .Name "root")}}<button class="link danger" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/disks/{{.Name}}/delete" hx-target="#flash" hx-confirm="Remove {{.Name}}?">Remove</button>{{end}}</td></tr>{{end}}</tbody>
+</table></div>
+{{if and $.CanOperate (not .Running)}}
+<form class="inline spaced" hx-post="/vms/{{.Namespace}}/{{.Name}}/disks" hx-target="#flash">
+  <input name="size" type="number" min="1" max="4096" value="10" required class="num"> GiB
+  <button class="btn sm" type="submit">{{template "icon" "plus"}}Add disk</button>
+</form>
+{{end}}
+<h2 class="spaced">Network</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Name</th><th>Network</th><th>MAC</th></tr></thead>
+  <tbody>{{range .NICs}}<tr><td>{{.Name}}</td><td>{{.Network}}</td><td class="mono">{{.MAC}}</td></tr>{{end}}</tbody>
+</table></div>
+{{else if eq $.Tab "snapshots"}}
+{{with $.Snapshots}}
+<div class="table-wrap"><table>
+  <thead><tr><th>Created</th><th>Status</th><th></th></tr></thead>
+  <tbody>{{range .}}<tr><td title="{{.Name}}">{{.Created.Local.Format "2006-01-02 15:04"}}</td>
+    <td><span class="dot {{if .Ready}}Ready{{else}}{{.Phase}}{{end}}">{{if .Ready}}Ready{{else}}{{.Phase}}{{end}}</span></td>
+    <td class="row-actions">{{if $.CanOperate}}{{if not $.VM.Running}}<button class="link" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/snapshots/{{.Name}}/restore" hx-target="#flash" hx-confirm="Restore {{$.VM.Label}} to this snapshot? Current disk contents are lost.">Restore</button>{{end}}<button class="link danger" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/snapshots/{{.Name}}/delete" hx-target="#flash" hx-confirm="Delete this snapshot?">Delete</button>{{end}}</td></tr>{{end}}</tbody>
+</table></div>
+{{else}}<p class="muted">No snapshots.</p>{{end}}
+{{if $.CanOperate}}<button class="btn sm spaced" hx-post="/vms/{{.Namespace}}/{{.Name}}/snapshots" hx-target="#flash">{{template "icon" "camera"}}Take snapshot</button>{{end}}
+{{else if eq $.Tab "logs"}}
+{{with $.Events}}
+<div class="table-wrap"><table>
+  <thead><tr><th>Time</th><th>Event</th></tr></thead>
+  <tbody>{{range .}}<tr><td>{{since .Time}} ago</td><td><span class="dot {{if eq .Type "Warning"}}Warning{{else}}Running{{end}}" title="{{.Message}}">{{.Reason}}</span></td></tr>{{end}}</tbody>
+</table></div>
+{{else}}<p class="muted">No recent events.</p>{{end}}
+{{end}}
 {{end}}
 {{end}}

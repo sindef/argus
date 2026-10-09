@@ -1,34 +1,54 @@
 {{define "content"}}
-<h1>Nodes</h1>
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-server"/></svg>
+  <h1>Hosts</h1>
+  {{if .IsAdmin}}<div class="actions"><button class="btn primary" data-dialog="add-host">{{template "icon" "plus"}}Add host</button></div>{{end}}
+</div>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
+<div class="table-wrap">
 <table>
-  <thead><tr><th>Name</th><th>Address</th><th>Version</th><th>Running VMs</th><th>Migration IPs</th><th>Status</th><th></th></tr></thead>
-  <tbody>{{range .Nodes}}<tr>
-    <td>{{.Node.Name}}</td>
-    <td><a href="{{.Node.URL}}" target="_blank">{{.Node.URL}}</a></td>
+  <thead><tr><th>Name</th><th>Datacenter</th><th>Cluster</th><th>Address</th><th>Version</th><th>VMs</th><th>Migration IPs</th><th>Status</th><th></th></tr></thead>
+  <tbody>{{range .Hosts}}<tr data-context>
+    <td>{{template "icon" "server"}}{{.Node.Name}}</td>
+    <td>{{with .Node.Datacenter}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
+    <td>{{with .Node.Cluster}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
+    <td><a href="{{.Node.URL}}" target="_blank" rel="noopener">{{.Node.URL}}</a></td>
     <td>{{.Info.Version}}</td>
-    <td>{{if not .Error}}{{.Info.RunningVMs}}{{end}}</td>
+    <td>{{.Running}} / {{.VMs}}</td>
     <td>{{index $.Ranges .Node.Name}}</td>
-    <td>{{if .Error}}<span class="status Failed" title="{{.Error}}">Unreachable</span>{{else}}<span class="status Running">Connected</span>{{end}}</td>
-    <td class="row-actions">{{if $.IsAdmin}}<form method="post" action="/nodes/{{.Node.Name}}/delete" onsubmit="return confirm('Remove {{.Node.Name}}?')"><button type="submit" class="link danger">Remove</button></form>{{end}}</td>
-  </tr>{{end}}</tbody>
+    <td><span class="dot {{.Status}}" title="{{.Error}}">{{.Status}}</span></td>
+    <td class="row-actions">{{if $.IsAdmin}}
+      <div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
+        <div class="menu-list" hidden>
+          <form method="post" action="/hosts/{{.Node.Name}}/group" class="form" style="padding:8px">
+            <input name="datacenter" placeholder="Datacenter" value="{{.Node.Datacenter}}">
+            <input name="cluster" placeholder="Cluster" value="{{.Node.Cluster}}">
+            <button class="btn sm" type="submit">{{template "icon" "tag"}}Set group</button>
+          </form>
+          <hr>
+          <form method="post" action="/hosts/{{.Node.Name}}/delete" onsubmit="return confirm('Remove {{.Node.Name}}?')"><button type="submit" class="danger">{{template "icon" "trash-2"}}Remove</button></form>
+        </div>
+      </div>
+    {{end}}</td>
+  </tr>{{else}}<tr><td colspan="9" class="muted">No hosts registered.</td></tr>{{end}}</tbody>
 </table>
+</div>
 {{if .IsAdmin}}
-<h2>Migration network</h2>
-<form method="post" action="/settings/migration" class="inline">
-  <input name="subnet" placeholder="10.99.0.0/24" value="{{.Migration.Subnet}}" required>
-  <input name="vlan" type="number" min="0" max="4094" placeholder="VLAN" value="{{if .Migration.VLAN}}{{.Migration.VLAN}}{{end}}" class="num">
-  <button type="submit">Apply to all nodes</button>
-</form>
-<h2>Add node</h2>
-<form method="post" action="/nodes" class="card form">
-  <div class="row">
-    <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
-    <label>Address <input name="url" type="url" placeholder="https://192.168.1.10" required></label>
-  </div>
-  <label>API token <input name="token" required autocomplete="off"></label>
-  <label>CA fingerprint <input name="fingerprint" required autocomplete="off"></label>
-  <button type="submit">Add</button>
-</form>
+<dialog id="add-host" class="card">
+  <form method="post" action="/hosts" class="form">
+    <h2>Add host</h2>
+    <div class="row">
+      <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
+      <label>Address <input name="url" type="url" placeholder="https://192.168.1.10" required></label>
+    </div>
+    <div class="row">
+      <label>Datacenter <input name="datacenter"></label>
+      <label>Cluster <input name="cluster"></label>
+    </div>
+    <label>API token <input name="token" required autocomplete="off"></label>
+    <label>CA fingerprint <span class="help" title="Shown on the host under Settings → Host → Manager access">?</span><input name="fingerprint" required autocomplete="off"></label>
+    <div class="inline"><button class="btn primary" type="submit">Add</button><button class="btn" type="button" data-close-dialog>Cancel</button></div>
+  </form>
+</dialog>
 {{end}}
 {{end}}

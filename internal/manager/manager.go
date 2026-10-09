@@ -19,25 +19,24 @@ import (
 	"argus/internal/kube"
 	"argus/internal/tlscert"
 
+	"github.com/gorilla/websocket"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const nodesKey = "argus-nodes"
 
 type Node struct {
-	Name  string `json:"name"`
-	URL   string `json:"url"`
-	Token string `json:"token"`
-	CA    string `json:"ca"`
-	Slot  int    `json:"slot,omitempty"`
+	Name       string `json:"name"`
+	URL        string `json:"url"`
+	Token      string `json:"token"`
+	CA         string `json:"ca"`
+	Slot       int    `json:"slot,omitempty"`
+	Org        string `json:"org"`
+	Datacenter string `json:"datacenter"`
+	Cluster    string `json:"cluster"`
 }
 
-type NodeInfo struct {
-	Name          string `json:"name"`
-	Version       string `json:"version"`
-	CAFingerprint string `json:"caFingerprint"`
-	RunningVMs    int    `json:"runningVMs"`
-}
+type NodeInfo = kube.NodeInfo
 
 type Manager struct {
 	store auth.Secrets
@@ -48,9 +47,11 @@ type Manager struct {
 	syncing  map[string]bool
 	started  time.Time
 	haMu     sync.Mutex
+	inv      inventory
 }
 
 type Job struct {
+	Org      string
 	VM       string
 	From, To string
 	Started  time.Time
@@ -61,12 +62,45 @@ type Job struct {
 }
 
 func New(store auth.Secrets) *Manager {
-	return &Manager{store: store, lastSeen: map[string]time.Time{}, syncing: map[string]bool{}, started: time.Now()}
+	return &Manager{store: store, lastSeen: map[string]time.Time{}, syncing: map[string]bool{}, started: time.Now(), inv: inventory{nodes: map[string]NodeState{}}}
 }
 
 func (c *Manager) Nodes(ctx context.Context) ([]Node, error) {
 	ns, _, err := c.load(ctx)
 	return ns, err
+}
+
+func (c *Manager) NodesFor(ctx context.Context, org string) ([]Node, error) {
+	ns, err := c.Nodes(ctx)
+	out := ns[:0]
+	for _, n := range ns {
+		if n.Org == org {
+			out = append(out, n)
+		}
+	}
+	return out, err
+}
+
+func (c *Manager) NodeIn(ctx context.Context, org, name string) (Node, error) {
+	n, err := c.Node(ctx, name)
+	if err == nil && n.Org != org {
+		return Node{}, fmt.Errorf("node %s not found", name)
+	}
+	return n, err
+}
+
+func (c *Manager) SetNodeGroup(ctx context.Context, org, name, datacenter, cluster string) error {
+	ns, rv, err := c.load(ctx)
+	if err != nil {
+		return err
+	}
+	for i := range ns {
+		if ns[i].Name == name && ns[i].Org == org {
+			ns[i].Datacenter, ns[i].Cluster = datacenter, cluster
+			return c.save(ctx, ns, rv)
+		}
+	}
+	return fmt.Errorf("node %s not found", name)
 }
 
 func (c *Manager) Node(ctx context.Context, name string) (Node, error) {
@@ -107,7 +141,7 @@ func (c *Manager) save(ctx context.Context, ns []Node, rv string) error {
 	return c.store.Update(ctx, nodesKey, rv, data)
 }
 
-func (c *Manager) AddNode(ctx context.Context, name, url, token, fingerprint string) error {
+func (c *Manager) AddNode(ctx context.Context, org, name, url, token, fingerprint, datacenter, cluster string) error {
 	url = strings.TrimRight(url, "/")
 	ca, err := fetchCA(ctx, url)
 	if err != nil {
@@ -116,7 +150,7 @@ func (c *Manager) AddNode(ctx context.Context, name, url, token, fingerprint str
 	if got := tlscert.Fingerprint(ca); !strings.EqualFold(got, strings.ReplaceAll(strings.TrimSpace(fingerprint), ":", "")) {
 		return fmt.Errorf("CA fingerprint mismatch: node presents %s", got)
 	}
-	n := Node{Name: name, URL: url, Token: token, CA: string(ca)}
+	n := Node{Name: name, URL: url, Token: token, CA: string(ca), Org: org, Datacenter: datacenter, Cluster: cluster}
 	if _, err := n.Info(ctx); err != nil {
 		return err
 	}
@@ -135,14 +169,14 @@ func (c *Manager) AddNode(ctx context.Context, name, url, token, fingerprint str
 	return c.PushMigrationNetwork(ctx)
 }
 
-func (c *Manager) RemoveNode(ctx context.Context, name string) error {
+func (c *Manager) RemoveNode(ctx context.Context, org, name string) error {
 	ns, rv, err := c.load(ctx)
 	if err != nil {
 		return err
 	}
 	out := ns[:0]
 	for _, n := range ns {
-		if n.Name != name {
+		if n.Name != name || n.Org != org {
 			out = append(out, n)
 		}
 	}
@@ -251,12 +285,14 @@ func (c *Manager) checkNetworks(ctx context.Context, src, dst Node, ns, vm strin
 	return nil
 }
 
-func (c *Manager) Jobs() []Job {
+func (c *Manager) Jobs(org string) []Job {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	out := make([]Job, 0, len(c.jobs))
 	for i := len(c.jobs) - 1; i >= 0; i-- {
-		out = append(out, *c.jobs[i])
+		if c.jobs[i].Org == org {
+			out = append(out, *c.jobs[i])
+		}
 	}
 	return out
 }
@@ -268,7 +304,7 @@ func (c *Manager) update(j *Job, status string, done, failed bool) {
 }
 
 func (c *Manager) Migrate(src, dst Node, ns, vm string) {
-	j := &Job{VM: vm, From: src.Name, To: dst.Name, Started: time.Now(), Status: "Starting"}
+	j := &Job{Org: src.Org, VM: vm, From: src.Name, To: dst.Name, Started: time.Now(), Status: "Starting"}
 	c.mu.Lock()
 	c.jobs = append(c.jobs, j)
 	c.mu.Unlock()
@@ -340,4 +376,20 @@ func (c *Manager) migrate(ctx context.Context, j *Job, src, dst Node, ns, vm str
 	dst.do(ctx, http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/imported", kube.Namespace, vm), nil, nil)
 	unexport()
 	return src.do(ctx, http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/delete", ns, vm), nil, nil)
+}
+
+func (n Node) Call(ctx context.Context, method, path string, in, out any) error {
+	return n.do(ctx, method, path, in, out)
+}
+
+func (n Node) DialConsole(ctx context.Context, ns, vm, kind string) (*websocket.Conn, error) {
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM([]byte(n.CA))
+	d := websocket.Dialer{TLSClientConfig: &tls.Config{RootCAs: pool}, Subprotocols: []string{"binary"}}
+	u := strings.Replace(n.URL, "https://", "wss://", 1) + fmt.Sprintf("/api/vms/%s/%s/ws/%s", ns, vm, kind)
+	conn, resp, err := d.DialContext(ctx, u, http.Header{"Authorization": {"Bearer " + n.Token}})
+	if err != nil && resp != nil {
+		return nil, fmt.Errorf("%s: console: %s", n.Name, resp.Status)
+	}
+	return conn, err
 }

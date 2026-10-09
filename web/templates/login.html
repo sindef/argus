@@ -1,9 +1,47 @@
 {{define "content"}}
-<form method="post" action="/login" class="card narrow">
-  <h1>Log in</h1>
+{{if .Manager}}
+<div class="auth-card split">
+  <div class="side"><img src="/static/logo.svg" alt=""><h1>Argus Manager</h1></div>
+  <form method="post" action="/login">
+    <div class="auth-logo stacked"><img src="/static/logo.svg" alt=""><h1>Argus Manager</h1></div>
+    {{with .Error}}<p class="error">{{.}}</p>{{end}}
+    <label class="field">Organization
+      <span class="input-icon">{{template "icon" "building-2"}}
+        <select name="org" required>
+          {{if ne (len .Orgs) 1}}<option value="">Select your organization…</option>{{end}}
+          {{range .Orgs}}<option value="{{.ID}}"{{if .SSO}} data-sso{{end}}{{if eq .ID $.Org}} selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+      </span>
+    </label>
+    <label class="field">Username
+      <span class="input-icon">{{template "icon" "user"}}<input name="username" placeholder="Enter your username" autocomplete="username" required autofocus></span>
+    </label>
+    <label class="field">Password
+      <span class="input-icon">{{template "icon" "lock"}}<input name="password" type="password" placeholder="Enter your password" autocomplete="current-password" required>
+        <button type="button" class="icon-btn reveal" data-reveal aria-label="Show password">{{template "icon" "eye-off"}}</button></span>
+    </label>
+    <label class="check"><input type="checkbox" name="remember" value="1"> Remember me</label>
+    <button class="btn primary" type="submit">{{template "icon" "log-in"}}Sign In</button>
+    {{if .SSO}}
+    <div id="sso" class="form" hidden>
+      <div class="or">OR</div>
+      <button class="btn outline" type="submit" formaction="/sso/start" formnovalidate>{{template "icon" "key-round"}}Use SSO</button>
+    </div>
+    {{end}}
+  </form>
+</div>
+{{else}}
+<form method="post" action="/login" class="auth-card">
+  <div class="auth-logo"><img src="/static/logo.svg" alt=""><h1>Argus</h1></div>
   {{with .Error}}<p class="error">{{.}}</p>{{end}}
-  <label>Username <input name="username" autocomplete="username" required autofocus></label>
-  <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
-  <button type="submit">Log in</button>
+  <label class="field">Username
+    <span class="input-icon">{{template "icon" "user"}}<input name="username" autocomplete="username" required autofocus></span>
+  </label>
+  <label class="field">Password
+    <span class="input-icon">{{template "icon" "lock"}}<input name="password" type="password" autocomplete="current-password" required>
+      <button type="button" class="icon-btn reveal" data-reveal aria-label="Show password">{{template "icon" "eye-off"}}</button></span>
+  </label>
+  <button class="btn primary" type="submit">{{template "icon" "log-in"}}Sign In</button>
 </form>
+{{end}}
 {{end}}

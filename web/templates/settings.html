@@ -1,0 +1,50 @@
+{{define "content"}}
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-settings"/></svg>
+  <div><h1>Settings</h1><div class="crumbs">{{.Org.Name}}</div></div>
+</div>
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+{{with .Notice}}<p class="notice">{{.}}</p>{{end}}
+<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(420px,1fr))">
+  <div class="card">
+    <div class="card-head">{{template "icon" "key-round"}}<h2>Single sign-on</h2></div>
+    <form method="post" action="/settings/sso" class="form">
+      <label>Issuer URL <input name="issuer" type="url" placeholder="https://idp.example.com/realms/argus" value="{{with .Org.OIDC}}{{.Issuer}}{{end}}"></label>
+      <div class="row">
+        <label>Client ID <input name="client" value="{{with .Org.OIDC}}{{.ClientID}}{{end}}"></label>
+        <label>Client secret <input name="secret" type="password" autocomplete="new-password" placeholder="{{with .Org.OIDC}}{{if .ClientSecret}}unchanged{{end}}{{end}}"></label>
+      </div>
+      <label>Groups claim <input name="claim" placeholder="groups" value="{{with .Org.OIDC}}{{.GroupsClaim}}{{end}}"></label>
+      <label>Role mapping <span class="help" title="One group=role per line. Roles: admin, operator, readonly. Users in no listed group are refused.">?</span>
+        <textarea name="roles" rows="4" placeholder="argus-admins=admin">{{.RoleMap}}</textarea></label>
+      <div class="muted">Redirect URI: <span class="mono">https://&lt;manager&gt;/sso/callback</span></div>
+      <div><button class="btn primary" type="submit">Save</button></div>
+    </form>
+  </div>
+  {{if .Super}}
+  <div class="card">
+    <div class="card-head">{{template "icon" "network"}}<h2>Migration network</h2></div>
+    <form method="post" action="/settings/migration" class="form">
+      <div class="row">
+        <label>Subnet <input name="subnet" placeholder="10.99.0.0/24" value="{{.Migration.Subnet}}" required></label>
+        <label>VLAN <input name="vlan" type="number" min="0" max="4094" value="{{if .Migration.VLAN}}{{.Migration.VLAN}}{{end}}" class="num"></label>
+      </div>
+      <div><button class="btn primary" type="submit">Apply to all hosts</button></div>
+    </form>
+  </div>
+  <div class="card">
+    <div class="card-head">{{template "icon" "building-2"}}<h2>Organizations</h2></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Name</th><th>ID</th><th>SSO</th><th></th></tr></thead>
+      <tbody>{{range .Orgs}}<tr><td>{{.Name}}</td><td class="mono">{{.ID}}</td><td>{{if .SSO}}On{{else}}<span class="muted">Off</span>{{end}}</td>
+        <td class="row-actions">{{if ne .ID "default"}}<form method="post" action="/settings/orgs/{{.ID}}/delete" onsubmit="return confirm('Delete {{.Name}}?')"><button type="submit" class="link danger">Delete</button></form>{{end}}</td></tr>{{end}}</tbody>
+    </table></div>
+    <form method="post" action="/settings/orgs" class="inline spaced">
+      <input name="name" placeholder="Name" required>
+      <input name="id" placeholder="id" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required>
+      <button class="btn" type="submit">{{template "icon" "plus"}}Add</button>
+    </form>
+  </div>
+  {{end}}
+</div>
+{{end}}

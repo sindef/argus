@@ -3,8 +3,10 @@ module argus
 go 1.23.5
 
 require (
+	github.com/coreos/go-oidc/v3 v3.12.0
 	github.com/gorilla/websocket v1.5.3
 	golang.org/x/crypto v0.36.0
+	golang.org/x/oauth2 v0.27.0
 	k8s.io/apimachinery v0.32.13
 	k8s.io/client-go v0.32.13
 )
@@ -12,6 +14,7 @@ require (
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
+	github.com/go-jose/go-jose/v4 v4.0.5 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
@@ -24,8 +27,7 @@ require (
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	golang.org/x/net v0.30.0 // indirect
-	golang.org/x/oauth2 v0.23.0 // indirect
+	golang.org/x/net v0.37.0 // indirect
 	golang.org/x/sys v0.31.0 // indirect
 	golang.org/x/term v0.30.0 // indirect
 	golang.org/x/text v0.23.0 // indirect

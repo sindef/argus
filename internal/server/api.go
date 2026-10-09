@@ -6,9 +6,12 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"runtime"
 	"time"
 
 	"argus/internal/kube"
@@ -27,20 +30,30 @@ func apiError(w http.ResponseWriter, r *http.Request, status int, err error) {
 	json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }
 
-type NodeInfo struct {
-	Name          string `json:"name"`
-	Version       string `json:"version"`
-	CAFingerprint string `json:"caFingerprint"`
-	RunningVMs    int    `json:"runningVMs"`
-}
-
 func (s *Server) apiNode(w http.ResponseWriter, r *http.Request) {
 	n, err := s.kube.RunningVMs(r.Context())
 	if err != nil {
 		apiError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, NodeInfo{Name: s.nodeName, Version: readEnv(s.releaseFile)["KAIROS_VERSION"], CAFingerprint: tlscert.Fingerprint(s.caPEM), RunningVMs: n})
+	writeJSON(w, kube.NodeInfo{Name: s.nodeName, Version: s.version, CAFingerprint: tlscert.Fingerprint(s.caPEM), RunningVMs: n, CPUCores: int64(runtime.NumCPU()), MemoryBytes: memTotal(), BootTime: bootTime()})
+}
+
+func memTotal() int64 {
+	b, _ := os.ReadFile("/proc/meminfo")
+	var kb int64
+	fmt.Sscanf(string(b), "MemTotal: %d kB", &kb)
+	return kb * 1024
+}
+
+func bootTime() time.Time {
+	b, err := os.ReadFile("/proc/uptime")
+	if err != nil {
+		return time.Time{}
+	}
+	var up float64
+	fmt.Sscanf(string(b), "%f", &up)
+	return time.Now().Add(-time.Duration(up * float64(time.Second))).Truncate(time.Second)
 }
 
 func (s *Server) apiVMs(w http.ResponseWriter, r *http.Request) {
@@ -286,5 +299,80 @@ func (s *Server) apiMigrationCleanup(w http.ResponseWriter, r *http.Request) {
 		apiError(w, r, http.StatusBadGateway, err)
 		return
 	}
+	writeJSON(w, map[string]string{})
+}
+
+func (s *Server) apiVM(w http.ResponseWriter, r *http.Request) {
+	vm, err := s.kube.GetVM(r.Context(), r.PathValue("ns"), r.PathValue("name"))
+	if err != nil {
+		apiError(w, r, http.StatusNotFound, err)
+		return
+	}
+	writeJSON(w, vm)
+}
+
+func (s *Server) apiEvents(w http.ResponseWriter, r *http.Request) {
+	evs, err := s.kube.Events(r.Context(), r.PathValue("ns"), r.PathValue("name"), 50)
+	if err != nil {
+		apiError(w, r, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, evs)
+}
+
+func (s *Server) apiSnapshots(w http.ResponseWriter, r *http.Request) {
+	snaps, err := s.kube.ListSnapshots(r.Context(), r.PathValue("ns"), r.PathValue("name"))
+	if err != nil {
+		apiError(w, r, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, snaps)
+}
+
+func (s *Server) apiSnapshotOp(w http.ResponseWriter, r *http.Request) {
+	ns, name, snap := r.PathValue("ns"), r.PathValue("name"), r.PathValue("snap")
+	var err error
+	switch op := r.PathValue("op"); {
+	case snap == "":
+		_, err = s.kube.CreateSnapshot(r.Context(), ns, name)
+	case op == "restore":
+		err = s.kube.RestoreSnapshot(r.Context(), ns, name, snap)
+	case op == "delete":
+		err = s.kube.DeleteSnapshot(r.Context(), ns, snap)
+	default:
+		err = errors.New("unknown snapshot operation")
+	}
+	if err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	log.Printf("%s: snapshot %s on %s/%s", session(r).User, r.PathValue("op"), ns, name)
+	writeJSON(w, map[string]string{})
+}
+
+func (s *Server) apiRenameClone(w http.ResponseWriter, r *http.Request) {
+	ns, name := r.PathValue("ns"), r.PathValue("name")
+	var req struct {
+		Value string `json:"value"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apiError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	var err error
+	if r.PathValue("op") == "clone" {
+		if !validObject.MatchString(req.Value) {
+			err = errors.New("invalid clone name")
+		} else {
+			err = s.kube.Clone(r.Context(), ns, name, req.Value)
+		}
+	} else {
+		err = s.kube.Rename(r.Context(), ns, name, req.Value)
+	}
+	if err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	log.Printf("%s: %s %s/%s %s", session(r).User, r.PathValue("op"), ns, name, req.Value)
 	writeJSON(w, map[string]string{})
 }

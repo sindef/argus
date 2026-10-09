@@ -30,7 +30,7 @@ func (s *Server) images(w http.ResponseWriter, r *http.Request) {
 		tmpl = "table"
 	}
 	imgs, err := s.kube.ListImages(r.Context())
-	s.render(w, r, "images.html", tmpl, map[string]any{"Images": imgs, "CanOperate": session(r).Role.Can(auth.Operator), "Error": errText(err)})
+	s.render(w, r, "images.html", tmpl, map[string]any{"Nav": "images", "Images": imgs, "CanOperate": session(r).Role.Can(auth.Operator), "Error": errText(err)})
 }
 
 func (s *Server) importImage(w http.ResponseWriter, r *http.Request) {

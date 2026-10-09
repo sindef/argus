@@ -132,6 +132,7 @@ func (c *Manager) Unprotect(ctx context.Context, vm string) error {
 
 func (c *Manager) Start() {
 	c.started = time.Now()
+	go c.pollLoop()
 	go func() {
 		for range time.Tick(heartbeatEvery) {
 			ctx, cancel := context.WithTimeout(context.Background(), heartbeatEvery)
@@ -230,7 +231,7 @@ func (c *Manager) failover(ctx context.Context) {
 		}
 		log.Printf("ha: %s failed over from %s to %s", vm, owner.Name, replica.Name)
 		c.mu.Lock()
-		c.jobs = append(c.jobs, &Job{VM: vm, From: owner.Name, To: replica.Name, Started: time.Now(), Status: "Failed over (HA)", Done: true})
+		c.jobs = append(c.jobs, &Job{Org: owner.Org, VM: vm, From: owner.Name, To: replica.Name, Started: time.Now(), Status: "Failed over (HA)", Done: true})
 		c.mu.Unlock()
 	}
 }

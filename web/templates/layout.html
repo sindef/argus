@@ -1,35 +1,78 @@
-{{define "layout"}}<!doctype html>
+{{define "head"}}<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{if .Manager}}Argus Manager{{else}}Argus{{end}}</title>
+<link rel="icon" href="/static/logo.svg">
 <link rel="stylesheet" href="/static/argus.css">
 <script src="/static/vendor/htmx/htmx.min.js"></script>
-</head>
+<script src="/static/argus.js"></script>
+</head>{{end}}
+
+{{define "icon"}}<svg class="i"><use href="/static/vendor/lucide/icons.svg#i-{{.}}"/></svg>{{end}}
+
+{{define "auth"}}{{template "head" .}}
 <body>
-<header>
-  <nav>
-    <a class="brand" href="/">{{if .Manager}}Argus Manager{{else}}Argus{{end}}</a>
-    {{if and .Session.User (not .Session.MustChange)}}
-    <a href="/">Virtual machines</a>
-    {{if .Manager}}
-    <a href="/nodes">Nodes</a>
-    {{if eq .Session.Role "admin"}}<a href="/users">Users</a>{{end}}
-    {{else}}
-    <a href="/images">Images</a>
-    <a href="/networks">Networks</a>
-    {{if eq .Session.Role "admin"}}<a href="/users">Users</a><a href="/host">Host</a>{{end}}
-    {{end}}
-    {{end}}
-  </nav>
-  {{with .Session}}{{if .User}}
-  <form method="post" action="/logout" class="user">
-    <a href="/password">{{.User}}</a>
-    <button type="submit" class="link">Log out</button>
-  </form>
-  {{end}}{{end}}
-</header>
-<main>{{template "content" .}}</main>
+<main class="auth">{{template "content" .}}</main>
 </body>
 </html>{{end}}
+
+{{define "layout"}}{{template "head" .}}
+<body>
+<header class="topbar">
+  <a class="brand" href="/"><img src="/static/logo.svg" alt="">{{if .Manager}}Argus Manager{{else}}Argus{{end}}</a>
+  {{if not .Session.MustChange}}
+  <form class="search input-icon" action="{{if .Manager}}/vms{{else}}/{{end}}" method="get">
+    {{template "icon" "search"}}
+    <input name="q" placeholder="{{if .Manager}}Search VMs, hosts…{{else}}Search…{{end}}" value="{{.Query}}" aria-label="Search">
+  </form>
+  <a class="icon-btn" href="/events" title="Events">{{template "icon" "bell"}}</a>
+  <span class="icon-btn" title="{{if .Manager}}Argus Manager{{else}}Argus{{end}} {{.Version}}">{{template "icon" "circle-help"}}</span>
+  {{end}}
+  <div class="menu user-menu">
+    <button data-menu>{{template "icon" "circle-user-round"}}<span>{{.Session.User}}</span>{{template "icon" "chevron-down"}}</button>
+    <div class="menu-list right" hidden>
+      {{with .Session.Org}}<span class="muted" style="display:block;padding:6px 10px">{{.}}</span><hr>{{end}}
+      {{if not .Session.SSO}}<a href="/password">{{template "icon" "key-round"}}Change password</a>{{end}}
+      <form method="post" action="/logout"><button type="submit">{{template "icon" "log-out"}}Log out</button></form>
+    </div>
+  </div>
+</header>
+<div class="shell">
+  {{if not .Session.MustChange}}<aside class="sidebar">{{if .Manager}}{{template "manager-nav" .}}{{else}}{{template "node-nav" .}}{{end}}</aside>{{end}}
+  <main class="content"{{if .Session.MustChange}} style="margin-left:0"{{end}}>{{template "content" .}}</main>
+  <p id="flash" class="error toast" role="alert" hx-on::after-swap="clearTimeout(this.t); this.t = setTimeout(() => this.innerHTML = '', 8000)"></p>
+  <aside id="drawer" class="drawer"></aside>
+</div>
+</body>
+</html>{{end}}
+
+{{define "node-nav"}}
+<div class="nav-section" id="vms">
+  <button class="nav-head">{{template "icon" "monitor"}}Virtual Machines<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-up"/></svg></button>
+  <div class="nav-items" hx-get="/nav/vms" hx-trigger="load, every 10s" hx-swap="innerHTML"></div>
+</div>
+<div class="nav-section" id="storage">
+  <button class="nav-head">{{template "icon" "database"}}Storage<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-up"/></svg></button>
+  <div class="nav-items">
+    <a class="nav-link sub{{if eq .Nav "images"}} active{{end}}" href="/images">Images</a>
+  </div>
+</div>
+<div class="nav-section" id="network">
+  <button class="nav-head">{{template "icon" "network"}}Network<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-up"/></svg></button>
+  <div class="nav-items">
+    <a class="nav-link sub{{if eq .Nav "networks"}} active{{end}}" href="/networks">Networks</a>
+  </div>
+</div>
+{{if eq .Session.Role "admin"}}
+<div class="nav-sep"></div>
+<div class="nav-section" id="settings">
+  <button class="nav-head">{{template "icon" "settings"}}Settings<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-up"/></svg></button>
+  <div class="nav-items">
+    <a class="nav-link sub{{if eq .Nav "host"}} active{{end}}" href="/host">Host</a>
+    <a class="nav-link sub{{if eq .Nav "users"}} active{{end}}" href="/users">Users</a>
+  </div>
+</div>
+{{end}}
+{{end}}

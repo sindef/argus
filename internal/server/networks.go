@@ -5,13 +5,26 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"argus/internal/auth"
 )
 
 func (s *Server) networks(w http.ResponseWriter, r *http.Request) {
 	nets, err := s.kube.ListNetworks(r.Context())
-	s.render(w, r, "networks.html", "layout", map[string]any{"Networks": nets, "CanEdit": session(r).Role.Can(auth.Admin), "Error": errText(err)})
+	attached := map[string]int{}
+	if vms, verr := s.kube.ListVMs(r.Context()); verr == nil {
+		for _, v := range vms {
+			for _, n := range v.NICs {
+				_, name, _ := strings.Cut(n.Network, "/")
+				if name == "" {
+					name = n.Network
+				}
+				attached[name]++
+			}
+		}
+	}
+	s.render(w, r, "networks.html", "layout", map[string]any{"Nav": "networks", "Networks": nets, "Attached": attached, "CanEdit": session(r).Role.Can(auth.Admin), "Error": errText(err)})
 }
 
 func (s *Server) createNetwork(w http.ResponseWriter, r *http.Request) {

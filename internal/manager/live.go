@@ -157,7 +157,7 @@ func (c *Manager) syncCAs(ctx context.Context) error {
 }
 
 func (c *Manager) LiveMigrate(src, dst Node, ns, vm string) {
-	j := &Job{VM: vm, From: src.Name, To: dst.Name, Started: time.Now(), Status: "Starting", Live: true}
+	j := &Job{Org: src.Org, VM: vm, From: src.Name, To: dst.Name, Started: time.Now(), Status: "Starting", Live: true}
 	c.mu.Lock()
 	c.jobs = append(c.jobs, j)
 	c.mu.Unlock()

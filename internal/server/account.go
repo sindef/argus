@@ -13,22 +13,48 @@ import (
 var validName = regexp.MustCompile(`^[a-z][a-z0-9._-]{0,31}$`)
 
 func (s *Server) loginPage(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, "login.html", "layout", nil)
+	s.render(w, r, "login.html", "auth", s.loginData(r, ""))
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
-	tok, err := s.auth.Login(r.Context(), r.FormValue("username"), r.FormValue("password"))
+	store, remember := s.auth, false
+	if s.manager != nil {
+		org := r.FormValue("org")
+		if _, err := s.manager.Org(r.Context(), org); err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			s.render(w, r, "login.html", "auth", s.loginData(r, "Select your organization"))
+			return
+		}
+		store, remember = s.auth.ForOrg(org), r.FormValue("remember") != ""
+		http.SetCookie(w, &http.Cookie{Name: "argus_org", Value: org, Path: "/", MaxAge: 365 * 24 * 3600, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
+	}
+	tok, err := store.Login(r.Context(), r.FormValue("username"), r.FormValue("password"), remember)
 	if err != nil {
 		log.Printf("login: %v", err)
 	}
 	if tok == "" {
 		time.Sleep(time.Second)
 		w.WriteHeader(http.StatusUnauthorized)
-		s.render(w, r, "login.html", "layout", map[string]any{"Error": "Invalid username or password"})
+		s.render(w, r, "login.html", "auth", s.loginData(r, "Invalid username or password"))
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: tok, Path: "/", HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
+	setSessionCookie(w, tok, remember)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func setSessionCookie(w http.ResponseWriter, tok string, remember bool) {
+	c := &http.Cookie{Name: cookieName, Value: tok, Path: "/", HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode}
+	if remember {
+		c.MaxAge = 30 * 24 * 3600
+	}
+	http.SetCookie(w, c)
+}
+
+func (s *Server) users(r *http.Request) *auth.Store {
+	if s.manager != nil {
+		return s.auth.ForOrg(session(r).Org)
+	}
+	return s.auth
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
@@ -52,7 +78,7 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 	case pw != r.FormValue("confirm"):
 		msg = "Passwords do not match"
 	default:
-		err := s.auth.ChangePassword(r.Context(), session(r).Token, r.FormValue("current"), pw)
+		err := s.users(r).ChangePassword(r.Context(), session(r).Token, r.FormValue("current"), pw)
 		if err == nil {
 			log.Printf("%s: changed password", session(r).User)
 			if session(r).User == "admin" {
@@ -70,19 +96,19 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "password.html", "layout", map[string]any{"Error": msg})
 }
 
-func (s *Server) users(w http.ResponseWriter, r *http.Request) {
+func (s *Server) usersPage(w http.ResponseWriter, r *http.Request) {
 	s.renderUsers(w, r, "", nil)
 }
 
 func (s *Server) renderUsers(w http.ResponseWriter, r *http.Request, notice string, err error) {
-	us, lerr := s.auth.Users(r.Context())
+	us, lerr := s.users(r).Users(r.Context())
 	if err == nil {
 		err = lerr
 	}
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 	}
-	s.render(w, r, "users.html", "layout", map[string]any{"Users": us, "Roles": auth.Roles, "Notice": notice, "Error": errText(err)})
+	s.render(w, r, "users.html", "layout", map[string]any{"Nav": "users", "Users": us, "Roles": auth.Roles, "Notice": notice, "Error": errText(err)})
 }
 
 func (s *Server) addUser(w http.ResponseWriter, r *http.Request) {
@@ -92,7 +118,7 @@ func (s *Server) addUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pw := auth.RandomPassword()
-	if err := s.auth.Add(r.Context(), name, role, pw); err != nil {
+	if err := s.users(r).Add(r.Context(), name, role, pw); err != nil {
 		s.renderUsers(w, r, "", err)
 		return
 	}
@@ -106,7 +132,7 @@ func (s *Server) setRole(w http.ResponseWriter, r *http.Request) {
 		s.renderUsers(w, r, "", errors.New("invalid role"))
 		return
 	}
-	if err := s.auth.SetRole(r.Context(), name, role); err != nil {
+	if err := s.users(r).SetRole(r.Context(), name, role); err != nil {
 		s.renderUsers(w, r, "", err)
 		return
 	}
@@ -117,7 +143,7 @@ func (s *Server) setRole(w http.ResponseWriter, r *http.Request) {
 func (s *Server) resetPassword(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	pw := auth.RandomPassword()
-	if err := s.auth.ResetPassword(r.Context(), name, pw); err != nil {
+	if err := s.users(r).ResetPassword(r.Context(), name, pw); err != nil {
 		s.renderUsers(w, r, "", err)
 		return
 	}
@@ -131,10 +157,27 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
 		s.renderUsers(w, r, "", errors.New("cannot delete yourself"))
 		return
 	}
-	if err := s.auth.Delete(r.Context(), name); err != nil {
+	if err := s.users(r).Delete(r.Context(), name); err != nil {
 		s.renderUsers(w, r, "", err)
 		return
 	}
 	log.Printf("%s: deleted user %s", session(r).User, name)
 	http.Redirect(w, r, "/users", http.StatusSeeOther)
+}
+
+func (s *Server) loginData(r *http.Request, msg string) map[string]any {
+	data := map[string]any{"Error": msg}
+	if s.manager != nil {
+		orgs, _ := s.manager.Orgs(r.Context())
+		sso := false
+		for _, o := range orgs {
+			sso = sso || o.SSO()
+		}
+		org := r.FormValue("org")
+		if c, err := r.Cookie("argus_org"); err == nil && org == "" {
+			org = c.Value
+		}
+		data["Orgs"], data["Org"], data["SSO"] = orgs, org, sso
+	}
+	return data
 }

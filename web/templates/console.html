@@ -1,18 +1,19 @@
 {{define "content"}}
-<div class="title">
-  <p><a href="/">Virtual machines</a> / <a href="/vms/{{.Namespace}}/{{.Name}}">{{.Name}}</a></p>
-  <nav class="tabs">
-    <a href="?type=vnc"{{if eq .Kind "vnc"}} class="active"{{end}}>Display</a>
-    <a href="?type=serial"{{if eq .Kind "console"}} class="active"{{end}}>Serial</a>
-  </nav>
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-terminal"/></svg>
+  <div><h1>{{.Name}}</h1><div class="crumbs"><a href="/">Virtual Machines</a> / <a href="{{.Page}}">{{.Name}}</a> / Console</div></div>
 </div>
+<nav class="tabs">
+  <a href="?type=vnc"{{if eq .Kind "vnc"}} class="active"{{end}}>Display</a>
+  <a href="?type=serial"{{if eq .Kind "console"}} class="active"{{end}}>Serial</a>
+</nav>
 <p id="state" class="muted">Connecting…</p>
 <div id="screen" class="screen"></div>
 {{if eq .Kind "vnc"}}
 <script type="module">
 import RFB from "/static/vendor/novnc/core/rfb.js";
 const state = document.getElementById("state");
-const url = "wss://" + location.host + "/ws/" + {{.Namespace}} + "/" + {{.Name}} + "/vnc";
+const url = "wss://" + location.host + {{.WS}} + "vnc";
 const rfb = new RFB(document.getElementById("screen"), url);
 rfb.scaleViewport = true;
 rfb.addEventListener("connect", () => state.textContent = "");
@@ -25,7 +26,7 @@ import { Terminal } from "/static/vendor/xterm/xterm.mjs";
 const state = document.getElementById("state");
 const term = new Terminal();
 term.open(document.getElementById("screen"));
-const ws = new WebSocket("wss://" + location.host + "/ws/" + {{.Namespace}} + "/" + {{.Name}} + "/console");
+const ws = new WebSocket("wss://" + location.host + {{.WS}} + "console");
 ws.binaryType = "arraybuffer";
 const enc = new TextEncoder();
 ws.onopen = () => { state.textContent = ""; term.focus(); ws.send(enc.encode("\r")); };

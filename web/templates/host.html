@@ -1,45 +1,52 @@
 {{define "content"}}
-<h1>Host</h1>
-<p id="flash" class="error"></p>
-{{if .Available}}
-<div hx-get="/host" hx-trigger="every 5s">{{template "state" .}}</div>
-<h2>Update</h2>
-<form hx-post="/host/upgrade" hx-target="#flash" hx-confirm="Update the OS and reboot?" class="inline">
-  <input name="image" placeholder="registry/argus-os:tag" required class="grow">
-  <button type="submit">Update and reboot</button>
-</form>
-<h2>Power</h2>
-<div class="inline">
-  <button hx-post="/host/reboot" hx-target="#flash" hx-confirm="Reboot the host?">Reboot</button>
-  <button class="danger" hx-post="/host/poweroff" hx-target="#flash" hx-confirm="Shut down the host?">Shut down</button>
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-server"/></svg>
+  <div><h1>{{.NodeName}}</h1><div class="crumbs">Settings / Host</div></div>
 </div>
-{{else}}
-<p class="muted">Host control is not available.</p>
-{{end}}
-
-<h2>Manager access</h2>
-{{with .Error}}<p class="error">{{.}}</p>{{end}}
-{{with .Notice}}<p class="notice">{{.}}</p>{{end}}
-<dl><dt>CA fingerprint</dt><dd class="mono">{{.CAFingerprint}}</dd></dl>
-{{if .Tokens}}
-<table class="spaced">
-  <thead><tr><th>Token</th><th>Created</th><th></th></tr></thead>
-  <tbody>{{range .Tokens}}<tr><td>{{.Name}}</td><td>{{.Created.Local.Format "2006-01-02 15:04"}}</td>
-    <td class="row-actions"><form method="post" action="/tokens/{{.Name}}/delete" onsubmit="return confirm('Revoke {{.Name}}?')"><button type="submit" class="link danger">Revoke</button></form></td></tr>{{end}}</tbody>
-</table>
-{{end}}
-<form method="post" action="/tokens" class="inline spaced">
-  <input name="name" placeholder="token name" pattern="[a-z][a-z0-9._-]{0,31}" required>
-  <button type="submit">Create token</button>
-</form>
+<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(420px,1fr))">
+  {{if .Available}}
+  <div class="card">
+    <div class="card-head">{{template "icon" "server"}}<h2>System</h2></div>
+    <div hx-get="/host" hx-trigger="every 5s">{{template "state" .}}</div>
+  </div>
+  <div class="card">
+    <div class="card-head">{{template "icon" "download"}}<h2>Update</h2></div>
+    <form hx-post="/host/upgrade" hx-target="#flash" hx-confirm="Update the OS and reboot?" class="form">
+      <input name="image" placeholder="registry/argus-os:tag" required>
+      <div class="inline">
+        <button class="btn primary" type="submit">Update and reboot</button>
+        <button class="btn" type="button" hx-post="/host/reboot" hx-target="#flash" hx-confirm="Reboot the host?">{{template "icon" "rotate-cw"}}Reboot</button>
+        <button class="btn danger" type="button" hx-post="/host/poweroff" hx-target="#flash" hx-confirm="Shut down the host?">{{template "icon" "power"}}Shut down</button>
+      </div>
+    </form>
+  </div>
+  {{end}}
+  <div class="card">
+    <div class="card-head">{{template "icon" "key-round"}}<h2>Manager access</h2></div>
+    {{with .Error}}<p class="error">{{.}}</p>{{end}}
+    {{with .Notice}}<p class="notice">{{.}}</p>{{end}}
+    <dl class="kv"><dt>CA fingerprint</dt><dd class="mono">{{.CAFingerprint}}</dd></dl>
+    {{if .Tokens}}
+    <div class="table-wrap spaced"><table>
+      <thead><tr><th>Token</th><th>Created</th><th></th></tr></thead>
+      <tbody>{{range .Tokens}}<tr><td>{{.Name}}</td><td>{{.Created.Local.Format "2006-01-02 15:04"}}</td>
+        <td class="row-actions"><form method="post" action="/tokens/{{.Name}}/delete" onsubmit="return confirm('Revoke {{.Name}}?')"><button type="submit" class="link danger">Revoke</button></form></td></tr>{{end}}</tbody>
+    </table></div>
+    {{end}}
+    <form method="post" action="/tokens" class="inline spaced">
+      <input name="name" placeholder="token name" pattern="[a-z][a-z0-9._-]{0,31}" required>
+      <button class="btn" type="submit">{{template "icon" "plus"}}Create token</button>
+    </form>
+  </div>
+</div>
 {{end}}
 
 {{define "state"}}
-<dl>
+<dl class="kv">
   <dt>OS version</dt><dd>{{index .Release "KAIROS_VERSION"}}</dd>
   <dt>Base</dt><dd>{{index .Release "KAIROS_FLAVOR"}} {{index .Release "KAIROS_FLAVOR_RELEASE"}}</dd>
   <dt>k3s</dt><dd>{{index .Release "KAIROS_SOFTWARE_VERSION"}}</dd>
   {{with .Status}}<dt>Status</dt><dd>{{.}}</dd>{{end}}
 </dl>
-{{with .Log}}<pre class="log">{{.}}</pre>{{end}}
+{{with .Log}}<pre class="log spaced">{{.}}</pre>{{end}}
 {{end}}

@@ -23,8 +23,10 @@ type Server struct {
 	releaseFile string
 	caPEM       []byte
 	nodeName    string
+	version     string
 	manager     *manager.Manager
 	ha          haState
+	sso         ssoFlows
 	pages       map[string]*template.Template
 	mux         *http.ServeMux
 }
@@ -47,8 +49,10 @@ type reqAuth struct {
 
 func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s := &Server{kube: k, auth: a, banner: o.Banner, runDir: o.RunDir, releaseFile: o.ReleaseFile, caPEM: o.CAPEM, nodeName: o.NodeName, manager: o.Manager, pages: map[string]*template.Template{}, mux: http.NewServeMux()}
-	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "vm.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "nodes.html"} {
-		t, err := template.ParseFS(web.FS, "templates/layout.html", "templates/"+p)
+	s.version = readEnv(o.ReleaseFile)["KAIROS_VERSION"]
+	s.sso.m = map[string]ssoFlow{}
+	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html"} {
+		t, err := template.New(p).Funcs(funcs).ParseFS(web.FS, "templates/layout.html", "templates/manager-nav.html", "templates/"+p)
 		if err != nil {
 			return nil, err
 		}
@@ -61,21 +65,33 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /logout", s.logout)
 	s.mux.HandleFunc("GET /password", s.require(auth.ReadOnly, s.passwordPage))
 	s.mux.HandleFunc("POST /password", s.require(auth.ReadOnly, s.changePassword))
-	s.mux.HandleFunc("GET /users", s.require(auth.Admin, s.users))
+	s.mux.HandleFunc("GET /users", s.require(auth.Admin, s.usersPage))
 	s.mux.HandleFunc("POST /users", s.require(auth.Admin, s.addUser))
 	s.mux.HandleFunc("POST /users/{name}/role", s.require(auth.Admin, s.setRole))
 	s.mux.HandleFunc("POST /users/{name}/reset", s.require(auth.Admin, s.resetPassword))
 	s.mux.HandleFunc("POST /users/{name}/delete", s.require(auth.Admin, s.deleteUser))
 	if s.manager != nil {
-		s.mux.HandleFunc("GET /{$}", s.require(auth.ReadOnly, s.managerVMs))
-		s.mux.HandleFunc("GET /vms", s.require(auth.ReadOnly, s.managerTable))
+		s.mux.HandleFunc("POST /sso/start", s.ssoStart)
+		s.mux.HandleFunc("GET /sso/callback", s.ssoCallback)
+		s.mux.HandleFunc("GET /{$}", s.require(auth.ReadOnly, s.managerHome))
+		s.mux.HandleFunc("GET /vms", s.require(auth.ReadOnly, s.managerVMs))
+		s.mux.HandleFunc("GET /nav/tree", s.require(auth.ReadOnly, s.managerTree))
+		s.mux.HandleFunc("GET /nodes/{node}/vms/{ns}/{name}", s.require(auth.ReadOnly, s.managerVM))
+		s.mux.HandleFunc("GET /nodes/{node}/vms/{ns}/{name}/console", s.require(auth.Operator, s.managerConsole))
+		s.mux.HandleFunc("GET /nodes/{node}/vms/{ns}/{name}/ws/{kind}", s.require(auth.Operator, s.managerConsoleWS))
 		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/migrate", s.require(auth.Admin, s.managerMigrate))
 		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/protect", s.require(auth.Admin, s.managerProtect))
 		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/unprotect", s.require(auth.Admin, s.managerUnprotect))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/{action}", s.require(auth.Operator, s.managerAction))
-		s.mux.HandleFunc("GET /nodes", s.require(auth.ReadOnly, s.managerNodes))
-		s.mux.HandleFunc("POST /nodes", s.require(auth.Admin, s.managerAddNode))
-		s.mux.HandleFunc("POST /nodes/{node}/delete", s.require(auth.Admin, s.managerRemoveNode))
+		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/snapshots/{snap}/{op}", s.require(auth.Operator, s.managerSnapshotOp))
+		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/{action}", s.require(auth.Operator, s.managerVMAction))
+		s.mux.HandleFunc("GET /hosts", s.require(auth.ReadOnly, s.managerHosts))
+		s.mux.HandleFunc("POST /hosts", s.require(auth.Admin, s.managerAddNode))
+		s.mux.HandleFunc("POST /hosts/{node}/group", s.require(auth.Admin, s.managerGroupNode))
+		s.mux.HandleFunc("POST /hosts/{node}/delete", s.require(auth.Admin, s.managerRemoveNode))
+		s.mux.HandleFunc("GET /settings", s.require(auth.Admin, s.managerSettings))
+		s.mux.HandleFunc("POST /settings/sso", s.require(auth.Admin, s.managerSSO))
+		s.mux.HandleFunc("POST /settings/orgs", s.require(auth.Admin, s.managerAddOrg))
+		s.mux.HandleFunc("POST /settings/orgs/{id}/delete", s.require(auth.Admin, s.managerDeleteOrg))
 		s.mux.HandleFunc("POST /settings/migration", s.require(auth.Admin, s.managerMigrationSettings))
 		return s, nil
 	}
@@ -111,6 +127,13 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /api/migration-network", s.require(auth.Admin, s.apiMigrationNetwork))
 	s.mux.HandleFunc("POST /api/receive", s.require(auth.Admin, s.apiReceive))
 	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/spec", s.require(auth.Admin, s.apiVMSpec))
+	s.mux.HandleFunc("GET /api/vms/{ns}/{name}", s.require(auth.Admin, s.apiVM))
+	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/events", s.require(auth.Admin, s.apiEvents))
+	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/snapshots", s.require(auth.Admin, s.apiSnapshots))
+	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/snapshots", s.require(auth.Admin, s.apiSnapshotOp))
+	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/snapshots/{snap}/{op}", s.require(auth.Admin, s.apiSnapshotOp))
+	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/meta/{op}", s.require(auth.Admin, s.apiRenameClone))
+	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/ws/{kind}", s.require(auth.Admin, s.consoleWS))
 	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/migration", s.require(auth.Admin, s.apiMigrationPhase))
 	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/send", s.require(auth.Admin, s.apiSend))
 	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/migration-cleanup", s.require(auth.Admin, s.apiMigrationCleanup))
@@ -118,7 +141,10 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("GET /vms", s.require(auth.ReadOnly, s.vmTable))
 	s.mux.HandleFunc("GET /vms/new", s.require(auth.Operator, s.newVM))
 	s.mux.HandleFunc("POST /vms", s.require(auth.Operator, s.createVM))
-	s.mux.HandleFunc("GET /vms/{ns}/{name}", s.require(auth.ReadOnly, s.vm))
+	s.mux.HandleFunc("GET /vms/{ns}/{name}", s.require(auth.ReadOnly, s.vms))
+	s.mux.HandleFunc("GET /vms/{ns}/{name}/drawer", s.require(auth.ReadOnly, s.vmDrawer))
+	s.mux.HandleFunc("GET /nav/vms", s.require(auth.ReadOnly, s.navVMs))
+	s.mux.HandleFunc("POST /vms/bulk/{action}", s.require(auth.Operator, s.bulk))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/delete", s.require(auth.Operator, s.deleteVM))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/disks", s.require(auth.Operator, s.addDisk))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/disks/{disk}/delete", s.require(auth.Operator, s.removeDisk))
@@ -144,6 +170,12 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page, tmpl strin
 	}
 	data["Session"] = session(r)
 	data["Manager"] = s.manager != nil
+	data["Query"] = r.FormValue("q")
+	data["Version"] = s.version
+	data["NodeName"] = s.nodeName
+	if _, ok := data["Nav"]; !ok {
+		data["Nav"] = ""
+	}
 	if err := s.pages[page].ExecuteTemplate(w, tmpl, data); err != nil {
 		log.Printf("render %s: %v", page, err)
 	}
