@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"argus/internal/auth"
 	"argus/internal/kube"
@@ -193,7 +194,35 @@ func (s *Server) consoleWS(w http.ResponseWriter, r *http.Request) {
 	done := make(chan struct{}, 2)
 	go pipe(client, backend, done)
 	go pipe(backend, client, done)
-	<-done
+	s.waitConsole(r, done)
+}
+
+func (s *Server) sessionValid(r *http.Request) bool {
+	if tok := session(r).Token; tok != "" {
+		_, ok := s.auth.Session(tok)
+		return ok
+	}
+	if tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
+		_, valid := s.auth.CheckToken(r.Context(), tok)
+		return valid
+	}
+	return false
+}
+
+func (s *Server) waitConsole(r *http.Request, done <-chan struct{}) {
+	t := time.NewTicker(10 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-t.C:
+			if !s.sessionValid(r) {
+				log.Printf("%s: console closed, session revoked", session(r).User)
+				return
+			}
+		}
+	}
 }
 
 func pipe(dst, src *websocket.Conn, done chan<- struct{}) {

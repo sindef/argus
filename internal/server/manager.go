@@ -350,7 +350,7 @@ func (s *Server) managerConsoleWS(w http.ResponseWriter, r *http.Request) {
 	done := make(chan struct{}, 2)
 	go pipe(client, backend, done)
 	go pipe(backend, client, done)
-	<-done
+	s.waitConsole(r, done)
 }
 
 func (s *Server) managerMigrate(w http.ResponseWriter, r *http.Request) {

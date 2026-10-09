@@ -17,6 +17,12 @@ func (s *Server) loginPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
+	ip := clientIP(r)
+	if s.limiter.blocked(ip) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		s.render(w, r, "login.html", "auth", s.loginData(r, "Too many failed sign-ins, try again later"))
+		return
+	}
 	store, remember := s.auth, false
 	if s.manager != nil {
 		org := r.FormValue("org")
@@ -28,16 +34,21 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		store, remember = s.auth.ForOrg(org), r.FormValue("remember") != ""
 		http.SetCookie(w, &http.Cookie{Name: "argus_org", Value: org, Path: "/", MaxAge: 365 * 24 * 3600, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
 	}
+	s.limiter.slots <- struct{}{}
 	tok, err := store.Login(r.Context(), r.FormValue("username"), r.FormValue("password"), remember)
+	<-s.limiter.slots
 	if err != nil {
 		log.Printf("login: %v", err)
 	}
 	if tok == "" {
+		s.limiter.fail(ip)
+		log.Printf("login: failed for %q from %s", r.FormValue("username"), ip)
 		time.Sleep(time.Second)
 		w.WriteHeader(http.StatusUnauthorized)
 		s.render(w, r, "login.html", "auth", s.loginData(r, "Invalid username or password"))
 		return
 	}
+	s.limiter.succeed(ip)
 	setSessionCookie(w, tok, remember)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

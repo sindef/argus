@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"argus/internal/auth"
@@ -28,6 +29,7 @@ type Server struct {
 	ha          haState
 	sso         ssoFlows
 	pages       map[string]*template.Template
+	limiter     *loginLimiter
 	mux         *http.ServeMux
 }
 
@@ -48,7 +50,7 @@ type reqAuth struct {
 }
 
 func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
-	s := &Server{kube: k, auth: a, banner: o.Banner, runDir: o.RunDir, releaseFile: o.ReleaseFile, caPEM: o.CAPEM, nodeName: o.NodeName, manager: o.Manager, pages: map[string]*template.Template{}, mux: http.NewServeMux()}
+	s := &Server{kube: k, auth: a, banner: o.Banner, runDir: o.RunDir, releaseFile: o.ReleaseFile, caPEM: o.CAPEM, nodeName: o.NodeName, manager: o.Manager, pages: map[string]*template.Template{}, mux: http.NewServeMux(), limiter: newLoginLimiter()}
 	s.version = readEnv(o.ReleaseFile)["KAIROS_VERSION"]
 	s.sso.m = map[string]ssoFlow{}
 	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html"} {
@@ -181,7 +183,30 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if !sameOrigin(r) {
+		http.Error(w, "cross-origin request refused", http.StatusForbidden)
+		return
+	}
 	s.mux.ServeHTTP(w, r)
+}
+
+func sameOrigin(r *http.Request) bool {
+	switch r.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return true
+	}
+	if strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
+		return true
+	}
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		ref, err := url.Parse(r.Header.Get("Referer"))
+		if err != nil || ref.Host == "" {
+			return false
+		}
+		origin = ref.Scheme + "://" + ref.Host
+	}
+	return origin == "https://"+r.Host
 }
 
 func (s *Server) render(w http.ResponseWriter, r *http.Request, page, tmpl string, data map[string]any) {
