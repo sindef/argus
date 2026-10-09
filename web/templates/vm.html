@@ -42,6 +42,24 @@
 </form>
 {{end}}
 
+<h2>Snapshots</h2>
+{{with $.Error}}<p class="error">{{.}}</p>{{end}}
+{{if $.Snapshots}}
+<table>
+  <thead><tr><th>Name</th><th>Created</th><th>Status</th><th></th></tr></thead>
+  <tbody>{{range $.Snapshots}}<tr>
+    <td>{{.Name}}</td>
+    <td>{{.Created.Local.Format "2006-01-02 15:04"}}</td>
+    <td><span class="status {{.Phase}}">{{if .Ready}}Ready{{else}}{{.Phase}}{{end}}</span></td>
+    <td class="row-actions">{{if $.CanOperate}}
+      {{if not $.VM.Running}}<button class="link" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/snapshots/{{.Name}}/restore" hx-target="#flash" hx-confirm="Restore {{$.VM.Name}} to {{.Name}}? Current disk contents are lost.">Restore</button>{{end}}
+      <button class="link danger" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/snapshots/{{.Name}}/delete" hx-target="#flash" hx-confirm="Delete snapshot {{.Name}}?">Delete</button>
+    {{end}}</td>
+  </tr>{{end}}</tbody>
+</table>
+{{end}}
+{{if $.CanOperate}}<button class="spaced" hx-post="/vms/{{.Namespace}}/{{.Name}}/snapshots" hx-target="#flash">Take snapshot</button>{{end}}
+
 <h2>Network</h2>
 <table>
   <thead><tr><th>Name</th><th>Network</th><th>MAC</th><th>IP</th></tr></thead>

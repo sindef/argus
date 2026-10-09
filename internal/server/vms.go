@@ -33,7 +33,8 @@ func (s *Server) vm(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("HX-Request") != "" {
 		tmpl = "detail"
 	}
-	s.render(w, r, "vm.html", tmpl, map[string]any{"VM": vm, "CanOperate": session(r).Role.Can(auth.Operator)})
+	snaps, err := s.kube.ListSnapshots(r.Context(), vm.Namespace, vm.Name)
+	s.render(w, r, "vm.html", tmpl, map[string]any{"VM": vm, "Snapshots": snaps, "CanOperate": session(r).Role.Can(auth.Operator), "Error": errText(err)})
 }
 
 func (s *Server) action(w http.ResponseWriter, r *http.Request) {
@@ -177,5 +178,36 @@ func (s *Server) removeDisk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("%s: remove disk %s from %s/%s", session(r).User, disk, ns, name)
+	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) snapshot(w http.ResponseWriter, r *http.Request) {
+	ns, name := r.PathValue("ns"), r.PathValue("name")
+	snap, err := s.kube.CreateSnapshot(r.Context(), ns, name)
+	if err != nil {
+		flash(w, err)
+		return
+	}
+	log.Printf("%s: snapshot %s/%s as %s", session(r).User, ns, name, snap)
+	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) restoreSnapshot(w http.ResponseWriter, r *http.Request) {
+	ns, name, snap := r.PathValue("ns"), r.PathValue("name"), r.PathValue("snap")
+	if err := s.kube.RestoreSnapshot(r.Context(), ns, name, snap); err != nil {
+		flash(w, err)
+		return
+	}
+	log.Printf("%s: restore %s/%s from %s", session(r).User, ns, name, snap)
+	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
+	ns, snap := r.PathValue("ns"), r.PathValue("snap")
+	if err := s.kube.DeleteSnapshot(r.Context(), ns, snap); err != nil {
+		flash(w, err)
+		return
+	}
+	log.Printf("%s: delete snapshot %s/%s", session(r).User, ns, snap)
 	w.Header().Set("HX-Refresh", "true")
 }
