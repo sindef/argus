@@ -30,9 +30,17 @@
 
 <h2>Disks</h2>
 <table>
-  <thead><tr><th>Name</th><th>Bus</th><th>Source</th></tr></thead>
-  <tbody>{{range .Disks}}<tr><td>{{.Name}}</td><td>{{.Bus}}</td><td>{{.Source}}</td></tr>{{end}}</tbody>
+  <thead><tr><th>Name</th><th>Bus</th><th>Source</th><th></th></tr></thead>
+  <tbody>{{range .Disks}}<tr><td>{{.Name}}</td><td>{{.Bus}}</td><td>{{.Source}}</td>
+    <td class="row-actions">{{if and $.CanOperate (not $.VM.Running) (ne .Name "root")}}<button class="link danger" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/disks/{{.Name}}/delete" hx-target="#flash" hx-confirm="Remove {{.Name}}?">Remove</button>{{end}}</td>
+  </tr>{{end}}</tbody>
 </table>
+{{if and $.CanOperate (not .Running)}}
+<form hx-post="/vms/{{.Namespace}}/{{.Name}}/disks" hx-target="#flash" class="inline spaced">
+  <input name="size" type="number" min="1" max="4096" value="10" required class="num"> GiB
+  <button type="submit">Add disk</button>
+</form>
+{{end}}
 
 <h2>Network</h2>
 <table>

@@ -154,3 +154,28 @@ func intField(r *http.Request, field string, min, max int, dst *int) error {
 	*dst = n
 	return nil
 }
+
+func (s *Server) addDisk(w http.ResponseWriter, r *http.Request) {
+	ns, name := r.PathValue("ns"), r.PathValue("name")
+	var size int
+	err := intField(r, "size", 1, 4096, &size)
+	if err == nil {
+		err = s.kube.AddDisk(r.Context(), ns, name, size)
+	}
+	if err != nil {
+		flash(w, err)
+		return
+	}
+	log.Printf("%s: add %dGi disk to %s/%s", session(r).User, size, ns, name)
+	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) removeDisk(w http.ResponseWriter, r *http.Request) {
+	ns, name, disk := r.PathValue("ns"), r.PathValue("name"), r.PathValue("disk")
+	if err := s.kube.RemoveDisk(r.Context(), ns, name, disk); err != nil {
+		flash(w, err)
+		return
+	}
+	log.Printf("%s: remove disk %s from %s/%s", session(r).User, disk, ns, name)
+	w.Header().Set("HX-Refresh", "true")
+}
