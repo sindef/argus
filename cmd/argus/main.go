@@ -22,11 +22,16 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	cert, err := tlscert.Load(ctx, kc.Secrets(ns))
-	cancel()
-	if err != nil {
-		log.Fatal(err)
+	var cert tls.Certificate
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		cert, err = tlscert.Load(ctx, kc.Secrets(ns))
+		cancel()
+		if err == nil {
+			break
+		}
+		log.Print(err)
+		time.Sleep(5 * time.Second)
 	}
 	srv, err := server.New(kc, auth.NewStore(kc.Secrets(ns)))
 	if err != nil {
