@@ -9,6 +9,9 @@ spec:
   workloadUpdateStrategy:
     workloadUpdateMethods: []
   configuration:
+    developerConfiguration:
+      featureGates:
+        - DecentralizedLiveMigration
     virtTemplateDeployment:
       enabled: false
     virtualMachineOptions:

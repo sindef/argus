@@ -46,20 +46,8 @@ func (c *Client) ExportVM(ctx context.Context, ns, name, baseURL, caPEM string) 
 	if err != nil {
 		return Export{}, err
 	}
-	owned := map[string]bool{}
-	templates, _, _ := unstructured.NestedSlice(vm.Object, "spec", "dataVolumeTemplates")
-	for _, t := range templates {
-		n, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
-		owned[n] = true
-	}
-	volumes, _, _ := unstructured.NestedSlice(vm.Object, "spec", "template", "spec", "volumes")
-	for _, v := range volumes {
-		if _, ok := v.(obj)["persistentVolumeClaim"]; ok {
-			return Export{}, fmt.Errorf("eject the CD-ROM from %s first", name)
-		}
-		if dv, ok := v.(obj)["dataVolume"].(obj); ok && !owned[dv["name"].(string)] {
-			return Export{}, fmt.Errorf("disk %v of %s cannot be migrated", dv["name"], name)
-		}
+	if err := migratable(vm); err != nil {
+		return Export{}, err
 	}
 	b := make([]byte, 24)
 	rand.Read(b)
@@ -90,11 +78,31 @@ func (c *Client) ExportVM(ctx context.Context, ns, name, baseURL, caPEM string) 
 	}
 	spec, _, _ := unstructured.NestedMap(vm.Object, "spec")
 	ex := Export{Spec: spec, Token: string(data["token"]), CA: caPEM}
+	templates, _, _ := unstructured.NestedSlice(spec, "dataVolumeTemplates")
 	for _, t := range templates {
 		dv, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
 		ex.Disks = append(ex.Disks, ExportDisk{DataVolume: dv, URL: fmt.Sprintf("%s/export/%s/%s/%s", baseURL, ns, exp, dv)})
 	}
 	return ex, nil
+}
+
+func migratable(vm *unstructured.Unstructured) error {
+	owned := map[string]bool{}
+	templates, _, _ := unstructured.NestedSlice(vm.Object, "spec", "dataVolumeTemplates")
+	for _, t := range templates {
+		n, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
+		owned[n] = true
+	}
+	volumes, _, _ := unstructured.NestedSlice(vm.Object, "spec", "template", "spec", "volumes")
+	for _, v := range volumes {
+		if _, ok := v.(obj)["persistentVolumeClaim"]; ok {
+			return fmt.Errorf("eject the CD-ROM from %s first", vm.GetName())
+		}
+		if dv, ok := v.(obj)["dataVolume"].(obj); ok && !owned[dv["name"].(string)] {
+			return fmt.Errorf("disk %v of %s cannot be migrated", dv["name"], vm.GetName())
+		}
+	}
+	return nil
 }
 
 func (c *Client) waitExportReady(ctx context.Context, ns, name string) error {

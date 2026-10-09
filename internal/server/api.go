@@ -187,3 +187,104 @@ func (s *Server) exportPassthrough(w http.ResponseWriter, r *http.Request) {
 	n, _ := io.Copy(w, resp.Body)
 	log.Printf("export %s/%s %s: %d bytes", r.PathValue("ns"), r.PathValue("export"), r.PathValue("volume"), n)
 }
+
+func (s *Server) apiKubeVirtCA(w http.ResponseWriter, r *http.Request) {
+	ca, err := s.kube.KubeVirtCA(r.Context())
+	if err != nil {
+		apiError(w, r, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, map[string]string{"ca": ca})
+}
+
+func (s *Server) apiExternalCA(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Bundle string `json:"bundle"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apiError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.kube.SetExternalCA(r.Context(), req.Bundle); err != nil {
+		apiError(w, r, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, map[string]string{})
+}
+
+func (s *Server) apiMigrationNetwork(w http.ResponseWriter, r *http.Request) {
+	var m kube.MigrationNetwork
+	if err := json.NewDecoder(r.Body).Decode(&m); err != nil || m.Subnet == "" || m.RangeStart == "" || m.RangeEnd == "" || m.VLAN < 0 || m.VLAN > 4094 {
+		apiError(w, r, http.StatusBadRequest, errors.New("invalid migration network"))
+		return
+	}
+	if err := s.kube.SetMigrationNetwork(r.Context(), m); err != nil {
+		apiError(w, r, http.StatusBadGateway, err)
+		return
+	}
+	log.Printf("%s: migration network vlan %d %s-%s", session(r).User, m.VLAN, m.RangeStart, m.RangeEnd)
+	writeJSON(w, map[string]string{})
+}
+
+func (s *Server) apiVMSpec(w http.ResponseWriter, r *http.Request) {
+	spec, err := s.kube.VMSpec(r.Context(), r.PathValue("ns"), r.PathValue("name"))
+	if err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, spec)
+}
+
+func (s *Server) apiReceive(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name        string         `json:"name"`
+		MigrationID string         `json:"migrationID"`
+		Spec        map[string]any `json:"spec"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || !validObject.MatchString(req.Name) || req.MigrationID == "" {
+		apiError(w, r, http.StatusBadRequest, errors.New("invalid receive request"))
+		return
+	}
+	addr, err := s.kube.Receive(r.Context(), kube.Namespace, req.Name, req.MigrationID, req.Spec)
+	if err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	log.Printf("%s: receiving %s at %s", session(r).User, req.Name, addr)
+	writeJSON(w, map[string]string{"syncAddress": addr})
+}
+
+func (s *Server) apiSend(w http.ResponseWriter, r *http.Request) {
+	ns, name := r.PathValue("ns"), r.PathValue("name")
+	var req struct {
+		MigrationID string `json:"migrationID"`
+		ConnectURL  string `json:"connectURL"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.MigrationID == "" || req.ConnectURL == "" {
+		apiError(w, r, http.StatusBadRequest, errors.New("invalid send request"))
+		return
+	}
+	if err := s.kube.Send(r.Context(), ns, name, req.MigrationID, req.ConnectURL); err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	log.Printf("%s: sending %s/%s to %s", session(r).User, ns, name, req.ConnectURL)
+	writeJSON(w, map[string]string{})
+}
+
+func (s *Server) apiMigrationPhase(w http.ResponseWriter, r *http.Request) {
+	phase, err := s.kube.MigrationPhase(r.Context(), r.PathValue("ns"), r.PathValue("name"))
+	if err != nil {
+		apiError(w, r, http.StatusNotFound, err)
+		return
+	}
+	writeJSON(w, map[string]string{"phase": phase})
+}
+
+func (s *Server) apiMigrationCleanup(w http.ResponseWriter, r *http.Request) {
+	if err := s.kube.CleanupMigration(r.Context(), r.PathValue("ns"), r.PathValue("name")); err != nil {
+		apiError(w, r, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, map[string]string{})
+}
