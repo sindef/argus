@@ -12,3 +12,12 @@ spec:
   valuesContent: |-
     analytics:
       enabled: false
+    zfsController:
+      resizer:
+        extraArgs: ["--v=2"]
+      snapshotter:
+        extraArgs: ["--v=2"]
+      snapshotController:
+        extraArgs: ["--v=2"]
+      provisioner:
+        extraArgs: ["--v=2"]

@@ -8,6 +8,11 @@ spec:
     replicas: 1
   workloadUpdateStrategy:
     workloadUpdateMethods: []
+  configuration:
+    virtTemplateDeployment:
+      enabled: false
+    virtualMachineOptions:
+      disableSerialConsoleLog: {}
   customizeComponents:
     patches:
       - resourceType: Deployment
