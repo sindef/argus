@@ -11,8 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"argus/internal/kube"
-
 	"golang.org/x/crypto/bcrypt"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
@@ -56,8 +54,14 @@ var (
 	ErrPassword  = errors.New("current password is incorrect")
 )
 
+type Secrets interface {
+	Get(ctx context.Context, name string) (map[string][]byte, string, error)
+	Create(ctx context.Context, name, typ string, data map[string][]byte) error
+	Update(ctx context.Context, name, resourceVersion string, data map[string][]byte) error
+}
+
 type Store struct {
-	secrets kube.Secrets
+	secrets Secrets
 
 	mu       sync.Mutex
 	sessions map[string]Session
@@ -70,7 +74,7 @@ type Session struct {
 	Expires    time.Time
 }
 
-func NewStore(secrets kube.Secrets) *Store {
+func NewStore(secrets Secrets) *Store {
 	return &Store{secrets: secrets, sessions: map[string]Session{}}
 }
 
@@ -314,4 +318,40 @@ func (s *Store) dropSessions(name string) {
 			delete(s.sessions, k)
 		}
 	}
+}
+
+func (s *Store) EnsureAdmin(ctx context.Context, seed string) (string, error) {
+	users, err := s.Users(ctx)
+	if err != nil {
+		return "", err
+	}
+	pw := seed
+	if pw == "" {
+		pw = RandomPassword()
+	}
+	switch {
+	case len(users) == 0:
+		if _, err := s.Bootstrap(ctx, pw); err != nil {
+			return "", err
+		}
+	case seed == "" && pendingAdmin(users):
+		if err := s.ResetPassword(ctx, "admin", pw); err != nil {
+			return "", err
+		}
+	default:
+		return "", nil
+	}
+	if seed != "" {
+		return "", nil
+	}
+	return pw, nil
+}
+
+func pendingAdmin(users []User) bool {
+	for _, u := range users {
+		if u.Name == "admin" && u.MustChange {
+			return true
+		}
+	}
+	return false
 }

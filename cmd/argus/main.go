@@ -34,7 +34,11 @@ func main() {
 		return err
 	})
 	retry(func(ctx context.Context) error {
-		return initialAdmin(ctx, store, os.Getenv("ARGUS_ADMIN_PASSWORD_FILE"), banner)
+		pw, err := store.EnsureAdmin(ctx, readSeed(os.Getenv("ARGUS_ADMIN_PASSWORD_FILE")))
+		if err == nil {
+			banner(pw)
+		}
+		return err
 	})
 
 	srv, err := server.New(kc, store, server.Options{Banner: banner, RunDir: runDir, ReleaseFile: os.Getenv("ARGUS_RELEASE_FILE")})
@@ -49,51 +53,6 @@ func main() {
 	}
 	log.Printf("listening on %s", addr)
 	log.Fatal(hs.ListenAndServeTLS("", ""))
-}
-
-func initialAdmin(ctx context.Context, store *auth.Store, seedFile string, banner func(string)) error {
-	seed := ""
-	if seedFile != "" {
-		if b, err := os.ReadFile(seedFile); err == nil {
-			seed = strings.TrimSpace(string(b))
-		}
-	}
-	users, err := store.Users(ctx)
-	if err != nil {
-		return err
-	}
-	pw := seed
-	if pw == "" {
-		pw = auth.RandomPassword()
-	}
-	switch {
-	case len(users) == 0:
-		if _, err := store.Bootstrap(ctx, pw); err != nil {
-			return err
-		}
-	case seed == "" && pendingAdmin(users):
-		if err := store.ResetPassword(ctx, "admin", pw); err != nil {
-			return err
-		}
-	default:
-		banner("")
-		return nil
-	}
-	if seed != "" {
-		banner("")
-		return nil
-	}
-	banner(pw)
-	return nil
-}
-
-func pendingAdmin(users []auth.User) bool {
-	for _, u := range users {
-		if u.Name == "admin" && u.MustChange {
-			return true
-		}
-	}
-	return false
 }
 
 func consoleBanner(dir string) func(string) {
@@ -112,6 +71,14 @@ func consoleBanner(dir string) func(string) {
 			log.Printf("banner: %v", err)
 		}
 	}
+}
+
+func readSeed(path string) string {
+	if path == "" {
+		return ""
+	}
+	b, _ := os.ReadFile(path)
+	return strings.TrimSpace(string(b))
 }
 
 func retry(fn func(context.Context) error) {
