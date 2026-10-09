@@ -8,3 +8,21 @@ spec:
     replicas: 1
   workloadUpdateStrategy:
     workloadUpdateMethods: []
+  customizeComponents:
+    patches:
+      - resourceType: Deployment
+        resourceName: virt-api
+        type: strategic
+        patch: '{"spec":{"template":{"spec":{"containers":[{"name":"virt-api","resources":{"requests":{"memory":"180Mi"}}}]}}}}'
+      - resourceType: Deployment
+        resourceName: virt-controller
+        type: strategic
+        patch: '{"spec":{"template":{"spec":{"containers":[{"name":"virt-controller","resources":{"requests":{"memory":"100Mi"}}}]}}}}'
+      - resourceType: Deployment
+        resourceName: virt-exportproxy
+        type: strategic
+        patch: '{"spec":{"template":{"spec":{"containers":[{"name":"exportproxy","resources":{"requests":{"memory":"40Mi"}}}]}}}}'
+      - resourceType: DaemonSet
+        resourceName: virt-handler
+        type: strategic
+        patch: '{"spec":{"template":{"spec":{"containers":[{"name":"virt-handler","resources":{"requests":{"memory":"100Mi"}}}]}}}}'

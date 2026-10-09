@@ -37,6 +37,11 @@ RUN apt-get update \
 ADD https://github.com/kubevirt/kubevirt/releases/download/${KUBEVIRT_VERSION}/kubevirt-operator.yaml /usr/share/argus/manifests/10-kubevirt-operator.yaml
 ADD https://github.com/kubevirt/containerized-data-importer/releases/download/${CDI_VERSION}/cdi-operator.yaml /usr/share/argus/manifests/10-cdi-operator.yaml
 ADD https://raw.githubusercontent.com/k8snetworkplumbingwg/network-attachment-definition-client/${NAD_VERSION}/artifacts/networks-crd.yaml /usr/share/argus/manifests/10-nad-crd.yaml
+RUN cd /usr/share/argus/manifests \
+    && sed -i 's/^  replicas: 2$/  replicas: 1/; s/^            memory: 450Mi$/            memory: 256Mi/' 10-kubevirt-operator.yaml \
+    && sed -i 's/^            memory: 150Mi$/            memory: 80Mi/' 10-cdi-operator.yaml \
+    && grep -q '^            memory: 256Mi$' 10-kubevirt-operator.yaml \
+    && grep -q '^            memory: 80Mi$' 10-cdi-operator.yaml
 COPY rootfs/ /
 
 RUN --mount=type=bind,from=kairos-init,src=/kairos-init,dst=/kairos-init \
