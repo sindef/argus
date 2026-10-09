@@ -2,7 +2,9 @@ package kube
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
+	"net"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -70,7 +72,7 @@ func (c *Client) CreateVM(ctx context.Context, s VMSpec) error {
 						"devices": obj{
 							"autoattachPodInterface": false,
 							"disks":                  disks,
-							"interfaces":             []interface{}{obj{"name": "nic0", "model": "virtio", "bridge": obj{}}},
+							"interfaces":             []interface{}{obj{"name": "nic0", "model": "virtio", "bridge": obj{}, "macAddress": randomMAC()}},
 						},
 					},
 					"networks": []interface{}{obj{"name": "nic0", "multus": obj{"networkName": s.Network}}},
@@ -81,6 +83,13 @@ func (c *Client) CreateVM(ctx context.Context, s VMSpec) error {
 	}}
 	_, err := c.dyn.Resource(vmGVR).Namespace(Namespace).Create(ctx, vm, metav1.CreateOptions{})
 	return err
+}
+
+func randomMAC() string {
+	b := make([]byte, 6)
+	rand.Read(b)
+	b[0] = b[0]&0xfc | 0x02
+	return net.HardwareAddr(b).String()
 }
 
 func (c *Client) DeleteVM(ctx context.Context, ns, name string) error {
