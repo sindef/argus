@@ -32,10 +32,19 @@ stages:
             [NetDev]
             Name=br0
             Kind=bridge
+            MACAddress=none
 
             [Bridge]
             VLANFiltering=yes
             DefaultPVID=1
+        - path: /etc/systemd/network/05-br0.link
+          permissions: 0644
+          content: |
+            [Match]
+            OriginalName=br0
+
+            [Link]
+            MACAddressPolicy=none
         - path: /etc/systemd/network/05-uplink.network
           permissions: 0644
           content: |
@@ -55,3 +64,6 @@ stages:
 
             [Network]
             DHCP=yes
+
+            [DHCPv4]
+            ClientIdentifier=mac
