@@ -18,6 +18,7 @@ type volumeReq struct {
 	Size int    `json:"size"`
 	URL  string `json:"url"`
 	VM   string `json:"vm"`
+	Pool string `json:"pool"`
 }
 
 type storageInfo struct {
@@ -46,7 +47,11 @@ func (s *Server) volumeOp(ctx context.Context, op string, q volumeReq) error {
 		if u, err := url.Parse(q.URL); q.URL != "" && (err != nil || (u.Scheme != "http" && u.Scheme != "https")) {
 			return errors.New("URL must be http or https")
 		}
-		return s.kube.CreateVolume(ctx, q.Name, q.Size, q.URL)
+		class, err := s.poolClass(ctx, q.Pool)
+		if err != nil {
+			return err
+		}
+		return s.kube.CreateVolume(ctx, q.Name, q.Size, q.URL, class)
 	case "delete":
 		return s.kube.DeleteVolume(ctx, q.Name)
 	case "snapshot":
@@ -62,7 +67,7 @@ func (s *Server) volumeOp(ctx context.Context, op string, q volumeReq) error {
 func formVolume(r *http.Request) volumeReq {
 	var size int
 	intField(r, "size", 1, 4096, &size)
-	return volumeReq{Name: r.FormValue("name"), Size: size, URL: r.FormValue("url"), VM: r.FormValue("vm")}
+	return volumeReq{Name: r.FormValue("name"), Size: size, URL: r.FormValue("url"), VM: r.FormValue("vm"), Pool: r.FormValue("pool")}
 }
 
 type hostVolume struct {
@@ -87,7 +92,7 @@ func (s *Server) volumesPage(w http.ResponseWriter, r *http.Request) {
 	for i, v := range st.Volumes {
 		rows[i] = hostVolume{Volume: v}
 	}
-	s.render(w, r, "volumes.html", "layout", map[string]any{"Nav": "volumes", "Pools": st.Pools, "Volumes": rows, "Attachable": map[string][]string{"": stoppedVMs(vms)}, "CanOperate": session(r).Role.Can(auth.Operator), "Error": errText(err)})
+	s.render(w, r, "volumes.html", "layout", map[string]any{"Nav": "volumes", "Pools": st.Pools, "Volumes": rows, "Attachable": map[string][]string{"": stoppedVMs(vms)}, "PoolChoices": s.poolChoices(r.Context()), "CanOperate": session(r).Role.Can(auth.Operator), "Error": errText(err)})
 }
 
 func (s *Server) volumeAction(w http.ResponseWriter, r *http.Request) {

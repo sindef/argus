@@ -335,8 +335,15 @@ func (c *Manager) preflight(ctx context.Context, src, dst Node, ns, vm string) e
 		return err
 	}
 	var free int64
+	classes := map[string]bool{"": true}
 	for _, p := range st.Pools {
 		free += p.Free
+		classes[p.StorageClass] = true
+	}
+	for _, d := range source.Disks {
+		if !classes[d.StorageClass] {
+			return fmt.Errorf("disk %s uses storage pool %s, which %s does not have", d.Name, d.StorageClass, dst.Name)
+		}
 	}
 	if free < source.StorageBytes {
 		return fmt.Errorf("%s has %d GiB free, %s needs %d GiB", dst.Name, free>>30, vm, source.StorageBytes>>30)

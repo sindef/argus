@@ -248,7 +248,7 @@ func (s *Server) newVM(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("HX-Request") != "" {
 		tmpl = "modal"
 	}
-	s.render(w, r, "vmnew.html", tmpl, map[string]any{"Images": imgs, "Networks": nets, "Error": errText(err)})
+	s.render(w, r, "vmnew.html", tmpl, map[string]any{"Images": imgs, "Networks": nets, "Pools": s.poolChoices(r.Context()), "Error": errText(err)})
 }
 
 func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {
@@ -272,6 +272,9 @@ func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {
 	}
 	if err == nil && spec.Network == "" {
 		err = errors.New("network required")
+	}
+	if err == nil {
+		spec.StorageClass, err = s.poolClass(r.Context(), r.FormValue("pool"))
 	}
 	if err == nil {
 		err = s.kube.CreateVM(r.Context(), spec)
@@ -310,7 +313,10 @@ func (s *Server) addDisk(w http.ResponseWriter, r *http.Request) {
 	if vol := r.FormValue("volume"); r.FormValue("source") == "volume" {
 		err = s.kube.AttachVolume(r.Context(), ns, name, vol)
 	} else if err = intField(r, "size", 1, 4096, &size); err == nil {
-		err = s.kube.AddDisk(r.Context(), ns, name, size)
+		var class string
+		if class, err = s.poolClass(r.Context(), r.FormValue("pool")); err == nil {
+			err = s.kube.AddDisk(r.Context(), ns, name, size, class)
+		}
 	}
 	if err != nil {
 		flash(w, r, err)
@@ -333,7 +339,7 @@ func (s *Server) newDisk(w http.ResponseWriter, r *http.Request) {
 			free = append(free, v)
 		}
 	}
-	s.render(w, r, "vms.html", "disk-modal", map[string]any{"VM": vm, "Volumes": free})
+	s.render(w, r, "vms.html", "disk-modal", map[string]any{"VM": vm, "Volumes": free, "Pools": s.poolChoices(r.Context())})
 }
 
 func (s *Server) removeDisk(w http.ResponseWriter, r *http.Request) {

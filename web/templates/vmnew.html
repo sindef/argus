@@ -9,6 +9,9 @@
     <label>vCPUs <input name="cores" type="number" min="1" max="64" value="2" required></label>
     <label>Memory (MiB) <input name="memory" type="number" min="128" max="262144" step="128" value="2048" required></label>
     <label>Disk (GiB) <input name="disk" type="number" min="1" max="4096" value="20" required></label>
+    <label>Storage pool
+      <select name="pool">{{range .Pools}}<option value="{{.Name}}">{{.Name}} ({{bytes .Free}} free)</option>{{end}}</select>
+    </label>
   </div>
   <div class="row">
     <label>Disk source

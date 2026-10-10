@@ -13,15 +13,24 @@ import (
 )
 
 type VMSpec struct {
-	Name      string
-	Cores     int
-	MemoryMiB int
-	DiskGiB   int
-	Image     string
-	CDROM     string
-	Network   string
-	UserData  string
-	Start     bool
+	Name         string
+	Cores        int
+	MemoryMiB    int
+	DiskGiB      int
+	Image        string
+	CDROM        string
+	Network      string
+	UserData     string
+	Start        bool
+	StorageClass string
+}
+
+func storageSpec(sizeGiB int, class string) obj {
+	st := obj{"resources": obj{"requests": obj{"storage": fmt.Sprintf("%dGi", sizeGiB)}}}
+	if class != "" {
+		st["storageClassName"] = class
+	}
+	return st
 }
 
 type obj = map[string]interface{}
@@ -63,7 +72,7 @@ func (c *Client) CreateVM(ctx context.Context, s VMSpec) error {
 				"metadata": obj{"name": root},
 				"spec": obj{
 					"source":  source,
-					"storage": obj{"resources": obj{"requests": obj{"storage": fmt.Sprintf("%dGi", s.DiskGiB)}}},
+					"storage": storageSpec(s.DiskGiB, s.StorageClass),
 				},
 			}},
 			"template": obj{
@@ -100,7 +109,7 @@ func (c *Client) DeleteVM(ctx context.Context, ns, name string) error {
 	return c.dyn.Resource(vmGVR).Namespace(ns).Delete(ctx, name, metav1.DeleteOptions{PropagationPolicy: &fg})
 }
 
-func (c *Client) AddDisk(ctx context.Context, ns, name string, sizeGiB int) error {
+func (c *Client) AddDisk(ctx context.Context, ns, name string, sizeGiB int, class string) error {
 	return c.editStoppedVM(ctx, ns, name, func(o obj) error {
 		disks, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "domain", "devices", "disks")
 		used := map[string]bool{}
@@ -118,7 +127,7 @@ func (c *Client) AddDisk(ctx context.Context, ns, name string, sizeGiB int) erro
 			"metadata": obj{"name": dv},
 			"spec": obj{
 				"source":  obj{"blank": obj{}},
-				"storage": obj{"resources": obj{"requests": obj{"storage": fmt.Sprintf("%dGi", sizeGiB)}}},
+				"storage": storageSpec(sizeGiB, class),
 			},
 		})
 		volumes, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")

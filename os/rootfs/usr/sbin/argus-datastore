@@ -26,3 +26,10 @@ reserve="${ARGUS_RANCHER_RESERVE:-4G}"
 [ "$(zfs get -H -o value reservation "$pool/rancher")" = "$reserve" ] ||
     zfs set reservation="$reserve" "$pool/rancher" ||
     echo "argus-datastore: could not reserve $reserve for $pool/rancher" >&2
+
+if [ -f /usr/local/argus/pools ]; then
+    for p in $(cat /usr/local/argus/pools); do
+        zpool list -H "$p" >/dev/null 2>&1 || zpool import -N "$p" ||
+            echo "argus-datastore: could not import pool $p" >&2
+    done
+fi

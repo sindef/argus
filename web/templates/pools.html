@@ -1,0 +1,94 @@
+{{define "content"}}
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-database"/></svg>
+  <div><h1>Pools</h1><div class="crumbs">Storage / Pools</div></div>
+  <div class="actions"><button class="btn primary" hx-get="/pools/new" hx-target="#modal">{{template "icon" "plus"}}Create pool</button></div>
+</div>
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>Media</th><th>Health</th><th>Size</th><th>Used</th><th>Free</th><th>Provisioned</th><th>Volumes</th><th></th></tr></thead>
+  <tbody>{{range .Pools}}{{$u := pct .Alloc .Size}}<tr data-context>
+    <td>{{template "icon" "database"}}{{.Name}}{{if .System}} <span class="badge" title="Holds Argus itself; can be expanded but not removed">system</span>{{end}}
+      <details class="pool-status"><summary class="muted">Layout</summary><pre class="log">{{.Status}}</pre></details></td>
+    <td>{{with .Media}}<span class="badge">{{.}}</span>{{end}}</td>
+    <td><span class="dot {{if eq .Health "ONLINE"}}Healthy{{else if eq .Health "DEGRADED"}}Warning{{else}}Failed{{end}}">{{.Health}}</span></td>
+    <td>{{bytes .Size}}</td>
+    <td class="meter">{{bytes .Alloc}} ({{$u}}%)<div class="bar {{if ge $u 90}}bad{{else if ge $u 80}}warn{{end}}"><span style="width:{{min100 $u}}%"></span></div></td>
+    <td>{{bytes .Free}}</td>
+    <td title="Thin provisioned">{{bytes .Provisioned}}</td>
+    <td>{{.Volumes}}</td>
+    <td class="row-actions">
+      <div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
+        <div class="menu-list" hidden hx-target="#flash">
+          <button hx-get="/pools/{{.Name}}/add" hx-target="#modal">{{template "icon" "plus"}}Add devices</button>
+          {{if not .System}}<hr>
+          <button hx-post="/pools/{{.Name}}/export" hx-confirm="Export {{.Name}}? Its disks keep their data and can be imported again.">{{template "icon" "upload"}}Export</button>
+          <button class="danger" hx-post="/pools/{{.Name}}/destroy" hx-prompt="Type {{.Name}} to destroy the pool and erase its disks">{{template "icon" "trash-2"}}Destroy</button>{{end}}
+        </div>
+      </div>
+    </td>
+  </tr>{{else}}<tr><td colspan="9" class="muted">No pools.</td></tr>{{end}}</tbody>
+</table>
+</div>
+{{with .Importable}}
+<div class="card spaced">
+  <div class="card-head">{{template "icon" "download"}}<h2>Pools found on disks</h2></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Name</th><th>State</th><th>ID</th><th></th></tr></thead>
+    <tbody>{{range .}}<tr><td>{{.Name}}</td><td>{{.State}}</td><td class="mono">{{.ID}}</td>
+      <td class="row-actions"><button class="link" hx-post="/pools/{{.Name}}/import" hx-target="#flash" hx-confirm="Import pool {{.Name}}?">Import</button></td></tr>{{end}}</tbody>
+  </table></div>
+</div>
+{{end}}
+{{end}}
+
+{{define "disk-picks"}}
+<div class="table-wrap picks"><table>
+  <tbody>{{range .Disks}}<tr>
+    <td><label class="check"><input type="checkbox" name="{{$.Field}}" value="{{.Name}}"> {{.Name}}</label></td>
+    <td>{{bytes .Size}}</td><td><span class="badge">{{.Media}}</span></td><td class="clip">{{.Model}}</td>
+    <td>{{if .Blank}}<span class="muted">Empty</span>{{else}}<span class="dot Warning">{{range $i, $s := .Signatures}}{{if $i}}, {{end}}{{$s}}{{end}}</span>{{end}}</td>
+  </tr>{{else}}<tr><td class="muted">No free disks.</td></tr>{{end}}</tbody>
+</table></div>
+{{end}}
+
+{{define "pool-modal"}}
+<form hx-post="{{if .Pool}}/pools/{{.Pool}}/add{{else}}/pools{{end}}" hx-target="#pool-form-error" class="form pool-form">
+  <h2>{{if .Pool}}Add devices to {{.Pool}}{{else}}Create pool{{end}}</h2>
+  <p id="pool-form-error" class="error form-error">{{.Error}}</p>
+  {{if not .Pool}}<label>Name <span class="help" title="The name is the tier you pick when creating disks, e.g. fast-ssd or bulk-hdd.">?</span><input name="name" pattern="[a-z][a-z0-9-]{0,30}" required placeholder="fast-ssd"></label>{{end}}
+  <div class="row">
+    <label>Data layout
+      <select name="data_type">
+        <option value="mirror">Mirror</option>
+        <option value="raidz1">RAID-Z1 (1 parity)</option>
+        <option value="raidz2">RAID-Z2 (2 parity)</option>
+        <option value="raidz3">RAID-Z3 (3 parity)</option>
+        <option value="stripe">Stripe (no redundancy)</option>
+      </select>
+    </label>
+    <label>Disks per group <span class="help" title="Leave empty for one group with all selected disks. 2 with four disks gives two mirrors.">?</span><input name="data_width" type="number" min="1" max="32"></label>
+  </div>
+  <div class="field">Data disks</div>
+  {{template "disk-picks" (picks .Disks "data_disks")}}
+  <details>
+    <summary>Log, cache, special and spare devices</summary>
+    <div class="row spaced">
+      <label>Log (SLOG) <select name="log_type"><option value="mirror">Mirror</option><option value="stripe">Stripe</option></select></label>
+      <label>Special (metadata) <span class="help" title="Losing the special vdev loses the pool; mirror it.">?</span><select name="special_type"><option value="mirror">Mirror</option><option value="stripe">Stripe</option></select></label>
+    </div>
+    <div class="field spaced">Log disks</div>{{template "disk-picks" (picks .Disks "log_disks")}}
+    <div class="field spaced">Special disks</div>{{template "disk-picks" (picks .Disks "special_disks")}}
+    <div class="field spaced">Cache (L2ARC) disks</div>{{template "disk-picks" (picks .Disks "cache_disks")}}
+    <div class="field spaced">Spare disks</div>{{template "disk-picks" (picks .Disks "spare_disks")}}
+  </details>
+  {{range .Disks}}{{if not .Blank}}
+  <label class="wipe wipe-{{.Name}}">Erase {{.Name}} ({{range $i, $s := .Signatures}}{{if $i}}, {{end}}{{$s}}{{end}}) — type <b>{{.Name}}</b> to confirm
+    <input name="wipe-{{.Name}}" autocomplete="off">
+  </label>
+  <style>.pool-form:has(input[value="{{.Name}}"]:checked) .wipe-{{.Name}} { display: block; }</style>
+  {{end}}{{end}}
+  <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">{{template "icon" "plus"}}{{if .Pool}}Add devices{{else}}Create pool{{end}}</button></div>
+</form>
+{{end}}

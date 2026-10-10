@@ -3,6 +3,7 @@ package kube
 import (
 	"context"
 	"fmt"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sort"
 	"time"
 
@@ -14,19 +15,24 @@ import (
 
 const volumeLabel = "argus.io/volume"
 
+const zfsProvisioner = "zfs.csi.openebs.io"
+
 var (
+	scGVR        = schema.GroupVersionResource{Group: "storage.k8s.io", Version: "v1", Resource: "storageclasses"}
+	profileGVR   = schema.GroupVersionResource{Group: "cdi.kubevirt.io", Version: "v1beta1", Resource: "storageprofiles"}
 	zfsNodeGVR   = schema.GroupVersionResource{Group: "zfs.openebs.io", Version: "v1", Resource: "zfsnodes"}
 	zfsVolumeGVR = schema.GroupVersionResource{Group: "zfs.openebs.io", Version: "v1", Resource: "zfsvolumes"}
 	volSnapGVR   = schema.GroupVersionResource{Group: "snapshot.storage.k8s.io", Version: "v1", Resource: "volumesnapshots"}
 )
 
 type Pool struct {
-	Name        string
-	Free        int64
-	Used        int64
-	Provisioned int64
-	Volumes     int
-	Snapshots   int
+	Name         string
+	StorageClass string
+	Free         int64
+	Used         int64
+	Provisioned  int64
+	Volumes      int
+	Snapshots    int
 }
 
 type Volume struct {
@@ -64,12 +70,13 @@ func (c *Client) Pools(ctx context.Context) ([]Pool, error) {
 	if err != nil {
 		return nil, err
 	}
+	classes, _ := c.PoolClasses(ctx)
 	var out []Pool
 	for _, n := range nodes.Items {
 		pools, _, _ := unstructured.NestedSlice(n.Object, "pools")
 		for _, p := range pools {
 			m := p.(obj)
-			pool := Pool{Name: fmt.Sprint(m["name"]), Free: quantity(fmt.Sprint(m["free"])), Used: quantity(fmt.Sprint(m["used"])), Snapshots: len(snaps.Items)}
+			pool := Pool{Name: fmt.Sprint(m["name"]), StorageClass: classes[fmt.Sprint(m["name"])], Free: quantity(fmt.Sprint(m["free"])), Used: quantity(fmt.Sprint(m["used"])), Snapshots: len(snaps.Items)}
 			for _, v := range vols.Items {
 				if name, _, _ := unstructured.NestedString(v.Object, "spec", "poolName"); name == pool.Name {
 					capacity, _, _ := unstructured.NestedString(v.Object, "spec", "capacity")
@@ -128,7 +135,7 @@ func (c *Client) Volumes(ctx context.Context) ([]Volume, error) {
 	return out, nil
 }
 
-func (c *Client) CreateVolume(ctx context.Context, name string, sizeGiB int, url string) error {
+func (c *Client) CreateVolume(ctx context.Context, name string, sizeGiB int, url, class string) error {
 	source := obj{"blank": obj{}}
 	if url != "" {
 		source = obj{"http": obj{"url": url}}
@@ -139,7 +146,7 @@ func (c *Client) CreateVolume(ctx context.Context, name string, sizeGiB int, url
 		"metadata":   obj{"name": name, "labels": obj{volumeLabel: "true"}},
 		"spec": obj{
 			"source":  source,
-			"storage": obj{"resources": obj{"requests": obj{"storage": fmt.Sprintf("%dGi", sizeGiB)}}},
+			"storage": storageSpec(sizeGiB, class),
 		},
 	}}
 	_, err := c.dyn.Resource(dvGVR).Namespace(Namespace).Create(ctx, dv, metav1.CreateOptions{})
@@ -228,4 +235,77 @@ func (c *Client) DeleteVolumeSnapshot(ctx context.Context, name string) error {
 		return fmt.Errorf("%s is not a volume snapshot", name)
 	}
 	return c.dyn.Resource(volSnapGVR).Namespace(Namespace).Delete(ctx, name, metav1.DeleteOptions{})
+}
+
+func (c *Client) PoolClasses(ctx context.Context) (map[string]string, error) {
+	list, err := c.dyn.Resource(scGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	for _, sc := range list.Items {
+		if prov, _, _ := unstructured.NestedString(sc.Object, "provisioner"); prov != zfsProvisioner {
+			continue
+		}
+		if pool, _, _ := unstructured.NestedString(sc.Object, "parameters", "poolname"); pool != "" {
+			if _, ok := out[pool]; !ok || sc.GetName() == "zfs" {
+				out[pool] = sc.GetName()
+			}
+		}
+	}
+	return out, nil
+}
+
+func (c *Client) EnsurePoolClass(ctx context.Context, pool string) error {
+	classes, err := c.PoolClasses(ctx)
+	if err != nil {
+		return err
+	}
+	if _, ok := classes[pool]; !ok {
+		sc := &unstructured.Unstructured{Object: obj{
+			"apiVersion":           "storage.k8s.io/v1",
+			"kind":                 "StorageClass",
+			"metadata":             obj{"name": pool},
+			"provisioner":          zfsProvisioner,
+			"allowVolumeExpansion": true,
+			"volumeBindingMode":    "Immediate",
+			"parameters":           obj{"poolname": pool, "fstype": "ext4", "compression": "lz4", "thinprovision": "yes"},
+		}}
+		if _, err := c.dyn.Resource(scGVR).Create(ctx, sc, metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
+			return err
+		}
+	}
+	name := pool
+	if cls, ok := classes[pool]; ok {
+		name = cls
+	}
+	spec := obj{"cloneStrategy": "csi-clone", "claimPropertySets": []interface{}{obj{"accessModes": []interface{}{"ReadWriteOnce"}, "volumeMode": "Block"}}}
+	res := c.dyn.Resource(profileGVR)
+	prof, err := res.Get(ctx, name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		_, err = res.Create(ctx, &unstructured.Unstructured{Object: obj{"apiVersion": "cdi.kubevirt.io/v1beta1", "kind": "StorageProfile", "metadata": obj{"name": name}, "spec": spec}}, metav1.CreateOptions{})
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	unstructured.SetNestedField(prof.Object, spec, "spec")
+	_, err = res.Update(ctx, prof, metav1.UpdateOptions{})
+	return err
+}
+
+func (c *Client) DeletePoolClass(ctx context.Context, pool string) error {
+	classes, err := c.PoolClasses(ctx)
+	if err != nil {
+		return err
+	}
+	name, ok := classes[pool]
+	if !ok || name == "zfs" {
+		return nil
+	}
+	err = c.dyn.Resource(scGVR).Delete(ctx, name, metav1.DeleteOptions{})
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	return err
 }

@@ -256,3 +256,9 @@ h1 .dot { font-size: 14px; font-weight: 400; }
 .seg input[type=radio] { position: absolute; opacity: 0; pointer-events: none; }
 .form .seg { align-self: flex-start; }
 .disk-form:has(input[value=new]:checked) .volume-only, .disk-form:has(input[value=volume]:checked) .new-only { display: none; }
+.pool-form .wipe { display: none; color: var(--warn); }
+.pool-form .wipe input { display: block; width: 100%; margin-top: 6px; }
+.picks { max-height: 220px; overflow-y: auto; }
+.picks td { padding: 6px 10px; }
+.pool-status summary { font-size: 12px; cursor: pointer; }
+.pool-status pre { margin-top: 6px; font-size: 12px; white-space: pre; }

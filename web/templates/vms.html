@@ -142,7 +142,12 @@
     <label><input type="radio" name="source" value="new" checked> New disk</label>
     <label><input type="radio" name="source" value="volume"{{if not .Volumes}} disabled{{end}}> Existing volume</label>
   </div>
-  <label class="new-only">Size (GiB) <input name="size" type="number" min="1" max="4096" value="10"></label>
+  <div class="row new-only">
+    <label>Size (GiB) <input name="size" type="number" min="1" max="4096" value="10"></label>
+    <label>Storage pool
+      <select name="pool">{{range .Pools}}<option value="{{.Name}}">{{.Name}} ({{bytes .Free}} free)</option>{{end}}</select>
+    </label>
+  </div>
   <label class="volume-only">Volume
     <select name="volume">{{range .Volumes}}<option value="{{.Name}}">{{.Name}} ({{bytes .Size}})</option>{{end}}</select>
   </label>

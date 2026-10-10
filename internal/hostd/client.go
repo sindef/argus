@@ -64,3 +64,24 @@ func (c *Client) Disks(ctx context.Context) ([]Disk, error) {
 	var ds []Disk
 	return ds, c.do(ctx, http.MethodGet, "/disks", nil, &ds)
 }
+
+func (c *Client) Pools(ctx context.Context) (Pools, error) {
+	var ps Pools
+	return ps, c.do(ctx, http.MethodGet, "/pools", nil, &ps)
+}
+
+func (c *Client) CreatePool(ctx context.Context, spec PoolSpec) error {
+	return c.do(ctx, http.MethodPost, "/pools", spec, nil)
+}
+
+func (c *Client) AddToPool(ctx context.Context, name string, spec PoolSpec) error {
+	return c.do(ctx, http.MethodPost, "/pools/"+name+"/add", spec, nil)
+}
+
+func (c *Client) ImportPool(ctx context.Context, name string) error {
+	return c.do(ctx, http.MethodPost, "/pools/"+name+"/import", nil, nil)
+}
+
+func (c *Client) ReleasePool(ctx context.Context, name, action, confirm string) error {
+	return c.do(ctx, http.MethodPost, "/pools/"+name+"/"+action, map[string]string{"confirm": confirm}, nil)
+}

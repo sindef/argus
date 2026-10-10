@@ -53,6 +53,9 @@
       <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
       <label>Size (GiB) <input name="size" type="number" min="1" max="4096" value="10" required></label>
     </div>
+    {{with .PoolChoices}}<label>Storage pool
+      <select name="pool">{{range .}}<option value="{{.Name}}">{{.Name}} ({{bytes .Free}} free)</option>{{end}}</select>
+    </label>{{end}}
     <label>Import from URL <span class="help" title="Optional. Leave empty for a blank volume. qcow2, raw and compressed images are converted.">?</span><input name="url" type="url" placeholder="https://…"></label>
     <div class="inline"><button class="btn primary" type="submit">Create</button><button class="btn" type="button" data-close-dialog>Cancel</button></div>
   </form>

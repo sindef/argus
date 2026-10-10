@@ -79,9 +79,10 @@ func (v VM) IPs() []string {
 }
 
 type Disk struct {
-	Name   string
-	Bus    string
-	Source string
+	Name         string
+	Bus          string
+	Source       string
+	StorageClass string
 }
 
 type NIC struct {
@@ -320,7 +321,13 @@ func toVM(v, vmi *unstructured.Unstructured) VM {
 		vm.Memory, _, _ = unstructured.NestedString(o, "spec", "template", "spec", "domain", "resources", "requests", "memory")
 	}
 
-	sources := map[string]string{}
+	classes := map[string]string{}
+	tpls, _, _ := unstructured.NestedSlice(o, "spec", "dataVolumeTemplates")
+	for _, t := range tpls {
+		n, _, _ := unstructured.NestedString(t.(map[string]interface{}), "metadata", "name")
+		classes[n], _, _ = unstructured.NestedString(t.(map[string]interface{}), "spec", "storage", "storageClassName")
+	}
+	sources, volumeClass := map[string]string{}, map[string]string{}
 	vols, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")
 	for _, x := range vols {
 		m, _ := x.(map[string]interface{})
@@ -339,6 +346,9 @@ func toVM(v, vmi *unstructured.Unstructured) VM {
 			}
 			sources[n] = src
 		}
+		if dv, ok := m["dataVolume"].(map[string]interface{}); ok {
+			volumeClass[n] = classes[fmt.Sprint(dv["name"])]
+		}
 	}
 	disks, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "domain", "devices", "disks")
 	for _, x := range disks {
@@ -350,7 +360,7 @@ func toVM(v, vmi *unstructured.Unstructured) VM {
 				d.Bus, _ = mm["bus"].(string)
 			}
 		}
-		d.Source = sources[d.Name]
+		d.Source, d.StorageClass = sources[d.Name], volumeClass[d.Name]
 		vm.Disks = append(vm.Disks, d)
 	}
 
