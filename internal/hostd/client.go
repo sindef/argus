@@ -112,6 +112,10 @@ func (c *Client) SetAddress(ctx context.Context, a AddressSpec) error {
 	return c.do(ctx, http.MethodPost, "/network/address", a, nil)
 }
 
+func (c *Client) SetManagement(ctx context.Context, iface string, on bool) error {
+	return c.do(ctx, http.MethodPost, "/network/management", map[string]any{"iface": iface, "on": on}, nil)
+}
+
 func (c *Client) NetworkDecision(ctx context.Context, op string) error {
 	return c.do(ctx, http.MethodPost, "/network/"+op, nil, nil)
 }

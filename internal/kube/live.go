@@ -19,6 +19,7 @@ import (
 const (
 	kubevirtNS       = "kubevirt"
 	migrationNetwork = "argus-migration"
+	migrationBridge  = "argus.io/migration-bridge"
 )
 
 var (
@@ -94,7 +95,7 @@ func (c *Client) SetMigrationNetwork(ctx context.Context, m MigrationNetwork) (s
 		"cniVersion": "0.3.1",
 		"name":       migrationNetwork,
 		"type":       "bridge",
-		"bridge":     bridge,
+		"bridge":     c.MigrationBridge(ctx),
 		"ipam": obj{
 			"type":   "host-local",
 			"ranges": []interface{}{[]interface{}{obj{"subnet": m.Subnet, "rangeStart": m.RangeStart, "rangeEnd": m.RangeEnd}}},
@@ -203,6 +204,49 @@ func (c *Client) RemoveMigrationNetwork(ctx context.Context) error {
 	}
 	err := c.dyn.Resource(nadGVR).Namespace(kubevirtNS).Delete(ctx, migrationNetwork, metav1.DeleteOptions{})
 	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	return c.dyn.Resource(podGVR).Namespace(kubevirtNS).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: "kubevirt.io=virt-handler"})
+}
+
+func (c *Client) MigrationBridge(ctx context.Context) string {
+	kv, err := c.dyn.Resource(kvGVR).Namespace(kubevirtNS).Get(ctx, "kubevirt", metav1.GetOptions{})
+	if err == nil && kv.GetAnnotations()[migrationBridge] != "" {
+		return kv.GetAnnotations()[migrationBridge]
+	}
+	return bridge
+}
+
+func (c *Client) SetMigrationBridge(ctx context.Context, br string) error {
+	res := c.dyn.Resource(nadGVR).Namespace(kubevirtNS)
+	nad, err := res.Get(ctx, migrationNetwork, metav1.GetOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	var cfg obj
+	if err == nil {
+		raw, _, _ := unstructured.NestedString(nad.Object, "spec", "config")
+		if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+			return err
+		}
+		if active, err := c.migrationActive(ctx); err != nil || active {
+			return errors.New("a migration is in progress on this host; retry when it finishes")
+		}
+	}
+	patch, _ := json.Marshal(obj{"metadata": obj{"annotations": obj{migrationBridge: br}}})
+	if _, err := c.dyn.Resource(kvGVR).Namespace(kubevirtNS).Patch(ctx, "kubevirt", types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
+		return err
+	}
+	if cfg == nil || cfg["bridge"] == br {
+		return nil
+	}
+	cfg["bridge"] = br
+	b, err := json.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	unstructured.SetNestedField(nad.Object, string(b), "spec", "config")
+	if _, err := res.Update(ctx, nad, metav1.UpdateOptions{}); err != nil {
 		return err
 	}
 	return c.dyn.Resource(podGVR).Namespace(kubevirtNS).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: "kubevirt.io=virt-handler"})

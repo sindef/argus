@@ -132,6 +132,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("GET /dashboard/stats", s.require(auth.ReadOnly, s.dashboardStats))
 	s.mux.HandleFunc("GET /disks", s.require(auth.Admin, s.disksPage))
 	s.mux.HandleFunc("GET /network/host", s.require(auth.Admin, s.hostNetworkPage))
+	s.mux.HandleFunc("GET /network/host/iface/{name}", s.require(auth.Admin, s.ifaceModal))
 	s.mux.HandleFunc("POST /network/host/{op}", s.require(auth.Admin, s.hostNetworkAction))
 	s.mux.HandleFunc("GET /pools", s.require(auth.Admin, s.poolsPage))
 	s.mux.HandleFunc("GET /pools/new", s.require(auth.Admin, s.poolModal))

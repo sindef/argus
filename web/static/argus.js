@@ -56,6 +56,11 @@
       row.classList.add("selected");
       document.querySelector(".content").classList.add("with-drawer");
     }
+    const mrow = e.target.closest("tr[data-modal]");
+    if (mrow && !e.target.closest("input, button, a, form")) {
+      htmx.ajax("GET", mrow.dataset.modal, { target: "#modal", swap: "innerHTML" });
+      return;
+    }
     const dlg = e.target.closest("[data-dialog]");
     if (dlg) { document.getElementById(dlg.dataset.dialog).showModal(); return; }
     if (e.target.closest("[data-close-dialog]")) { e.target.closest("dialog").close(); return; }

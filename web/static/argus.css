@@ -182,7 +182,7 @@ dl.kv dd { margin: 0; }
 .form label .help { display: inline-grid; }
 .form label:has(> .help) { display: block; }
 .form label:has(> .help) > input, .form label:has(> .help) > textarea, .form label:has(> .help) > select { display: block; width: 100%; margin-top: 6px; }
-.form label.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; }
+.form label.check, .form label.check:has(> .help) { display: flex; flex-direction: row; align-items: center; gap: 8px; font-weight: 400; }
 .check { display: inline-flex; align-items: center; gap: 8px; font-weight: 400; }
 summary { cursor: pointer; color: var(--muted); }
 .log { background: var(--bg-2); border: 1px solid var(--line); border-radius: 6px; padding: 12px; font-size: 12px; overflow-x: auto; max-height: 320px; }
@@ -262,8 +262,15 @@ h1 .dot { font-size: 14px; font-weight: 400; }
 .picks td { padding: 6px 10px; }
 .pool-status summary { font-size: 12px; cursor: pointer; }
 .pool-status pre { margin-top: 6px; font-size: 12px; white-space: pre; }
-.addr-form:has(input[value=dhcp]:checked) .static-only { display: none; }
-.addr-mode { align-self: flex-end; }
+.addr-form:not(:has(input[name=ipv4][value=static]:checked)) .v4-static,
+.addr-form:not(:has(input[name=ipv6][value=static]:checked)) .v6-static { display: none; }
+.addr-head { display: flex; align-items: center; gap: 12px; }
+.addr-head .field { width: 48px; }
+.modal-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.modal-head h2 { margin: 0; }
+.modal-head .icon-btn { margin-left: auto; }
+.roles { gap: 20px; }
+.roles .btn { margin-left: auto; }
 .net-banner { display: flex; align-items: center; gap: 12px; padding: 10px 16px; margin-bottom: 16px; border: 1px solid var(--warn); border-radius: var(--radius); background: var(--panel); }
 .dash-charts { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
 .stat .value.sm { font-size: 18px; line-height: 1.6; }

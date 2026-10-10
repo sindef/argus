@@ -25,7 +25,14 @@ func main() {
 	path := flag.String("socket", "/run/argus/hostd.sock", "socket path when not socket-activated")
 	idle := flag.Duration("idle", time.Minute, "exit after this long without requests")
 	rollback := flag.Bool("rollback", false, "roll back an unconfirmed network change and exit")
+	firewall := flag.Bool("firewall", false, "load the management firewall and exit")
 	flag.Parse()
+	if *firewall {
+		if err := hostd.LoadFirewall(context.Background()); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	if *rollback {
 		if err := hostd.Rollback(context.Background()); err != nil {
 			log.Fatal(err)

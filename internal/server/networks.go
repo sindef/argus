@@ -132,22 +132,47 @@ func (s *Server) bridges(ctx context.Context) []string {
 	return out
 }
 
-func (s *Server) hostNetworkPage(w http.ResponseWriter, r *http.Request) {
-	data := map[string]any{"Nav": "hostnet"}
+func (s *Server) hostNet(r *http.Request) (hostd.HostNet, error) {
 	if s.hostd == nil {
-		data["Error"] = "host helper not available"
-	} else {
-		hn, err := s.hostd.Network(hostd.WithAccess(r.Context(), r.Host))
-		data["Net"], data["Error"] = hn, errText(err)
-		var free []hostd.Iface
-		for _, i := range hn.Ifaces {
-			if i.Kind == "ether" && !i.Mgmt {
-				free = append(free, i)
-			}
-		}
-		data["Ports"] = free
+		return hostd.HostNet{}, errors.New("host helper not available")
 	}
-	s.render(w, r, "hostnet.html", "layout", data)
+	return s.hostd.Network(hostd.WithAccess(r.Context(), r.Host))
+}
+
+func management(hn hostd.HostNet, i hostd.Iface) bool {
+	if !hn.Restricted {
+		return i.Master == ""
+	}
+	return i.Master == "" && slices.Contains(hn.Management, i.Name)
+}
+
+func (s *Server) hostNetworkPage(w http.ResponseWriter, r *http.Request) {
+	hn, err := s.hostNet(r)
+	var free []hostd.Iface
+	for _, i := range hn.Ifaces {
+		if i.Kind == "ether" && !i.Mgmt {
+			free = append(free, i)
+		}
+	}
+	s.render(w, r, "hostnet.html", "layout", map[string]any{"Nav": "hostnet", "Net": hn, "Ports": free, "Migration": s.kube.MigrationBridge(r.Context()), "Error": errText(err)})
+}
+
+func (s *Server) ifaceModal(w http.ResponseWriter, r *http.Request) {
+	hn, err := s.hostNet(r)
+	var iface *hostd.Iface
+	for i := range hn.Ifaces {
+		if hn.Ifaces[i].Name == r.PathValue("name") {
+			iface = &hn.Ifaces[i]
+		}
+	}
+	if err == nil && iface == nil {
+		err = fmt.Errorf("interface %s not found", r.PathValue("name"))
+	}
+	if err != nil {
+		flash(w, r, err)
+		return
+	}
+	s.render(w, r, "hostnet.html", "iface-modal", map[string]any{"I": iface, "DNS": hn.DNS, "Management": management(hn, *iface), "Migration": s.kube.MigrationBridge(r.Context()) == iface.Name})
 }
 
 func (s *Server) hostNetworkAction(w http.ResponseWriter, r *http.Request) {
@@ -167,12 +192,22 @@ func (s *Server) hostNetworkAction(w http.ResponseWriter, r *http.Request) {
 				err = fmt.Errorf("network %s uses %s; delete it first", n.Name, br)
 			}
 		}
+		if err == nil && s.kube.MigrationBridge(ctx) == br {
+			err = fmt.Errorf("%s carries live migration; move that role first", br)
+		}
 		if err == nil {
 			err = s.hostd.DeleteBridge(ctx, br)
 		}
 	case "address":
-		a := hostd.AddressSpec{Iface: r.FormValue("iface"), DHCP: r.FormValue("mode") == "dhcp", Address: strings.TrimSpace(r.FormValue("address")), Gateway: strings.TrimSpace(r.FormValue("gateway")), DNS: strings.Fields(strings.ReplaceAll(r.FormValue("dns"), ",", " "))}
+		a := hostd.AddressSpec{
+			Iface: r.FormValue("iface"), IPv4: r.FormValue("ipv4"), IPv6: r.FormValue("ipv6"),
+			Address: strings.TrimSpace(r.FormValue("address")), Gateway: strings.TrimSpace(r.FormValue("gateway")),
+			Address6: strings.TrimSpace(r.FormValue("address6")), Gateway6: strings.TrimSpace(r.FormValue("gateway6")),
+			DNS: strings.Fields(strings.ReplaceAll(r.FormValue("dns"), ",", " ")),
+		}
 		err = s.hostd.SetAddress(ctx, a)
+	case "roles":
+		err = s.setRoles(r)
 	case "confirm", "rollback":
 		err = s.hostd.NetworkDecision(ctx, op)
 	default:
@@ -182,6 +217,35 @@ func (s *Server) hostNetworkAction(w http.ResponseWriter, r *http.Request) {
 		flash(w, r, err)
 		return
 	}
-	log.Printf("%s: host network %s", session(r).User, r.PathValue("op"))
+	log.Printf("%s: host network %s %s", session(r).User, r.PathValue("op"), r.FormValue("iface"))
 	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) setRoles(r *http.Request) error {
+	name := r.FormValue("iface")
+	hn, err := s.hostNet(r)
+	if err != nil {
+		return err
+	}
+	var iface *hostd.Iface
+	for i := range hn.Ifaces {
+		if hn.Ifaces[i].Name == name {
+			iface = &hn.Ifaces[i]
+		}
+	}
+	if iface == nil || iface.Master != "" {
+		return fmt.Errorf("%s cannot take roles", name)
+	}
+	if r.FormValue("migration") != "" && s.kube.MigrationBridge(r.Context()) != name {
+		if iface.Kind != "bridge" {
+			return errors.New("live migration needs a bridge")
+		}
+		if err := s.kube.SetMigrationBridge(r.Context(), name); err != nil {
+			return err
+		}
+	}
+	if on := r.FormValue("management") != ""; on != management(hn, *iface) {
+		return s.hostd.SetManagement(hostd.WithAccess(r.Context(), r.Host), name, on)
+	}
+	return nil
 }

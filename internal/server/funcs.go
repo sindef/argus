@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"html/template"
+	"slices"
 	"strings"
 	"time"
 
@@ -49,6 +50,8 @@ var funcs = template.FuncMap{
 	"limit":  func(evs []kube.Event, n int) []kube.Event { return evs[:min(n, len(evs))] },
 	"picks":  func(disks any, field string) map[string]any { return map[string]any{"Disks": disks, "Field": field} },
 	"min100": func(v int) int { return min(v, 100) },
+	"list":   func(v ...string) []string { return v },
+	"has":    func(l []string, v string) bool { return slices.Contains(l, v) },
 	"add":    func(a, b int) int { return a + b },
 	"sub":    func(a, b int) int { return a - b },
 	"add64":  func(a, b int64) int64 { return a + b },

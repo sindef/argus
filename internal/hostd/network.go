@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -22,7 +23,11 @@ const (
 	PendingFile  = "/run/argus/net-pending.json"
 	rollbackUnit = "argus-net-rollback"
 	rollbackSecs = 120
+	mgmtFile     = "/usr/local/argus/management"
+	firewallFile = "/run/argus-hostd/firewall.nft"
 )
+
+var mgmtPorts = "22, 443, 6443, 10250"
 
 var (
 	validIface = regexp.MustCompile(`^[a-z][a-z0-9-]{0,14}$`)
@@ -40,13 +45,22 @@ type Iface struct {
 	Addresses []string `json:"addresses"`
 	Managed   bool     `json:"managed"`
 	Mgmt      bool     `json:"mgmt"`
+	Access    bool     `json:"access"`
+	V4        string   `json:"v4"`
+	V6        string   `json:"v6"`
+	Static4   string   `json:"static4"`
+	Static6   string   `json:"static6"`
+	Gateway4  string   `json:"gateway4"`
+	Gateway6  string   `json:"gateway6"`
 }
 
 type HostNet struct {
-	Ifaces  []Iface  `json:"ifaces"`
-	Gateway string   `json:"gateway"`
-	DNS     []string `json:"dns"`
-	Pending *Pending `json:"pending"`
+	Ifaces     []Iface  `json:"ifaces"`
+	Gateway    string   `json:"gateway"`
+	DNS        []string `json:"dns"`
+	Pending    *Pending `json:"pending"`
+	Restricted bool     `json:"restricted"`
+	Management []string `json:"management"`
 }
 
 type Pending struct {
@@ -63,11 +77,14 @@ type BridgeSpec struct {
 }
 
 type AddressSpec struct {
-	Iface   string   `json:"iface"`
-	DHCP    bool     `json:"dhcp"`
-	Address string   `json:"address"`
-	Gateway string   `json:"gateway"`
-	DNS     []string `json:"dns"`
+	Iface    string   `json:"iface"`
+	IPv4     string   `json:"ipv4"`
+	Address  string   `json:"address"`
+	Gateway  string   `json:"gateway"`
+	IPv6     string   `json:"ipv6"`
+	Address6 string   `json:"address6"`
+	Gateway6 string   `json:"gateway6"`
+	DNS      []string `json:"dns"`
 }
 
 type ipLink struct {
@@ -82,6 +99,7 @@ type ipLink struct {
 		Family    string `json:"family"`
 		Local     string `json:"local"`
 		Prefixlen int    `json:"prefixlen"`
+		Dynamic   bool   `json:"dynamic"`
 	} `json:"addr_info"`
 }
 
@@ -112,15 +130,17 @@ func hostNet(ctx context.Context) (HostNet, error) {
 	if err := json.Unmarshal([]byte(out), &links); err != nil {
 		return hn, err
 	}
-	routes, _ := run(ctx, "ip", "-j", "route", "show", "default")
-	var defs []struct{ Gateway, Dev string }
+	routes, _ := run(ctx, "ip", "-j", "-4", "route", "show", "default")
+	var defs, defs6 []struct{ Gateway, Dev string }
 	json.Unmarshal([]byte(routes), &defs)
+	routes6, _ := run(ctx, "ip", "-j", "-6", "route", "show", "default")
+	json.Unmarshal([]byte(routes6), &defs6)
 	mgmt := ""
 	if len(defs) > 0 {
 		hn.Gateway, mgmt = defs[0].Gateway, defs[0].Dev
 	}
 	ips, _ := ctx.Value(nodeIPKey{}).([]string)
-	protected := map[string]bool{}
+	protected, access := map[string]bool{}, map[string]bool{}
 	for i, ip := range ips {
 		for _, l := range links {
 			for _, a := range l.AddrInfo {
@@ -128,6 +148,8 @@ func hostNet(ctx context.Context) (HostNet, error) {
 					protected[l.Ifname] = true
 					if i == 0 {
 						mgmt = l.Ifname
+					} else {
+						access[l.Ifname] = true
 					}
 				}
 			}
@@ -159,13 +181,34 @@ func hostNet(ctx context.Context) (HostNet, error) {
 		default:
 			continue
 		}
-		i := &Iface{Name: l.Ifname, Kind: kind, MAC: l.Address, State: strings.ToLower(l.Operstate), Master: l.Master, Managed: managed[l.Ifname], Mgmt: protected[l.Ifname]}
+		i := &Iface{Name: l.Ifname, Kind: kind, MAC: l.Address, State: strings.ToLower(l.Operstate), Master: l.Master, Managed: managed[l.Ifname], Mgmt: protected[l.Ifname], Access: access[l.Ifname], V4: "off", V6: "off"}
 		if b, err := os.ReadFile(filepath.Join("/sys/class/net", l.Ifname, "speed")); err == nil {
 			fmt.Sscanf(string(b), "%d", &i.Speed)
 		}
 		for _, a := range l.AddrInfo {
-			if a.Family == "inet" || (a.Family == "inet6" && !strings.HasPrefix(a.Local, "fe80")) {
-				i.Addresses = append(i.Addresses, fmt.Sprintf("%s/%d", a.Local, a.Prefixlen))
+			cidr := fmt.Sprintf("%s/%d", a.Local, a.Prefixlen)
+			switch {
+			case a.Family == "inet" && a.Dynamic:
+				i.V4 = "dhcp"
+			case a.Family == "inet":
+				i.V4, i.Static4 = "static", cidr
+			case strings.HasPrefix(a.Local, "fe80"):
+				continue
+			case a.Dynamic:
+				i.V6 = "auto"
+			default:
+				i.V6, i.Static6 = "static", cidr
+			}
+			i.Addresses = append(i.Addresses, cidr)
+		}
+		for _, d := range defs {
+			if d.Dev == l.Ifname {
+				i.Gateway4 = d.Gateway
+			}
+		}
+		for _, d := range defs6 {
+			if d.Dev == l.Ifname {
+				i.Gateway6 = d.Gateway
 			}
 		}
 		byName[l.Ifname] = i
@@ -173,9 +216,8 @@ func hostNet(ctx context.Context) (HostNet, error) {
 	for _, i := range byName {
 		if m, ok := byName[i.Master]; ok {
 			m.Ports = append(m.Ports, i.Name)
-			if i.Mgmt || m.Mgmt {
-				m.Mgmt = true
-			}
+			m.Mgmt = m.Mgmt || i.Mgmt
+			m.Access = m.Access || i.Access
 		}
 	}
 	for _, i := range byName {
@@ -191,6 +233,7 @@ func hostNet(ctx context.Context) (HostNet, error) {
 		}
 	}
 	hn.Pending = readPending()
+	hn.Management, hn.Restricted = readMgmt()
 	return hn, nil
 }
 
@@ -334,36 +377,142 @@ func (s *Server) setAddress(ctx context.Context, a AddressSpec) error {
 	if target.Master != "" {
 		return fmt.Errorf("%s is a port of %s; set the address on %s", a.Iface, target.Master, target.Master)
 	}
-	body := fmt.Sprintf("[Match]\nName=%s\n\n[Network]\n", a.Iface)
-	if a.DHCP {
-		body += "DHCP=yes\n"
-	} else {
-		ip, _, err := net.ParseCIDR(a.Address)
-		if err != nil || ip.To4() == nil {
-			return errors.New("address must be IPv4 CIDR, e.g. 192.168.1.10/24")
-		}
-		body += "Address=" + a.Address + "\n"
-		if a.Gateway != "" {
-			if net.ParseIP(a.Gateway) == nil {
-				return errors.New("invalid gateway")
-			}
-			body += "Gateway=" + a.Gateway + "\n"
-		}
+	if target.Access && a.IPv4 == "off" && a.IPv6 == "off" {
+		return fmt.Errorf("you are connected through %s; it needs an address", a.Iface)
 	}
-	for _, d := range a.DNS {
-		if net.ParseIP(d) == nil {
-			return fmt.Errorf("invalid DNS server %q", d)
-		}
-		body += "DNS=" + d + "\n"
-	}
-	if target.Kind == "bridge" {
-		body += "ConfigureWithoutCarrier=yes\n"
-	}
-	if a.DHCP {
-		body += "\n[DHCPv4]\nClientIdentifier=mac\n"
+	body, err := addressNetwork(a, target.Kind == "bridge")
+	if err != nil {
+		return err
 	}
 	path, _ := unit(a.Iface, "network", "")
 	return s.apply(ctx, "set address of "+a.Iface, map[string]string{path: body}, nil, nil, []string{a.Iface})
+}
+
+func addressNetwork(a AddressSpec, bridge bool) (string, error) {
+	var b strings.Builder
+	fmt.Fprintf(&b, "[Match]\nName=%s\n\n[Network]\n", a.Iface)
+	dhcp := map[[2]bool]string{{true, true}: "yes", {true, false}: "ipv4", {false, true}: "ipv6"}[[2]bool{a.IPv4 == "dhcp", a.IPv6 == "dhcp"}]
+	if dhcp != "" {
+		b.WriteString("DHCP=" + dhcp + "\n")
+	}
+	static := func(cidr, gw string, v4 bool, label string) error {
+		ip, _, err := net.ParseCIDR(cidr)
+		if err != nil || (ip.To4() != nil) != v4 {
+			return fmt.Errorf("%s address must be a CIDR, e.g. %s", label, map[bool]string{true: "192.168.1.10/24", false: "2001:db8::10/64"}[v4])
+		}
+		b.WriteString("Address=" + cidr + "\n")
+		if gw != "" {
+			if g := net.ParseIP(gw); g == nil || (g.To4() != nil) != v4 {
+				return fmt.Errorf("invalid %s gateway", label)
+			}
+			b.WriteString("Gateway=" + gw + "\n")
+		}
+		return nil
+	}
+	switch a.IPv4 {
+	case "dhcp", "off":
+	case "static":
+		if err := static(a.Address, a.Gateway, true, "IPv4"); err != nil {
+			return "", err
+		}
+	default:
+		return "", errors.New("IPv4 mode must be dhcp, static or off")
+	}
+	switch a.IPv6 {
+	case "auto", "dhcp":
+		b.WriteString("IPv6AcceptRA=yes\n")
+	case "static":
+		if err := static(a.Address6, a.Gateway6, false, "IPv6"); err != nil {
+			return "", err
+		}
+		b.WriteString("IPv6AcceptRA=no\n")
+	case "off":
+		b.WriteString("IPv6AcceptRA=no\n")
+		if a.IPv4 == "off" {
+			b.WriteString("LinkLocalAddressing=no\n")
+		}
+	default:
+		return "", errors.New("IPv6 mode must be auto, dhcp, static or off")
+	}
+	for _, d := range a.DNS {
+		if net.ParseIP(d) == nil {
+			return "", fmt.Errorf("invalid DNS server %q", d)
+		}
+		b.WriteString("DNS=" + d + "\n")
+	}
+	if bridge {
+		b.WriteString("ConfigureWithoutCarrier=yes\n")
+	}
+	if a.IPv4 == "dhcp" {
+		b.WriteString("\n[DHCPv4]\nClientIdentifier=mac\n")
+	}
+	return b.String(), nil
+}
+
+func readMgmt() ([]string, bool) {
+	b, err := os.ReadFile(mgmtFile)
+	return strings.Fields(string(b)), err == nil
+}
+
+func LoadFirewall(ctx context.Context) error {
+	names, ok := readMgmt()
+	if !ok {
+		run(ctx, "nft", "delete", "table", "inet", "argus")
+		return nil
+	}
+	allow := []string{`"lo"`, `"cni0"`}
+	for _, n := range names {
+		allow = append(allow, strconv.Quote(n))
+	}
+	rules := fmt.Sprintf("table inet argus\ndelete table inet argus\ntable inet argus {\n\tchain prerouting {\n\t\ttype filter hook prerouting priority -150; policy accept;\n\t\tiifname != { %s } fib daddr type local tcp dport { %s } drop\n\t}\n}\n", strings.Join(allow, ", "), mgmtPorts)
+	if err := os.MkdirAll(filepath.Dir(firewallFile), 0o700); err != nil {
+		return err
+	}
+	if err := os.WriteFile(firewallFile, []byte(rules), 0o600); err != nil {
+		return err
+	}
+	_, err := run(ctx, "nft", "-f", firewallFile)
+	return err
+}
+
+func (s *Server) setManagement(ctx context.Context, iface string, on bool) error {
+	hn, err := hostNet(ctx)
+	if err != nil {
+		return err
+	}
+	var top []string
+	found := false
+	for _, i := range hn.Ifaces {
+		if i.Master == "" {
+			top = append(top, i.Name)
+			found = found || i.Name == iface
+		}
+	}
+	if !found {
+		return fmt.Errorf("%s is not a configurable interface", iface)
+	}
+	current, restricted := readMgmt()
+	if !restricted {
+		current = top
+	}
+	next := slices.DeleteFunc(slices.Clone(current), func(n string) bool { return n == iface || !slices.Contains(top, n) })
+	if on {
+		next = append(next, iface)
+	}
+	for _, i := range hn.Ifaces {
+		if i.Access && i.Master == "" && !slices.Contains(next, i.Name) {
+			return fmt.Errorf("you are connected through %s; it must keep the management role", i.Name)
+		}
+	}
+	if len(next) == 0 {
+		return errors.New("at least one interface needs the management role")
+	}
+	sort.Strings(next)
+	desc := fmt.Sprintf("management role %s %s", map[bool]string{true: "on", false: "off"}[on], iface)
+	if len(next) == len(top) {
+		return s.apply(ctx, desc, nil, []string{mgmtFile}, nil, nil)
+	}
+	return s.apply(ctx, desc, map[string]string{mgmtFile: strings.Join(next, "\n") + "\n"}, nil, nil, nil)
 }
 
 func (s *Server) apply(ctx context.Context, desc string, write map[string]string, remove, created, affected []string) error {
@@ -384,6 +533,11 @@ func (s *Server) apply(ctx context.Context, desc string, write map[string]string
 			return err
 		}
 	}
+	if b, err := os.ReadFile(mgmtFile); err == nil {
+		if err := os.WriteFile(filepath.Join(snapshotDir, filepath.Base(mgmtFile)), b, 0o644); err != nil {
+			return err
+		}
+	}
 	p := Pending{Description: desc, Deadline: time.Now().Add(rollbackSecs * time.Second), Created: created}
 	b, _ := json.Marshal(p)
 	if err := os.WriteFile(PendingFile, b, 0o644); err != nil {
@@ -394,6 +548,10 @@ func (s *Server) apply(ctx context.Context, desc string, write map[string]string
 		return err
 	}
 	for path, body := range write {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			Rollback(ctx)
+			return err
+		}
 		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 			Rollback(ctx)
 			return err
@@ -401,6 +559,13 @@ func (s *Server) apply(ctx context.Context, desc string, write map[string]string
 	}
 	for _, path := range remove {
 		os.Remove(path)
+	}
+	if err := LoadFirewall(ctx); err != nil {
+		Rollback(ctx)
+		return err
+	}
+	if len(affected) == 0 {
+		return nil
 	}
 	return reloadNetwork(ctx, affected)
 }
@@ -434,7 +599,12 @@ func Rollback(ctx context.Context) error {
 	for _, f := range current {
 		os.Remove(f)
 	}
-	saved, _ := filepath.Glob(filepath.Join(snapshotDir, "*"))
+	os.Remove(mgmtFile)
+	if b, err := os.ReadFile(filepath.Join(snapshotDir, filepath.Base(mgmtFile))); err == nil {
+		os.WriteFile(mgmtFile, b, 0o644)
+	}
+	LoadFirewall(ctx)
+	saved, _ := filepath.Glob(filepath.Join(snapshotDir, managedGlob))
 	var ifaces []string
 	for _, f := range saved {
 		b, err := os.ReadFile(f)

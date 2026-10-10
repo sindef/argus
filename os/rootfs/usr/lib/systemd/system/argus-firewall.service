@@ -1,0 +1,13 @@
+[Unit]
+Description=Argus management firewall
+ConditionPathExists=/usr/local/argus/management
+After=local-fs.target
+Before=k3s.service sshd.service ssh.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/argus-hostd -firewall
+
+[Install]
+WantedBy=multi-user.target

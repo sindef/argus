@@ -31,6 +31,7 @@ func NewServer() *Server {
 	s.mux.HandleFunc("POST /network/bridges", s.locked(s.bridge))
 	s.mux.HandleFunc("POST /network/bridges/{name}/delete", s.locked(s.unbridge))
 	s.mux.HandleFunc("POST /network/address", s.locked(s.address))
+	s.mux.HandleFunc("POST /network/management", s.locked(s.management))
 	s.mux.HandleFunc("POST /network/confirm", s.locked(func(w http.ResponseWriter, r *http.Request) { reply(w, nil, Confirm(r.Context())) }))
 	s.mux.HandleFunc("POST /network/rollback", s.locked(func(w http.ResponseWriter, r *http.Request) { reply(w, nil, Rollback(r.Context())) }))
 	s.touch()
@@ -164,4 +165,17 @@ func (s *Server) address(w http.ResponseWriter, r *http.Request) {
 func (s *Server) disks(w http.ResponseWriter, r *http.Request) {
 	ds, err := listDisks(r.Context())
 	reply(w, ds, err)
+}
+
+func (s *Server) management(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Iface string `json:"iface"`
+		On    bool   `json:"on"`
+	}
+	err := decode(r, &req)
+	if err == nil {
+		err = s.setManagement(r.Context(), req.Iface, req.On)
+	}
+	log.Printf("management role %s=%v: %v", req.Iface, req.On, err)
+	reply(w, nil, err)
 }

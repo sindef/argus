@@ -8,40 +8,22 @@
 {{with .Net}}
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Interface</th><th>Type</th><th>State</th><th>Speed</th><th>MAC</th><th>Addresses</th><th>Member of / ports</th><th></th></tr></thead>
-  <tbody>{{range .Ifaces}}<tr>
-    <td>{{template "icon" "cable"}}{{.Name}}{{if .Mgmt}} <span class="badge" title="Carries the management address and default route">management</span>{{end}}{{if .Managed}} <span class="badge">argus</span>{{end}}</td>
+  <thead><tr><th>Interface</th><th>Type</th><th>State</th><th>Speed</th><th>MAC</th><th>Addresses</th><th>Member of / ports</th><th>Roles</th></tr></thead>
+  <tbody>{{range .Ifaces}}<tr class="clickable" data-modal="{{$.Base}}/network/host/iface/{{.Name}}">
+    <td>{{template "icon" "cable"}}{{.Name}}{{if .Managed}} <span class="badge">argus</span>{{end}}</td>
     <td>{{.Kind}}</td>
     <td><span class="dot {{if eq .State "up"}}Up{{else}}Failed{{end}}">{{.State}}</span></td>
     <td>{{if gt .Speed 0}}{{.Speed}} Mb/s{{else}}<span class="muted">—</span>{{end}}</td>
     <td class="mono">{{.MAC}}</td>
-    <td>{{range .Addresses}}{{.}} {{else}}<span class="muted">—</span>{{end}}</td>
+    <td>{{range .Addresses}}<div>{{.}}</div>{{else}}<span class="muted">—</span>{{end}}</td>
     <td>{{with .Master}}{{.}}{{else}}{{range .Ports}}{{.}} {{end}}{{end}}</td>
-    <td class="row-actions">{{if and (eq .Kind "bridge") .Managed (not .Mgmt)}}<button class="link danger" hx-post="/network/host/delete" hx-vals='{"bridge":"{{.Name}}"}' hx-target="#flash" hx-confirm="Delete bridge {{.Name}}? Its ports are left unconfigured.">Delete</button>{{end}}</td>
+    <td>{{if not .Master}}{{if or (not $.Net.Restricted) (has $.Net.Management .Name)}}<span class="badge">management</span> {{end}}{{if eq .Name $.Migration}}<span class="badge">migration</span>{{end}}{{end}}</td>
   </tr>{{end}}</tbody>
 </table>
 </div>
-<div class="card spaced">
-  <div class="card-head">{{template "icon" "globe"}}<h2>Host address</h2></div>
-  <form hx-post="/network/host/address" hx-target="#flash" class="form addr-form" hx-confirm="Apply? Confirm it within 2 minutes from the new address or it rolls back.">
-    <div class="row">
-      <label>Interface <select name="iface">{{range .Ifaces}}{{if not .Master}}<option value="{{.Name}}"{{if .Mgmt}} selected{{end}}>{{.Name}}{{range .Addresses}} ({{.}}){{end}}</option>{{end}}{{end}}</select></label>
-      <div class="seg addr-mode">
-        <label><input type="radio" name="mode" value="dhcp" checked> DHCP</label>
-        <label><input type="radio" name="mode" value="static"> Static</label>
-      </div>
-    </div>
-    <div class="row static-only">
-      <label>Address (CIDR) <input name="address" placeholder="192.168.1.10/24"></label>
-      <label>Gateway <input name="gateway" placeholder="192.168.1.1" value="{{.Gateway}}"></label>
-      <label>DNS servers <input name="dns" placeholder="1.1.1.1 9.9.9.9" value="{{range $i, $d := .DNS}}{{if $i}} {{end}}{{$d}}{{end}}"></label>
-    </div>
-    <div><button class="btn primary" type="submit">Apply</button></div>
-  </form>
-</div>
 {{end}}
 <dialog id="new-bridge" class="card wide">
-  <form hx-post="/network/host/bridge" hx-target="#bridge-form-error" class="form">
+  <form hx-post="{{.Base}}/network/host/bridge" hx-target="#bridge-form-error" class="form">
     <h2>Create bridge</h2>
     <p id="bridge-form-error" class="error form-error"></p>
     <div class="row">
@@ -58,3 +40,48 @@
   </form>
 </dialog>
 {{end}}
+
+{{define "iface-modal"}}{{with .I}}
+<div class="modal-head"><h2>{{.Name}}</h2><span class="badge">{{.Kind}}</span><button class="icon-btn" type="button" data-close-dialog aria-label="Close">{{template "icon" "x"}}</button></div>
+<p id="iface-error" class="error form-error"></p>
+<dl class="kv">
+  <dt>State</dt><dd><span class="dot {{if eq .State "up"}}Up{{else}}Failed{{end}}">{{.State}}</span>{{if gt .Speed 0}} · {{.Speed}} Mb/s{{end}}</dd>
+  <dt>MAC</dt><dd class="mono">{{.MAC}}</dd>
+  {{with .Master}}<dt>Port of</dt><dd>{{.}}</dd>{{end}}
+  {{with .Ports}}<dt>Ports</dt><dd>{{range .}}{{.}} {{end}}</dd>{{end}}
+  <dt>Addresses</dt><dd>{{range .Addresses}}<div class="mono">{{.}}</div>{{else}}<span class="muted">—</span>{{end}}</dd>
+</dl>
+{{if not .Master}}
+<form hx-post="{{$.Base}}/network/host/roles" hx-target="#iface-error" class="form spaced">
+  <input type="hidden" name="iface" value="{{.Name}}">
+  <div class="field">Roles</div>
+  <div class="inline roles">
+    <label class="check"><input type="checkbox" name="management"{{if $.Management}} checked{{end}}> Management <span class="help" title="SSH, the web UI and the Kubernetes API (ports 22, 443, 6443, 10250) only answer on interfaces with this role.">?</span></label>
+    {{if eq .Kind "bridge"}}<label class="check"><input type="checkbox" name="migration"{{if $.Migration}} checked disabled{{end}}> Migration <span class="help" title="Carries live-migration traffic between hosts. One bridge per host; enable it on another bridge to move it.">?</span></label>{{end}}
+    <button class="btn" type="submit">Save roles</button>
+  </div>
+</form>
+<form hx-post="{{$.Base}}/network/host/address" hx-target="#iface-error" class="form addr-form spaced" hx-confirm="Apply? Confirm it within 2 minutes or it rolls back.">
+  <input type="hidden" name="iface" value="{{.Name}}">
+  <div class="addr-head"><span class="field">IPv4</span><div class="seg">
+    {{range $m := list "dhcp" "static" "off"}}<label><input type="radio" name="ipv4" value="{{$m}}"{{if eq $m $.I.V4}} checked{{end}}> {{if eq $m "dhcp"}}DHCP{{else}}{{title $m}}{{end}}</label>{{end}}
+  </div></div>
+  <div class="row v4-static">
+    <label>Address (CIDR) <input name="address" placeholder="192.168.1.10/24" value="{{.Static4}}"></label>
+    <label>Gateway <input name="gateway" placeholder="192.168.1.1" value="{{.Gateway4}}"></label>
+  </div>
+  <div class="addr-head"><span class="field">IPv6</span><div class="seg">
+    {{range $m := list "auto" "dhcp" "static" "off"}}<label><input type="radio" name="ipv6" value="{{$m}}"{{if eq $m $.I.V6}} checked{{end}}> {{if eq $m "dhcp"}}DHCPv6{{else if eq $m "auto"}}SLAAC{{else}}{{title $m}}{{end}}</label>{{end}}
+  </div></div>
+  <div class="row v6-static">
+    <label>Address (CIDR) <input name="address6" placeholder="2001:db8::10/64" value="{{.Static6}}"></label>
+    <label>Gateway <input name="gateway6" placeholder="fe80::1" value="{{.Gateway6}}"></label>
+  </div>
+  <label>DNS servers <input name="dns" placeholder="1.1.1.1 2606:4700:4700::1111" value="{{range $i, $d := $.DNS}}{{if $i}} {{end}}{{$d}}{{end}}"></label>
+  <div class="actions">
+    {{if and (eq .Kind "bridge") .Managed (not .Mgmt)}}<button class="btn danger" type="button" hx-post="{{$.Base}}/network/host/delete" hx-vals='{"bridge":"{{.Name}}"}' hx-target="#iface-error" hx-confirm="Delete bridge {{.Name}}? Its ports are left unconfigured.">{{template "icon" "trash-2"}}Delete bridge</button>{{end}}
+    <button class="btn primary" type="submit">Apply</button>
+  </div>
+</form>
+{{end}}
+{{end}}{{end}}
