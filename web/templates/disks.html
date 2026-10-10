@@ -7,7 +7,7 @@
 <div class="table-wrap">
 <table>
   <thead><tr><th>Device</th><th>Model</th><th>Serial</th><th>Size</th><th>Media</th><th>Status</th><th>Contents</th></tr></thead>
-  <tbody>{{range .Disks}}<tr>
+  <tbody>{{range .Disks}}<tr class="clickable" data-modal="{{$.Base}}/disks/{{.Name}}">
     <td title="{{.ID}}">{{template "icon" "hard-drive"}}{{.Name}}</td>
     <td>{{with .Model}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
     <td class="mono">{{with .Serial}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
@@ -19,3 +19,32 @@
 </table>
 </div>
 {{end}}
+
+{{define "disk-modal"}}{{with .D}}{{$d := .Disk}}
+<div class="modal-head"><h2>{{$d.Name}}</h2><span class="badge">{{$d.Media}}</span>{{with .Smart}}{{if .Supported}}<span class="dot {{if .Passed}}Healthy{{else}}Failed{{end}}">SMART {{if .Passed}}passed{{else}}failed{{end}}</span>{{end}}{{end}}<button class="icon-btn" type="button" data-close-dialog aria-label="Close">{{template "icon" "x"}}</button></div>
+<p id="disk-error" class="error form-error"></p>
+<dl class="kv">
+  <dt>Model</dt><dd>{{with $d.Model}}{{.}}{{else}}<span class="muted">—</span>{{end}}</dd>
+  <dt>Serial</dt><dd class="mono">{{with $d.Serial}}{{.}}{{else}}<span class="muted">—</span>{{end}}</dd>
+  <dt>Size</dt><dd>{{bytes $d.Size}}{{with $d.Transport}} · {{.}}{{end}}</dd>
+  <dt>Path</dt><dd class="mono">{{$d.ID}}</dd>
+  <dt>Status</dt><dd>{{if eq $d.Use "os"}}System disk{{else if eq $d.Use "pool"}}Pool {{$d.Pool}}{{else if eq $d.Use "mounted"}}Mounted{{else}}Available{{end}}</dd>
+  {{with .Smart}}{{if .Supported}}
+  {{if .Temp}}<dt>Temperature</dt><dd>{{.Temp}} °C</dd>{{end}}
+  <dt>Power-on</dt><dd>{{.Hours}} h{{if .Cycles}} · {{.Cycles}} cycles{{end}}</dd>
+  {{if .Wear}}<dt>Wear</dt><dd>{{.Wear}}% used</dd>{{end}}
+  {{with .Running}}<dt>Self-test</dt><dd><span class="dot Warning">{{.}}</span></dd>{{end}}
+  {{else}}<dt>SMART</dt><dd class="muted">{{.Message}}</dd>{{end}}{{end}}
+</dl>
+{{with .Partitions}}<div class="field spaced">Partitions</div>
+<div class="table-wrap"><table><tbody>{{range .}}<tr><td class="mono">{{.Name}}</td><td>{{bytes .Size}}</td><td>{{.FSType}}</td><td>{{.Label}}</td></tr>{{end}}</tbody></table></div>{{end}}
+{{with .Smart.Tests}}<div class="field spaced">Self-test log</div>
+<div class="table-wrap picks"><table><tbody>{{range .}}<tr><td>{{.Type}}</td><td>{{.Status}}</td><td>{{.Hours}} h</td></tr>{{end}}</tbody></table></div>{{end}}
+{{with .Smart.Attributes}}<details class="spaced"><summary class="muted">SMART attributes</summary>
+<div class="table-wrap picks"><table><thead><tr><th>ID</th><th>Attribute</th><th>Value</th><th>Worst</th><th>Threshold</th><th>Raw</th></tr></thead><tbody>{{range .}}<tr{{if and .Thresh (le .Value .Thresh)}} class="bad"{{end}}><td>{{.ID}}</td><td>{{.Name}}</td><td>{{.Value}}</td><td>{{.Worst}}</td><td>{{.Thresh}}</td><td class="mono">{{.Raw}}</td></tr>{{end}}</tbody></table></div></details>{{end}}
+<div class="actions spaced">
+  {{if .Smart.Supported}}<button class="btn" hx-post="{{$.Base}}/disks/{{$d.Name}}/smart-test" hx-vals='{"test":"short"}' hx-target="#disk-error">Short test</button>
+  <button class="btn" hx-post="{{$.Base}}/disks/{{$d.Name}}/smart-test" hx-vals='{"test":"long"}' hx-target="#disk-error" hx-confirm="Start an extended SMART test? It can take hours; the disk stays usable.">Extended test</button>{{end}}
+  {{if $d.Free}}<button class="btn danger" hx-post="{{$.Base}}/disks/{{$d.Name}}/wipe" hx-target="#disk-error" hx-prompt="Type {{$d.Name}} to erase all partitions and signatures">{{template "icon" "trash-2"}}Wipe</button>{{end}}
+</div>
+{{end}}{{end}}

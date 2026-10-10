@@ -70,6 +70,15 @@ func (c *Client) Disks(ctx context.Context) ([]Disk, error) {
 	return ds, c.do(ctx, http.MethodGet, "/disks", nil, &ds)
 }
 
+func (c *Client) Disk(ctx context.Context, name string) (DiskDetail, error) {
+	var dd DiskDetail
+	return dd, c.do(ctx, http.MethodGet, "/disks/"+name, nil, &dd)
+}
+
+func (c *Client) DiskAction(ctx context.Context, name, action, confirm, test string) error {
+	return c.do(ctx, http.MethodPost, "/disks/"+name+"/"+action, map[string]string{"confirm": confirm, "test": test}, nil)
+}
+
 func (c *Client) Pools(ctx context.Context) (Pools, error) {
 	var ps Pools
 	return ps, c.do(ctx, http.MethodGet, "/pools", nil, &ps)

@@ -21,6 +21,11 @@ type Server struct {
 func NewServer() *Server {
 	s := &Server{mux: http.NewServeMux()}
 	s.mux.HandleFunc("GET /disks", s.disks)
+	s.mux.HandleFunc("GET /disks/{name}", func(w http.ResponseWriter, r *http.Request) {
+		dd, err := diskDetail(r.Context(), r.PathValue("name"))
+		reply(w, dd, err)
+	})
+	s.mux.HandleFunc("POST /disks/{name}/{action}", s.locked(s.diskAction))
 	s.mux.HandleFunc("GET /pools", s.pools)
 	s.mux.HandleFunc("POST /pools", s.locked(s.create))
 	s.mux.HandleFunc("POST /pools/{name}/add", s.locked(s.add))
@@ -177,5 +182,22 @@ func (s *Server) management(w http.ResponseWriter, r *http.Request) {
 		err = s.setManagement(r.Context(), req.Iface, req.On)
 	}
 	log.Printf("management role %s=%v: %v", req.Iface, req.On, err)
+	reply(w, nil, err)
+}
+
+func (s *Server) diskAction(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Confirm, Test string }
+	decode(r, &req)
+	name, action := r.PathValue("name"), r.PathValue("action")
+	var err error
+	switch action {
+	case "wipe":
+		err = wipeDisk(r.Context(), name, req.Confirm)
+	case "smart-test":
+		err = smartTest(r.Context(), name, req.Test)
+	default:
+		err = fmt.Errorf("unknown action %q", action)
+	}
+	log.Printf("disk %s %s: %v", name, action, err)
 	reply(w, nil, err)
 }

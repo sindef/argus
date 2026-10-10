@@ -146,6 +146,33 @@ func (s *Server) disksPage(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "disks.html", "layout", map[string]any{"Nav": "disks", "Disks": ds, "Error": errText(err)})
 }
 
+func (s *Server) diskModal(w http.ResponseWriter, r *http.Request) {
+	if s.hostd == nil {
+		flash(w, r, errors.New("host helper not available"))
+		return
+	}
+	dd, err := s.hostd.Disk(r.Context(), r.PathValue("name"))
+	if err != nil {
+		flash(w, r, err)
+		return
+	}
+	s.render(w, r, "disks.html", "disk-modal", map[string]any{"D": dd})
+}
+
+func (s *Server) diskAction(w http.ResponseWriter, r *http.Request) {
+	name, action := r.PathValue("name"), r.PathValue("action")
+	confirm := r.FormValue("confirm")
+	if confirm == "" {
+		confirm = r.Header.Get("HX-Prompt")
+	}
+	if err := s.hostd.DiskAction(r.Context(), name, action, confirm, r.FormValue("test")); err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: disk %s %s %s", session(r).User, name, action, r.FormValue("test"))
+	w.Header().Set("HX-Refresh", "true")
+}
+
 func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "dashboard.html", "layout", map[string]any{"Nav": "dashboard"})
 }

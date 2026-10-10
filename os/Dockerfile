@@ -13,7 +13,7 @@ RUN --mount=type=bind,from=kairos-init,src=/kairos-init,dst=/kairos-init \
     /kairos-init -s install -m generic -p k3s --provider-k3s-version "${K3S_VERSION}" --version "${VERSION}"
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends zfsutils-linux \
+    && apt-get install -y --no-install-recommends zfsutils-linux smartmontools \
     && apt-get install -y --allow-remove-essential coreutils-from-gnu coreutils-from-uutils- \
     && dpkg --purge --force-depends rust-coreutils \
     && apt-get purge -y --auto-remove \
