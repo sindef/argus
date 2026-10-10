@@ -15,6 +15,14 @@ type Network struct {
 	CIDR        string `json:"cidr"`
 	Gateway     string `json:"gateway"`
 	Description string `json:"description"`
+	Bridge      string `json:"bridge,omitempty"`
+}
+
+func (n Network) BridgeName() string {
+	if n.Bridge == "" {
+		return "br0"
+	}
+	return n.Bridge
 }
 
 func networksKey(org string) string { return "argus-networks-" + org }

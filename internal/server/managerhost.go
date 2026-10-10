@@ -1,11 +1,21 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
+	"log"
 	"net/http"
+	"slices"
+	"sort"
 	"strings"
+	"sync"
+	"time"
+
+	"argus/internal/hostd"
+	"argus/internal/manager"
 )
 
 var hostTabs = []struct{ Path, Label string }{{"dashboard", "Summary"}, {"pools", "Pools"}, {"disks", "Disks"}, {"network/host", "Network"}}
@@ -50,4 +60,93 @@ func (s *Server) managerHostUI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.render(w, r, "remote.html", "layout", map[string]any{"Nav": "host:" + n.Name, "Host": n.Name, "Tabs": hostTabs, "Tab": r.PathValue("path"), "Body": template.HTML(body)})
+}
+
+type hostNetRow struct {
+	Node    manager.Node
+	Info    HostNetInfo
+	Bridges []hostd.Iface
+	Mgmt    []string
+	Error   string
+}
+
+func (s *Server) fleetHostNets(ctx context.Context, org string) []hostNetRow {
+	var (
+		mu   sync.Mutex
+		rows []hostNetRow
+	)
+	nodes, _ := s.manager.NodesFor(ctx, org)
+	var wg sync.WaitGroup
+	for _, n := range nodes {
+		wg.Add(1)
+		go func(n manager.Node) {
+			defer wg.Done()
+			cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			defer cancel()
+			row := hostNetRow{Node: n}
+			if err := n.Call(cctx, http.MethodGet, "/api/host/network", nil, &row.Info); err != nil {
+				row.Error = err.Error()
+			}
+			for _, i := range row.Info.Net.Ifaces {
+				if i.Kind == "bridge" {
+					row.Bridges = append(row.Bridges, i)
+				}
+				if i.Master == "" && (!row.Info.Net.Restricted || slices.Contains(row.Info.Net.Management, i.Name)) {
+					row.Mgmt = append(row.Mgmt, i.Name)
+				}
+			}
+			mu.Lock()
+			rows = append(rows, row)
+			mu.Unlock()
+		}(n)
+	}
+	wg.Wait()
+	sort.Slice(rows, func(i, j int) bool { return rows[i].Node.Name < rows[j].Node.Name })
+	return rows
+}
+
+func (s *Server) managerHostNets(w http.ResponseWriter, r *http.Request) {
+	s.render(w, r, "hostnets.html", "layout", map[string]any{"Nav": "hostnets", "Rows": s.fleetHostNets(r.Context(), session(r).Org)})
+}
+
+func (s *Server) managerBridgeRollout(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	spec := hostd.BridgeSpec{Name: r.FormValue("name"), Ports: strings.Fields(strings.ReplaceAll(r.FormValue("ports"), ",", " ")), Bond: r.FormValue("bond"), BondMode: r.FormValue("bond_mode")}
+	hosts := r.Form["hosts"]
+	sort.Strings(hosts)
+	if len(hosts) == 0 || spec.Name == "" || len(spec.Ports) == 0 {
+		flash(w, r, errors.New("name, ports and at least one host are required"))
+		return
+	}
+	var out []string
+	defer func() { w.Write([]byte(template.HTMLEscapeString(strings.Join(out, "\n")))) }()
+	for i, name := range hosts {
+		n, err := s.manager.NodeIn(r.Context(), session(r).Org, name)
+		if err == nil {
+			err = s.rolloutBridge(r.Context(), n, spec)
+		}
+		if err != nil {
+			out = append(out, name+": "+strings.TrimPrefix(err.Error(), name+": "))
+			if rest := hosts[i+1:]; len(rest) > 0 {
+				out = append(out, "Stopped; not changed: "+strings.Join(rest, ", "))
+			}
+			return
+		}
+		log.Printf("%s: bridge %s rolled out to %s", session(r).User, spec.Name, name)
+		out = append(out, name+": "+spec.Name+" created and confirmed")
+	}
+}
+
+func (s *Server) rolloutBridge(ctx context.Context, n manager.Node, spec hostd.BridgeSpec) error {
+	if err := n.Call(ctx, http.MethodPost, "/api/host/network/bridge", spec, nil); err != nil {
+		return err
+	}
+	time.Sleep(5 * time.Second)
+	pctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	var info HostNetInfo
+	if err := n.Call(pctx, http.MethodGet, "/api/host/network", nil, &info); err != nil {
+		return fmt.Errorf("unreachable after the change, it rolls back automatically: %w", err)
+	}
+	return n.Call(ctx, http.MethodPost, "/api/host/network/confirm", nil, nil)
 }

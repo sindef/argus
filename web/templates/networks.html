@@ -43,10 +43,11 @@
 {{if .CanEdit}}<div class="toolbar"><button class="btn primary" data-dialog="new-network">{{template "icon" "plus"}}Define network</button></div>{{end}}
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Name</th><th>VLAN</th><th>CIDR</th><th>Gateway</th><th>Applied</th><th>Attached VMs</th><th></th></tr></thead>
+  <thead><tr><th>Name</th><th>VLAN</th><th>Bridge</th><th>CIDR</th><th>Gateway</th><th>Applied</th><th>Attached VMs</th><th></th></tr></thead>
   <tbody>{{range .Rows}}<tr>
     <td>{{template "icon" "network"}}{{.Name}}{{with .Description}} <span class="muted">{{.}}</span>{{end}}{{if not .Defined}} <span class="badge" title="Exists on a host but is not defined in Argus Manager">host only</span>{{end}}</td>
     <td>{{if .VLAN}}{{.VLAN}}{{else}}<span class="muted">untagged</span>{{end}}</td>
+    <td class="mono">{{.BridgeName}}</td>
     <td>{{with .CIDR}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
     <td>{{with .Gateway}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
     <td><span class="dot {{if eq .Applied $.Reachable}}Applied{{else}}Warning{{end}}" title="{{range $h, $st := .Hosts}}{{$h}}: {{$st}}&#10;{{end}}">{{.Applied}} / {{$.Reachable}} hosts</span></td>
@@ -55,7 +56,7 @@
       {{if and .Defined (ne .Applied $.Reachable)}}<button class="link" hx-post="/networks/{{.Name}}/apply" hx-target="#flash">Apply</button>{{end}}
       <button class="link danger" hx-post="/networks/{{.Name}}/delete" hx-target="#flash" hx-confirm="Delete {{.Name}} from all hosts?">Delete</button>
     {{end}}</td>
-  </tr>{{else}}<tr><td colspan="7" class="muted">No networks.</td></tr>{{end}}</tbody>
+  </tr>{{else}}<tr><td colspan="8" class="muted">No networks.</td></tr>{{end}}</tbody>
 </table>
 </div>
 <div class="card spaced">
@@ -69,7 +70,9 @@
     <div class="row">
       <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
       <label>VLAN <input name="vlan" type="number" min="1" max="4094" placeholder="untagged"></label>
+      <label>Bridge <span class="help" title="Must exist on every host. Create it under Host networks first.">?</span><input name="bridge" placeholder="br0" list="bridge-names"></label>
     </div>
+    <datalist id="bridge-names">{{range $.AllBridges}}<option>{{.}}</option>{{end}}</datalist>
     <div class="row">
       <label>CIDR <span class="help" title="Descriptive only. Addressing comes from your network's DHCP or static guest config.">?</span><input name="cidr" placeholder="10.10.1.0/24"></label>
       <label>Gateway <input name="gateway" placeholder="10.10.1.1"></label>

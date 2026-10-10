@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -65,7 +66,7 @@ func (s *Server) managerNetworks(w http.ResponseWriter, r *http.Request) {
 	for host, nets := range onHost {
 		for name, x := range nets {
 			if rows[name] == nil {
-				rows[name] = &netRow{Network: manager.Network{Name: name, VLAN: x.VLAN}, Hosts: map[string]string{}}
+				rows[name] = &netRow{Network: manager.Network{Name: name, VLAN: x.VLAN, Bridge: x.Bridge}, Hosts: map[string]string{}}
 			}
 		}
 		for name, row := range rows {
@@ -73,7 +74,7 @@ func (s *Server) managerNetworks(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case !ok:
 				row.Hosts[host] = "Missing"
-			case x.VLAN != row.VLAN:
+			case x.VLAN != row.VLAN || x.Bridge != row.BridgeName():
 				row.Hosts[host] = "Mismatch"
 			default:
 				row.Hosts[host] = "Applied"
@@ -90,12 +91,21 @@ func (s *Server) managerNetworks(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		errs = err.Error()
 	}
-	s.render(w, r, "networks.html", "layout", map[string]any{"Nav": "networks", "Rows": out, "Reachable": len(onHost), "Bridges": bridges, "CanEdit": session(r).Role.Can(auth.Admin), "Error": errs})
+	var all []string
+	for _, bs := range bridges {
+		for _, b := range bs {
+			if !slices.Contains(all, b) {
+				all = append(all, b)
+			}
+		}
+	}
+	sort.Strings(all)
+	s.render(w, r, "networks.html", "layout", map[string]any{"Nav": "networks", "Rows": out, "Reachable": len(onHost), "Bridges": bridges, "AllBridges": all, "CanEdit": session(r).Role.Can(auth.Admin), "Error": errs})
 }
 
 func (s *Server) pushNetwork(r *http.Request, op string, n manager.Network) string {
 	return fanOut(r.Context(), s.manager.Inventory(session(r).Org), func(ctx context.Context, node manager.Node) error {
-		return node.Call(ctx, http.MethodPost, "/api/networks/"+op, networkReq{Name: n.Name, VLAN: n.VLAN}, nil)
+		return node.Call(ctx, http.MethodPost, "/api/networks/"+op, networkReq{Name: n.Name, VLAN: n.VLAN, Bridge: n.Bridge}, nil)
 	})
 }
 
@@ -104,7 +114,7 @@ func (s *Server) managerAddNetwork(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		err = validNetwork(req)
 	}
-	n := manager.Network{Name: req.Name, VLAN: req.VLAN, CIDR: strings.TrimSpace(r.FormValue("cidr")), Gateway: strings.TrimSpace(r.FormValue("gateway")), Description: strings.TrimSpace(r.FormValue("description"))}
+	n := manager.Network{Name: req.Name, VLAN: req.VLAN, Bridge: req.Bridge, CIDR: strings.TrimSpace(r.FormValue("cidr")), Gateway: strings.TrimSpace(r.FormValue("gateway")), Description: strings.TrimSpace(r.FormValue("description"))}
 	if _, _, cerr := net.ParseCIDR(n.CIDR); err == nil && n.CIDR != "" && cerr != nil {
 		err = errors.New("invalid CIDR")
 	}

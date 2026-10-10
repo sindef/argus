@@ -1,0 +1,38 @@
+{{define "content"}}
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-cable"/></svg>
+  <div><h1>Host networks</h1><div class="crumbs">Networking / Host networks</div></div>
+  <div class="actions"><button class="btn primary" data-dialog="rollout">{{template "icon" "plus"}}Create bridge on hosts</button></div>
+</div>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Host</th><th>Bridges</th><th>Management</th><th>Migration</th><th>Pending change</th></tr></thead>
+  <tbody>{{range .Rows}}<tr>
+    <td><a href="/hosts/{{.Node.Name}}/network/host">{{template "icon" "server"}}{{.Node.Name}}</a></td>
+    {{if .Error}}<td colspan="4"><span class="dot Failed">{{.Error}}</span></td>{{else}}
+    <td>{{range .Bridges}}<div><span class="mono">{{.Name}}</span> <span class="muted">{{range .Ports}}{{.}} {{end}}</span></div>{{end}}</td>
+    <td>{{range .Mgmt}}{{.}} {{end}}{{if not .Info.Net.Restricted}}<span class="muted">(unrestricted)</span>{{end}}</td>
+    <td class="mono">{{.Info.Migration}}</td>
+    <td>{{with .Info.Net.Pending}}<span class="dot Warning">{{.Description}}</span>{{else}}<span class="muted">—</span>{{end}}</td>
+    {{end}}
+  </tr>{{else}}<tr><td colspan="5" class="muted">No hosts.</td></tr>{{end}}</tbody>
+</table>
+</div>
+<dialog id="rollout" class="card wide">
+  <form hx-post="/network/hosts/bridge" hx-target="#rollout-result" class="form" hx-disabled-elt="find button[type=submit]">
+    <h2>Create bridge on hosts</h2>
+    <div class="row">
+      <label>Name <input name="name" pattern="[a-z][a-z0-9-]{0,14}" placeholder="br1" required></label>
+      <label>Ports <span class="help" title="Port names, space separated. They must exist and be unused on every selected host.">?</span><input name="ports" placeholder="enp3s0 enp4s0" required></label>
+    </div>
+    <div class="row">
+      <label>Bond name <span class="help" title="Optional. Bonds the ports before bridging them.">?</span><input name="bond" pattern="[a-z][a-z0-9-]{0,14}" placeholder="bond0"></label>
+      <label>Bond mode <select name="bond_mode"><option>active-backup</option><option>802.3ad</option><option>balance-alb</option><option>balance-tlb</option><option>balance-xor</option></select></label>
+    </div>
+    <div class="field">Hosts <span class="help" title="Applied one host at a time. Each host is confirmed only once Argus Manager can still reach it; the rollout stops at the first failure.">?</span></div>
+    <div class="table-wrap picks"><table><tbody>{{range .Rows}}<tr><td><label class="check"><input type="checkbox" name="hosts" value="{{.Node.Name}}"{{if .Error}} disabled{{end}}> {{.Node.Name}}</label></td><td class="muted">{{range .Bridges}}{{.Name}} {{end}}</td></tr>{{end}}</tbody></table></div>
+    <pre id="rollout-result" class="log"></pre>
+    <div class="actions"><button class="btn" type="button" onclick="location.reload()">Close</button><button class="btn primary" type="submit">Create</button></div>
+  </form>
+</dialog>
+{{end}}

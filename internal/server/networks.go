@@ -101,6 +101,8 @@ func (s *Server) apiNetworkOp(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.PathValue("op") == "delete" {
 		err = s.kube.DeleteNetwork(r.Context(), n.Name)
+	} else if n.Bridge != "" && !slices.Contains(s.bridges(r.Context()), n.Bridge) {
+		err = fmt.Errorf("bridge %s not found on %s", n.Bridge, s.nodeName)
 	} else {
 		err = s.kube.CreateNetwork(r.Context(), n.Name, n.VLAN, n.Bridge)
 	}
@@ -248,4 +250,44 @@ func (s *Server) setRoles(r *http.Request) error {
 		return s.hostd.SetManagement(hostd.WithAccess(r.Context(), r.Host), name, on)
 	}
 	return nil
+}
+
+type HostNetInfo struct {
+	Net       hostd.HostNet `json:"net"`
+	Migration string        `json:"migration"`
+}
+
+func (s *Server) apiHostNetwork(w http.ResponseWriter, r *http.Request) {
+	hn, err := s.hostNet(r)
+	if err != nil {
+		apiError(w, r, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, HostNetInfo{Net: hn, Migration: s.kube.MigrationBridge(r.Context())})
+}
+
+func (s *Server) apiHostNetworkOp(w http.ResponseWriter, r *http.Request) {
+	if s.hostd == nil {
+		apiError(w, r, http.StatusServiceUnavailable, errors.New("host helper not available"))
+		return
+	}
+	ctx := hostd.WithAccess(r.Context(), r.Host)
+	var err error
+	switch op := r.PathValue("op"); op {
+	case "bridge":
+		var spec hostd.BridgeSpec
+		if err = json.NewDecoder(r.Body).Decode(&spec); err == nil {
+			err = s.hostd.CreateBridge(ctx, spec)
+		}
+	case "confirm":
+		err = s.hostd.NetworkDecision(ctx, op)
+	default:
+		err = errors.New("unknown network operation")
+	}
+	if err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	log.Printf("%s: host network %s", session(r).User, r.PathValue("op"))
+	writeJSON(w, map[string]string{})
 }
