@@ -54,5 +54,7 @@ RUN sed -i "s/argus:VERSION/argus:${VERSION}/" /usr/share/argus/manifests/40-arg
 RUN --mount=type=bind,from=kairos-init,src=/kairos-init,dst=/kairos-init \
     /kairos-init -s init -m generic -p k3s --provider-k3s-version "${K3S_VERSION}" --version "${VERSION}"
 
+RUN systemctl disable fail2ban && dpkg --purge fail2ban && rm -rf /etc/fail2ban
+
 FROM scratch
 COPY --from=build / /
