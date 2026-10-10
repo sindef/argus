@@ -138,8 +138,8 @@ func (s *Server) poolAction(w http.ResponseWriter, r *http.Request) {
 			name = spec.Name
 			err = s.kube.EnsurePoolClass(r.Context(), name)
 		}
-	case "import":
-		if err = s.hostd.ImportPool(r.Context(), name); err == nil {
+	case "import", "force-import":
+		if err = s.hostd.ImportPool(r.Context(), name, op == "force-import"); err == nil {
 			err = s.kube.EnsurePoolClass(r.Context(), name)
 		}
 	case "export", "destroy":

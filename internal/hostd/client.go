@@ -83,8 +83,12 @@ func (c *Client) AddToPool(ctx context.Context, name string, spec PoolSpec) erro
 	return c.do(ctx, http.MethodPost, "/pools/"+name+"/add", spec, nil)
 }
 
-func (c *Client) ImportPool(ctx context.Context, name string) error {
-	return c.do(ctx, http.MethodPost, "/pools/"+name+"/import", nil, nil)
+func (c *Client) ImportPool(ctx context.Context, name string, force bool) error {
+	path := "/pools/" + name + "/import"
+	if force {
+		path += "?force=1"
+	}
+	return c.do(ctx, http.MethodPost, path, nil, nil)
 }
 
 func (c *Client) ReleasePool(ctx context.Context, name, action, confirm string) error {

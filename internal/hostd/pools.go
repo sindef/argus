@@ -234,11 +234,18 @@ func (s *Server) addToPool(ctx context.Context, name string, spec PoolSpec) erro
 	return err
 }
 
-func importPool(ctx context.Context, name string) error {
+func importPool(ctx context.Context, name string, force bool) error {
 	if !validPool.MatchString(name) {
 		return errors.New("invalid pool name")
 	}
-	if _, err := run(ctx, "zpool", "import", "-N", name); err != nil {
+	args := []string{"import", "-N", name}
+	if force {
+		args = []string{"import", "-f", "-N", name}
+	}
+	if out, err := run(ctx, "zpool", args...); err != nil {
+		if strings.Contains(out, "in use from another system") {
+			return fmt.Errorf("pool %s was last used by another host; use Force import only if no other host is using these disks", name)
+		}
 		return err
 	}
 	return persist(name, true)

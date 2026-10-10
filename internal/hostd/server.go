@@ -112,7 +112,7 @@ func (s *Server) add(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) importPool(w http.ResponseWriter, r *http.Request) {
-	err := importPool(r.Context(), r.PathValue("name"))
+	err := importPool(r.Context(), r.PathValue("name"), r.URL.Query().Get("force") == "1")
 	log.Printf("import pool %s: %v", r.PathValue("name"), err)
 	reply(w, nil, err)
 }

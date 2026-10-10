@@ -37,7 +37,7 @@
   <div class="table-wrap"><table>
     <thead><tr><th>Name</th><th>State</th><th>ID</th><th></th></tr></thead>
     <tbody>{{range .}}<tr><td>{{.Name}}</td><td>{{.State}}</td><td class="mono">{{.ID}}</td>
-      <td class="row-actions"><button class="link" hx-post="/pools/{{.Name}}/import" hx-target="#flash" hx-confirm="Import pool {{.Name}}?">Import</button></td></tr>{{end}}</tbody>
+      <td class="row-actions"><button class="link" hx-post="/pools/{{.Name}}/import" hx-target="#flash" hx-confirm="Import pool {{.Name}}?">Import</button><button class="link danger" hx-post="/pools/{{.Name}}/force-import" hx-target="#flash" hx-confirm="Force import {{.Name}}? Only do this if no other host is using these disks.">Force import</button></td></tr>{{end}}</tbody>
   </table></div>
 </div>
 {{end}}
