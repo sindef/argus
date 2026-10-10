@@ -10,12 +10,12 @@ spec:
       - resourceType: Deployment
         resourceName: cdi-apiserver
         type: strategic
-        patch: '{"spec":{"template":{"spec":{"containers":[{"name":"cdi-apiserver","resources":{"requests":{"memory":"40Mi"}}}]}}}}'
+        patch: '{"spec":{"template":{"spec":{"containers":[{"name":"cdi-apiserver","env":[{"name":"GOGC","value":"50"}],"resources":{"requests":{"memory":"40Mi"}}}]}}}}'
       - resourceType: Deployment
         resourceName: cdi-deployment
         type: strategic
-        patch: '{"spec":{"template":{"spec":{"containers":[{"name":"cdi-deployment","resources":{"requests":{"memory":"80Mi"}}}]}}}}'
+        patch: '{"spec":{"template":{"spec":{"containers":[{"name":"cdi-deployment","env":[{"name":"GOGC","value":"50"}],"resources":{"requests":{"memory":"80Mi"}}}]}}}}'
       - resourceType: Deployment
         resourceName: cdi-uploadproxy
         type: strategic
-        patch: '{"spec":{"template":{"spec":{"containers":[{"name":"cdi-uploadproxy","resources":{"requests":{"memory":"32Mi"}}}]}}}}'
+        patch: '{"spec":{"template":{"spec":{"containers":[{"name":"cdi-uploadproxy","env":[{"name":"GOGC","value":"50"}],"resources":{"requests":{"memory":"32Mi"}}}]}}}}'
