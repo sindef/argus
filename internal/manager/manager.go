@@ -21,6 +21,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 const nodesKey = "argus-nodes"
@@ -310,18 +311,52 @@ func (c *Manager) checkNetworks(ctx context.Context, src, dst Node, ns, vm strin
 	if source == nil {
 		return fmt.Errorf("%s not found on %s", vm, src.Name)
 	}
-	var nets []kube.Network
-	if err := dst.do(ctx, http.MethodGet, "/api/networks", nil, &nets); err != nil {
+	var srcNets, dstNets []kube.Network
+	if err := src.do(ctx, http.MethodGet, "/api/networks", nil, &srcNets); err != nil {
 		return err
 	}
-	have := map[string]bool{}
-	for _, n := range nets {
-		have[n.Name] = true
-		have[kube.Namespace+"/"+n.Name] = true
+	if err := dst.do(ctx, http.MethodGet, "/api/networks", nil, &dstNets); err != nil {
+		return err
 	}
-	for _, nic := range source.NICs {
-		if nic.Network != "" && nic.Network != "pod" && !have[nic.Network] {
-			return fmt.Errorf("network %s missing on %s", nic.Network, dst.Name)
+	have := map[string]kube.Network{}
+	for _, n := range dstNets {
+		have[n.Name] = n
+	}
+	for _, sn := range srcNets {
+		used := false
+		for _, nic := range source.NICs {
+			used = used || nic.Network == sn.Name || nic.Network == kube.Namespace+"/"+sn.Name
+		}
+		if !used {
+			continue
+		}
+		dn, ok := have[sn.Name]
+		switch {
+		case !ok:
+			return fmt.Errorf("network %s missing on %s", sn.Name, dst.Name)
+		case dn.VLAN != sn.VLAN:
+			return fmt.Errorf("network %s is VLAN %d on %s but VLAN %d on %s", sn.Name, sn.VLAN, src.Name, dn.VLAN, dst.Name)
+		}
+	}
+	var st struct{ Pools []kube.Pool }
+	if err := dst.do(ctx, http.MethodGet, "/api/storage", nil, &st); err != nil {
+		return err
+	}
+	var free int64
+	for _, p := range st.Pools {
+		free += p.Free
+	}
+	if free < source.StorageBytes {
+		return fmt.Errorf("%s has %d GiB free, %s needs %d GiB", dst.Name, free>>30, vm, source.StorageBytes>>30)
+	}
+	if source.Running {
+		var m kube.MetricsSample
+		if err := dst.do(ctx, http.MethodGet, "/api/metrics", nil, &m); err != nil {
+			return err
+		}
+		need, _ := resource.ParseQuantity(source.Memory)
+		if avail := m.MemTotal - m.MemUsed; avail < need.Value() {
+			return fmt.Errorf("%s has %d MiB memory available, %s needs %d MiB", dst.Name, avail>>20, vm, need.Value()>>20)
 		}
 	}
 	return nil
