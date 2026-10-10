@@ -46,8 +46,11 @@ func (c *Client) ListNetworks(ctx context.Context) ([]Network, error) {
 	return out, nil
 }
 
-func (c *Client) CreateNetwork(ctx context.Context, name string, vlan int) error {
-	cfg, err := json.Marshal(cniConfig{CNIVersion: "0.3.1", Name: name, Type: "bridge", Bridge: bridge, VLAN: vlan})
+func (c *Client) CreateNetwork(ctx context.Context, name string, vlan int, br string) error {
+	if br == "" {
+		br = bridge
+	}
+	cfg, err := json.Marshal(cniConfig{CNIVersion: "0.3.1", Name: name, Type: "bridge", Bridge: br, VLAN: vlan})
 	if err != nil {
 		return err
 	}

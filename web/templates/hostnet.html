@@ -1,0 +1,60 @@
+{{define "content"}}
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-cable"/></svg>
+  <div><h1>Host network</h1><div class="crumbs">Network / Host network</div></div>
+  <div class="actions"><button class="btn primary" data-dialog="new-bridge">{{template "icon" "plus"}}Create bridge</button></div>
+</div>
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+{{with .Net}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Interface</th><th>Type</th><th>State</th><th>Speed</th><th>MAC</th><th>Addresses</th><th>Member of / ports</th><th></th></tr></thead>
+  <tbody>{{range .Ifaces}}<tr>
+    <td>{{template "icon" "cable"}}{{.Name}}{{if .Mgmt}} <span class="badge" title="Carries the management address and default route">management</span>{{end}}{{if .Managed}} <span class="badge">argus</span>{{end}}</td>
+    <td>{{.Kind}}</td>
+    <td><span class="dot {{if eq .State "up"}}Up{{else}}Failed{{end}}">{{.State}}</span></td>
+    <td>{{if gt .Speed 0}}{{.Speed}} Mb/s{{else}}<span class="muted">—</span>{{end}}</td>
+    <td class="mono">{{.MAC}}</td>
+    <td>{{range .Addresses}}{{.}} {{else}}<span class="muted">—</span>{{end}}</td>
+    <td>{{with .Master}}{{.}}{{else}}{{range .Ports}}{{.}} {{end}}{{end}}</td>
+    <td class="row-actions">{{if and (eq .Kind "bridge") .Managed (not .Mgmt)}}<button class="link danger" hx-post="/network/host/delete" hx-vals='{"bridge":"{{.Name}}"}' hx-target="#flash" hx-confirm="Delete bridge {{.Name}}? Its ports are left unconfigured.">Delete</button>{{end}}</td>
+  </tr>{{end}}</tbody>
+</table>
+</div>
+<div class="card spaced">
+  <div class="card-head">{{template "icon" "globe"}}<h2>Host address</h2></div>
+  <form hx-post="/network/host/address" hx-target="#flash" class="form addr-form" hx-confirm="Apply? Confirm it within 2 minutes from the new address or it rolls back.">
+    <div class="row">
+      <label>Interface <select name="iface">{{range .Ifaces}}{{if not .Master}}<option value="{{.Name}}"{{if .Mgmt}} selected{{end}}>{{.Name}}{{range .Addresses}} ({{.}}){{end}}</option>{{end}}{{end}}</select></label>
+      <div class="seg addr-mode">
+        <label><input type="radio" name="mode" value="dhcp" checked> DHCP</label>
+        <label><input type="radio" name="mode" value="static"> Static</label>
+      </div>
+    </div>
+    <div class="row static-only">
+      <label>Address (CIDR) <input name="address" placeholder="192.168.1.10/24"></label>
+      <label>Gateway <input name="gateway" placeholder="192.168.1.1" value="{{.Gateway}}"></label>
+      <label>DNS servers <input name="dns" placeholder="1.1.1.1 9.9.9.9" value="{{range $i, $d := .DNS}}{{if $i}} {{end}}{{$d}}{{end}}"></label>
+    </div>
+    <div><button class="btn primary" type="submit">Apply</button></div>
+  </form>
+</div>
+{{end}}
+<dialog id="new-bridge" class="card wide">
+  <form hx-post="/network/host/bridge" hx-target="#bridge-form-error" class="form">
+    <h2>Create bridge</h2>
+    <p id="bridge-form-error" class="error form-error"></p>
+    <div class="row">
+      <label>Name <input name="name" pattern="[a-z][a-z0-9-]{0,14}" placeholder="br1" required></label>
+      <label>Bond name <span class="help" title="Optional. Bonds the selected ports before bridging them; needs two or more ports.">?</span><input name="bond" pattern="[a-z][a-z0-9-]{0,14}" placeholder="bond0"></label>
+      <label>Bond mode <select name="bond_mode"><option>active-backup</option><option>802.3ad</option><option>balance-alb</option><option>balance-tlb</option><option>balance-xor</option></select></label>
+    </div>
+    <div class="field">Ports</div>
+    <div class="table-wrap picks"><table><tbody>{{range .Ports}}<tr>
+      <td><label class="check"><input type="checkbox" name="ports" value="{{.Name}}"> {{.Name}}</label></td><td class="mono">{{.MAC}}</td>
+      <td><span class="dot {{if eq .State "up"}}Up{{else}}Failed{{end}}">{{.State}}</span></td><td>{{with .Master}}in {{.}}{{end}}</td>
+    </tr>{{else}}<tr><td class="muted">No spare network ports.</td></tr>{{end}}</tbody></table></div>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">{{template "icon" "plus"}}Create bridge</button></div>
+  </form>
+</dialog>
+{{end}}

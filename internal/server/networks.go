@@ -1,14 +1,18 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
 	"argus/internal/auth"
+	"argus/internal/hostd"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
@@ -27,16 +31,17 @@ func (s *Server) networks(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	s.render(w, r, "networks.html", "layout", map[string]any{"Nav": "networks", "Networks": nets, "Attached": attached, "CanEdit": session(r).Role.Can(auth.Admin), "Error": errText(err)})
+	s.render(w, r, "networks.html", "layout", map[string]any{"Nav": "networks", "Networks": nets, "Attached": attached, "Bridges": s.bridges(r.Context()), "CanEdit": session(r).Role.Can(auth.Admin), "Error": errText(err)})
 }
 
 type networkReq struct {
-	Name string `json:"name"`
-	VLAN int    `json:"vlan"`
+	Name   string `json:"name"`
+	VLAN   int    `json:"vlan"`
+	Bridge string `json:"bridge"`
 }
 
 func parseNetwork(r *http.Request) (networkReq, error) {
-	n := networkReq{Name: r.FormValue("name")}
+	n := networkReq{Name: r.FormValue("name"), Bridge: r.FormValue("bridge")}
 	var err error
 	if v := r.FormValue("vlan"); v != "" {
 		n.VLAN, err = strconv.Atoi(v)
@@ -60,8 +65,11 @@ func (s *Server) createNetwork(w http.ResponseWriter, r *http.Request) {
 		err = validNetwork(n)
 	}
 	name, vlan := n.Name, n.VLAN
+	if err == nil && n.Bridge != "" && !slices.Contains(s.bridges(r.Context()), n.Bridge) {
+		err = fmt.Errorf("bridge %s not found", n.Bridge)
+	}
 	if err == nil {
-		err = s.kube.CreateNetwork(r.Context(), name, vlan)
+		err = s.kube.CreateNetwork(r.Context(), name, vlan, n.Bridge)
 	}
 	if err != nil {
 		flash(w, r, err)
@@ -94,7 +102,7 @@ func (s *Server) apiNetworkOp(w http.ResponseWriter, r *http.Request) {
 	if r.PathValue("op") == "delete" {
 		err = s.kube.DeleteNetwork(r.Context(), n.Name)
 	} else {
-		err = s.kube.CreateNetwork(r.Context(), n.Name, n.VLAN)
+		err = s.kube.CreateNetwork(r.Context(), n.Name, n.VLAN, n.Bridge)
 	}
 	if apierrors.IsAlreadyExists(err) || apierrors.IsNotFound(err) {
 		err = nil
@@ -105,4 +113,75 @@ func (s *Server) apiNetworkOp(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("%s: network %s %s vlan %d", session(r).User, r.PathValue("op"), n.Name, n.VLAN)
 	writeJSON(w, map[string]string{})
+}
+
+func (s *Server) bridges(ctx context.Context) []string {
+	if s.hostd == nil {
+		return nil
+	}
+	hn, err := s.hostd.Network(ctx)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, i := range hn.Ifaces {
+		if i.Kind == "bridge" {
+			out = append(out, i.Name)
+		}
+	}
+	return out
+}
+
+func (s *Server) hostNetworkPage(w http.ResponseWriter, r *http.Request) {
+	data := map[string]any{"Nav": "hostnet"}
+	if s.hostd == nil {
+		data["Error"] = "host helper not available"
+	} else {
+		hn, err := s.hostd.Network(hostd.WithAccess(r.Context(), r.Host))
+		data["Net"], data["Error"] = hn, errText(err)
+		var free []hostd.Iface
+		for _, i := range hn.Ifaces {
+			if i.Kind == "ether" && !i.Mgmt {
+				free = append(free, i)
+			}
+		}
+		data["Ports"] = free
+	}
+	s.render(w, r, "hostnet.html", "layout", data)
+}
+
+func (s *Server) hostNetworkAction(w http.ResponseWriter, r *http.Request) {
+	ctx := hostd.WithAccess(r.Context(), r.Host)
+	var err error
+	switch op := r.PathValue("op"); op {
+	case "bridge":
+		r.ParseForm()
+		spec := hostd.BridgeSpec{Name: r.FormValue("name"), Ports: r.Form["ports"], Bond: r.FormValue("bond"), BondMode: r.FormValue("bond_mode")}
+		err = s.hostd.CreateBridge(ctx, spec)
+	case "delete":
+		br := r.FormValue("bridge")
+		nets, lerr := s.kube.ListNetworks(ctx)
+		err = lerr
+		for _, n := range nets {
+			if err == nil && n.Bridge == br {
+				err = fmt.Errorf("network %s uses %s; delete it first", n.Name, br)
+			}
+		}
+		if err == nil {
+			err = s.hostd.DeleteBridge(ctx, br)
+		}
+	case "address":
+		a := hostd.AddressSpec{Iface: r.FormValue("iface"), DHCP: r.FormValue("mode") == "dhcp", Address: strings.TrimSpace(r.FormValue("address")), Gateway: strings.TrimSpace(r.FormValue("gateway")), DNS: strings.Fields(strings.ReplaceAll(r.FormValue("dns"), ",", " "))}
+		err = s.hostd.SetAddress(ctx, a)
+	case "confirm", "rollback":
+		err = s.hostd.NetworkDecision(ctx, op)
+	default:
+		err = errors.New("unknown network operation")
+	}
+	if err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: host network %s", session(r).User, r.PathValue("op"))
+	w.Header().Set("HX-Refresh", "true")
 }

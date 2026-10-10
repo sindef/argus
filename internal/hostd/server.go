@@ -1,6 +1,7 @@
 package hostd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -25,16 +26,30 @@ func NewServer() *Server {
 	s.mux.HandleFunc("POST /pools/{name}/add", s.locked(s.add))
 	s.mux.HandleFunc("POST /pools/{name}/import", s.locked(s.importPool))
 	s.mux.HandleFunc("POST /pools/{name}/{action}", s.locked(s.release))
+	s.mux.HandleFunc("GET /network", s.network)
+	s.mux.HandleFunc("POST /network/bridges", s.locked(s.bridge))
+	s.mux.HandleFunc("POST /network/bridges/{name}/delete", s.locked(s.unbridge))
+	s.mux.HandleFunc("POST /network/address", s.locked(s.address))
+	s.mux.HandleFunc("POST /network/confirm", s.locked(func(w http.ResponseWriter, r *http.Request) { reply(w, nil, Confirm(r.Context())) }))
+	s.mux.HandleFunc("POST /network/rollback", s.locked(func(w http.ResponseWriter, r *http.Request) { reply(w, nil, Rollback(r.Context())) }))
 	s.touch()
 	return s
 }
 
 func (s *Server) touch() { s.last.Store(time.Now().Unix()) }
 
+const (
+	NodeIPHeader = "X-Argus-Node-IP"
+	AccessHeader = "X-Argus-Access-Host"
+)
+
+type nodeIPKey struct{}
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.active.Add(1)
 	defer func() { s.active.Add(-1); s.touch() }()
-	s.mux.ServeHTTP(w, r)
+	ips := []string{r.Header.Get(NodeIPHeader), r.Header.Get(AccessHeader)}
+	s.mux.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), nodeIPKey{}, ips)))
 }
 
 func (s *Server) Idle(d time.Duration) bool {
@@ -111,6 +126,37 @@ func (s *Server) release(w http.ResponseWriter, r *http.Request) {
 	decode(r, &req)
 	err := releasePool(r.Context(), r.PathValue("name"), action, req.Confirm)
 	log.Printf("%s pool %s: %v", action, r.PathValue("name"), err)
+	reply(w, nil, err)
+}
+
+func (s *Server) network(w http.ResponseWriter, r *http.Request) {
+	hn, err := hostNet(r.Context())
+	reply(w, hn, err)
+}
+
+func (s *Server) bridge(w http.ResponseWriter, r *http.Request) {
+	var spec BridgeSpec
+	err := decode(r, &spec)
+	if err == nil {
+		err = s.createBridge(r.Context(), spec)
+	}
+	log.Printf("create bridge %s: %v", spec.Name, err)
+	reply(w, nil, err)
+}
+
+func (s *Server) unbridge(w http.ResponseWriter, r *http.Request) {
+	err := s.deleteBridge(r.Context(), r.PathValue("name"))
+	log.Printf("delete bridge %s: %v", r.PathValue("name"), err)
+	reply(w, nil, err)
+}
+
+func (s *Server) address(w http.ResponseWriter, r *http.Request) {
+	var a AddressSpec
+	err := decode(r, &a)
+	if err == nil {
+		err = s.setAddress(r.Context(), a)
+	}
+	log.Printf("set address %s: %v", a.Iface, err)
 	reply(w, nil, err)
 }
 

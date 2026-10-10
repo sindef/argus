@@ -2,10 +2,12 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"html/template"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -63,11 +65,11 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		k.Guard = s.maintenance
 	}
 	if o.RunDir != "" {
-		s.hostd = hostd.NewClient(filepath.Join(o.RunDir, "hostd.sock"))
+		s.hostd = hostd.NewClient(filepath.Join(o.RunDir, "hostd.sock"), os.Getenv("HOST_IP"))
 	}
 	s.version = readEnv(o.ReleaseFile)["KAIROS_VERSION"]
 	s.sso.m = map[string]ssoFlow{}
-	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html"} {
+	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html", "hostnet.html"} {
 		t, err := template.New(p).Funcs(funcs).ParseFS(web.FS, "templates/layout.html", "templates/manager-nav.html", "templates/"+p)
 		if err != nil {
 			return nil, err
@@ -127,6 +129,8 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("GET /volumes", s.require(auth.ReadOnly, s.volumesPage))
 	s.mux.HandleFunc("POST /volumes/{op}", s.require(auth.Operator, s.volumeAction))
 	s.mux.HandleFunc("GET /disks", s.require(auth.Admin, s.disksPage))
+	s.mux.HandleFunc("GET /network/host", s.require(auth.Admin, s.hostNetworkPage))
+	s.mux.HandleFunc("POST /network/host/{op}", s.require(auth.Admin, s.hostNetworkAction))
 	s.mux.HandleFunc("GET /pools", s.require(auth.Admin, s.poolsPage))
 	s.mux.HandleFunc("GET /pools/new", s.require(auth.Admin, s.poolModal))
 	s.mux.HandleFunc("GET /pools/{name}/add", s.require(auth.Admin, s.poolModal))
@@ -246,6 +250,14 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page, tmpl strin
 	data["Query"] = r.FormValue("q")
 	data["Version"] = s.version
 	data["NodeName"] = s.nodeName
+	if s.runDir != "" {
+		if b, err := os.ReadFile(filepath.Join(s.runDir, "net-pending.json")); err == nil {
+			var p hostd.Pending
+			if json.Unmarshal(b, &p) == nil {
+				data["NetPending"] = p
+			}
+		}
+	}
 	if _, ok := data["Nav"]; !ok {
 		data["Nav"] = ""
 	}

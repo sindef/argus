@@ -25,6 +25,7 @@
 <form hx-post="/networks" hx-target="#flash" class="inline spaced">
   <input name="name" placeholder="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required>
   <input name="vlan" type="number" min="1" max="4094" placeholder="VLAN" class="num">
+  {{with .Bridges}}<select name="bridge" title="Bridge">{{range .}}<option>{{.}}</option>{{end}}</select>{{end}}
   <button class="btn primary" type="submit">{{template "icon" "plus"}}Add network</button>
 </form>
 {{end}}
