@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -89,11 +90,16 @@ func (s *Server) streamUpload(r *http.Request) error {
 		if !validObject.MatchString(name) {
 			return errors.New("invalid name")
 		}
+		body := bufio.NewReaderSize(part, 64<<10)
+		head, _ := body.Peek(isoMagicOffset + 5)
+		if !diskImage(head) {
+			return errors.New("not a disk image: use qcow2, raw with a partition table, ISO, VMDK, VHDX, VDI, or a gzip/xz-compressed image")
+		}
 		if err := s.kube.CreateImage(r.Context(), name, size, ""); err != nil {
 			return err
 		}
 		log.Printf("%s: upload image %s", session(r).User, name)
-		if err := s.kube.Upload(r.Context(), name, part); err != nil {
+		if err := s.kube.Upload(r.Context(), name, body); err != nil {
 			s.kube.DeleteImage(context.Background(), name)
 			return err
 		}
@@ -109,4 +115,20 @@ func (s *Server) deleteImage(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("%s: delete image %s", session(r).User, name)
 	w.Header().Set("HX-Refresh", "true")
+}
+
+const isoMagicOffset = 32769
+
+func diskImage(b []byte) bool {
+	at := func(off int, magic string) bool {
+		return len(b) >= off+len(magic) && string(b[off:off+len(magic)]) == magic
+	}
+	switch {
+	case at(0, "QFI\xfb"), at(0, "KDMV"), at(0, "# Disk DescriptorFile"), at(0, "vhdxfile"), at(0, "conectix"),
+		at(64, "\x7f\x10\xda\xbe"), at(isoMagicOffset, "CD001"),
+		at(0, "\x1f\x8b"), at(0, "\xfd7zXZ\x00"),
+		at(510, "\x55\xaa"), at(512, "EFI PART"):
+		return true
+	}
+	return false
 }

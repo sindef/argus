@@ -10,28 +10,28 @@
     <div class="card-head">{{template "icon" "download"}}<h2>Import from URL</h2></div>
     <form hx-post="/images" hx-target="#flash" class="form">
       <div class="row">
-        <input name="name" placeholder="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required>
-        <input name="size" type="number" min="1" max="4096" value="10" required class="num" title="Size (GiB)">
+        <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
+        <label>Size (GiB) <span class="help" title="Virtual disk size. Must be at least the image's virtual size.">?</span><input name="size" type="number" min="1" max="4096" value="10" required></label>
       </div>
-      <input name="url" type="url" placeholder="https://…/image.qcow2" required>
-      <div><button class="btn primary" type="submit">Import</button></div>
+      <label>Image URL <input name="url" type="url" placeholder="https://…/image.qcow2" required></label>
+      <div><button class="btn primary" type="submit">{{template "icon" "download"}}Import</button></div>
     </form>
   </div>
   <div class="card">
     <div class="card-head">{{template "icon" "upload"}}<h2>Upload</h2></div>
-    <form hx-post="/images/upload" hx-target="#flash" hx-encoding="multipart/form-data" class="form">
+    <form id="upload-form" hx-post="/images/upload" hx-target="#flash" hx-encoding="multipart/form-data" class="form">
       <div class="row">
-        <input name="name" placeholder="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required>
-        <input name="size" type="number" min="1" max="4096" value="10" required class="num" title="Size (GiB)">
+        <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
+        <label>Size (GiB) <span class="help" title="Virtual disk size. Must be at least the image's virtual size.">?</span><input name="size" type="number" min="1" max="4096" value="10" required></label>
       </div>
-      <input name="file" type="file" required>
-      <div class="inline"><button class="btn primary" type="submit">Upload</button><progress id="upload" value="0" max="100" hidden></progress></div>
+      <label>File <span class="help" title="qcow2, raw (with partition table), ISO, VMDK, VHDX or VDI; gzip or xz compressed is fine.">?</span><input name="file" type="file" accept=".qcow2,.img,.raw,.iso,.vmdk,.vhdx,.vdi,.gz,.xz" required></label>
+      <div class="inline"><button class="btn primary" type="submit">{{template "icon" "upload"}}Upload</button><progress id="upload-progress" value="0" max="100" hidden></progress></div>
     </form>
   </div>
 </div>
 <script>
-htmx.on("htmx:xhr:progress", (e) => {
-  const p = document.getElementById("upload");
+document.getElementById("upload-form").addEventListener("htmx:xhr:progress", (e) => {
+  const p = document.getElementById("upload-progress");
   p.hidden = false;
   p.value = e.detail.loaded / e.detail.total * 100;
 });
