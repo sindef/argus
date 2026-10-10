@@ -244,7 +244,11 @@ func (s *Server) newVM(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		err = nerr
 	}
-	s.render(w, r, "vmnew.html", "layout", map[string]any{"Images": imgs, "Networks": nets, "Error": errText(err)})
+	tmpl := "layout"
+	if r.Header.Get("HX-Request") != "" {
+		tmpl = "modal"
+	}
+	s.render(w, r, "vmnew.html", tmpl, map[string]any{"Images": imgs, "Networks": nets, "Error": errText(err)})
 }
 
 func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {

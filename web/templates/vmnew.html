@@ -1,24 +1,23 @@
-{{define "content"}}
-<div class="page-head">
-  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-monitor"/></svg>
-  <div><h1>Create VM</h1><div class="crumbs"><a href="/">Virtual Machines</a> / New</div></div>
-</div>
-{{with .Error}}<p class="error">{{.}}</p>{{end}}
-<form hx-post="/vms" hx-target="#flash" class="card form">
-  <label class="field">Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required autofocus></label>
+{{define "content"}}{{template "modal" .}}{{end}}
+
+{{define "modal"}}
+<form hx-post="/vms" hx-target="#vm-form-error" class="form">
+  <h2>Create VM</h2>
+  <p id="vm-form-error" class="error form-error">{{.Error}}</p>
+  <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required autofocus></label>
   <div class="row">
-    <label class="field">vCPUs <input name="cores" type="number" min="1" max="64" value="2" required></label>
-    <label class="field">Memory (MiB) <input name="memory" type="number" min="128" max="262144" step="128" value="2048" required></label>
-    <label class="field">Disk (GiB) <input name="disk" type="number" min="1" max="4096" value="20" required></label>
+    <label>vCPUs <input name="cores" type="number" min="1" max="64" value="2" required></label>
+    <label>Memory (MiB) <input name="memory" type="number" min="128" max="262144" step="128" value="2048" required></label>
+    <label>Disk (GiB) <input name="disk" type="number" min="1" max="4096" value="20" required></label>
   </div>
   <div class="row">
-    <label class="field">Disk source
+    <label>Disk source
       <select name="image"><option value="">Empty disk</option>{{range .Images}}<option value="{{.Name}}">{{.Name}}</option>{{end}}</select>
     </label>
-    <label class="field">CD-ROM
+    <label>CD-ROM
       <select name="cdrom"><option value="">None</option>{{range .Images}}<option value="{{.Name}}">{{.Name}}</option>{{end}}</select>
     </label>
-    <label class="field">Network
+    <label>Network
       <select name="network" required>{{range .Networks}}<option value="{{.Name}}">{{.Name}}{{if .VLAN}} (VLAN {{.VLAN}}){{end}}</option>{{end}}</select>
     </label>
   </div>
@@ -27,6 +26,6 @@
     <textarea name="userdata" rows="8" placeholder="#cloud-config" style="margin-top:8px"></textarea>
   </details>
   <label class="check"><input name="start" type="checkbox" checked> Power on after creation</label>
-  <div><button class="btn primary" type="submit">{{template "icon" "plus"}}Create VM</button></div>
+  <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">{{template "icon" "plus"}}Create VM</button></div>
 </form>
 {{end}}

@@ -87,7 +87,13 @@
   };
   document.addEventListener("change", (e) => { if (e.target.matches("select[name=org]")) syncSSO(); });
 
-  document.addEventListener("htmx:afterRequest", (e) => { e.target.closest("dialog")?.close(); });
+  document.addEventListener("htmx:afterRequest", (e) => {
+    const d = e.target.closest("dialog");
+    if (d && !d.contains(e.detail.target)) d.close();
+  });
+  document.addEventListener("htmx:afterSwap", (e) => {
+    if (e.target.id === "modal" && e.target.innerHTML.trim()) e.target.showModal();
+  });
 
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenus(); });
 

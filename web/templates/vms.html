@@ -5,7 +5,7 @@
 </div>
 <div class="toolbar">
   {{if .CanOperate}}
-  <a class="btn primary" href="/vms/new">{{template "icon" "plus"}}Create VM</a>
+  <button class="btn primary" hx-get="/vms/new" hx-target="#modal">{{template "icon" "plus"}}Create VM</button>
   <div class="menu">
     <button class="btn" data-menu data-needs-selection>{{template "icon" "power"}}Power{{template "icon" "chevron-down"}}</button>
     <div class="menu-list" hidden>

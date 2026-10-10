@@ -181,7 +181,8 @@ dl.kv dd { margin: 0; }
 .form label { display: flex; flex-direction: column; gap: 6px; font-weight: 500; font-size: 13.5px; }
 .form label .help { display: inline-grid; }
 .form label:has(> .help) { display: block; }
-.form label:has(> .help) > input, .form label:has(> .help) > textarea { display: block; width: 100%; margin-top: 6px; }
+.form label:has(> .help) > input, .form label:has(> .help) > textarea, .form label:has(> .help) > select { display: block; width: 100%; margin-top: 6px; }
+.form label.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; }
 .check { display: inline-flex; align-items: center; gap: 8px; font-weight: 400; }
 summary { cursor: pointer; color: var(--muted); }
 .log { background: var(--bg-2); border: 1px solid var(--line); border-radius: 6px; padding: 12px; font-size: 12px; overflow-x: auto; max-height: 320px; }
@@ -218,7 +219,10 @@ progress { width: 160px; accent-color: var(--accent); }
   .auth-card.split .auth-logo.stacked { display: flex; }
 }
 .row-actions .menu-list { right: 0; left: auto; text-align: left; }
-dialog.card { padding: 22px; min-width: 420px; color: var(--fg); box-shadow: 0 20px 60px #000a; }
+dialog.card { padding: 22px; min-width: 420px; max-width: min(760px, calc(100vw - 32px)); color: var(--fg); box-shadow: 0 20px 60px #000a; }
+dialog.card.wide { width: 720px; }
+dialog .form-error:empty { display: none; }
+dialog .actions { display: flex; gap: 8px; justify-content: flex-end; }
 dialog::backdrop { background: #020814b3; }
 dialog h2 { margin: 0 0 6px; }
 .help { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--line-2); color: var(--muted); font-size: 11px; cursor: help; margin-left: 4px; }

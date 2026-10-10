@@ -45,6 +45,7 @@
   <main class="content"{{if .Session.MustChange}} style="margin-left:0"{{end}}>{{template "content" .}}</main>
   <p id="flash" class="error toast" role="alert" hx-on::after-swap="clearTimeout(this.t); this.t = setTimeout(() => this.innerHTML = '', 8000)"></p>
   <aside id="drawer" class="drawer"></aside>
+  <dialog id="modal" class="card wide"></dialog>
 </div>
 </body>
 </html>{{end}}
