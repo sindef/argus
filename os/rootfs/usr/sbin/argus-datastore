@@ -21,3 +21,8 @@ fi
 
 zfs list -H "$pool/rancher" >/dev/null 2>&1 || zfs create -o canmount=noauto -o mountpoint=/var/lib/rancher "$pool/rancher"
 [ "$(zfs get -H -o value mounted "$pool/rancher")" = yes ] || zfs mount -O "$pool/rancher"
+
+reserve="${ARGUS_RANCHER_RESERVE:-4G}"
+[ "$(zfs get -H -o value reservation "$pool/rancher")" = "$reserve" ] ||
+    zfs set reservation="$reserve" "$pool/rancher" ||
+    echo "argus-datastore: could not reserve $reserve for $pool/rancher" >&2
