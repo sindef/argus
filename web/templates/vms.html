@@ -106,10 +106,7 @@
     <td class="row-actions">{{if and $.CanOperate (not $.VM.Running) (ne .Name "root")}}<button class="link danger" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/disks/{{.Name}}/delete" hx-target="#flash" hx-confirm="Remove {{.Name}}?">Remove</button>{{end}}</td></tr>{{end}}</tbody>
 </table></div>
 {{if and $.CanOperate (not .Running)}}
-<form class="inline spaced" hx-post="/vms/{{.Namespace}}/{{.Name}}/disks" hx-target="#flash">
-  <input name="size" type="number" min="1" max="4096" value="10" required class="num"> GiB
-  <button class="btn sm" type="submit">{{template "icon" "plus"}}Add disk</button>
-</form>
+<button class="btn sm spaced" hx-get="/vms/{{.Namespace}}/{{.Name}}/disks/new" hx-target="#modal">{{template "icon" "plus"}}Add disk</button>
 {{end}}
 <h2 class="spaced">Network</h2>
 <div class="table-wrap"><table>
@@ -135,4 +132,20 @@
 {{else}}<p class="muted">No recent events.</p>{{end}}
 {{end}}
 {{end}}
+{{end}}
+
+{{define "disk-modal"}}
+<form hx-post="/vms/{{.VM.Namespace}}/{{.VM.Name}}/disks" hx-target="#disk-form-error" class="form disk-form">
+  <h2>Add disk to {{.VM.Label}}</h2>
+  <p id="disk-form-error" class="error form-error"></p>
+  <div class="seg">
+    <label><input type="radio" name="source" value="new" checked> New disk</label>
+    <label><input type="radio" name="source" value="volume"{{if not .Volumes}} disabled{{end}}> Existing volume</label>
+  </div>
+  <label class="new-only">Size (GiB) <input name="size" type="number" min="1" max="4096" value="10"></label>
+  <label class="volume-only">Volume
+    <select name="volume">{{range .Volumes}}<option value="{{.Name}}">{{.Name}} ({{bytes .Size}})</option>{{end}}</select>
+  </label>
+  <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">{{template "icon" "plus"}}Add disk</button></div>
+</form>
 {{end}}

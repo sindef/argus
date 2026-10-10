@@ -251,3 +251,7 @@ h1 .dot { font-size: 14px; font-weight: 400; }
 .u-legend { color: var(--muted); font-size: 12px; }
 .u-legend .u-marker { border-radius: 50%; }
 .u-legend th { font-weight: 400; }
+.seg label { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; padding: 6px 12px; cursor: pointer; font-weight: 400; }
+.seg label:has(input:checked) { background: var(--accent-bg); color: var(--fg); }
+.seg input[type=radio] { margin: 0; }
+.disk-form:has(input[value=new]:checked) .volume-only, .disk-form:has(input[value=volume]:checked) .new-only { display: none; }

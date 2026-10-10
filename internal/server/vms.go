@@ -306,16 +306,34 @@ func intField(r *http.Request, field string, min, max int, dst *int) error {
 func (s *Server) addDisk(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
 	var size int
-	err := intField(r, "size", 1, 4096, &size)
-	if err == nil {
+	var err error
+	if vol := r.FormValue("volume"); r.FormValue("source") == "volume" {
+		err = s.kube.AttachVolume(r.Context(), ns, name, vol)
+	} else if err = intField(r, "size", 1, 4096, &size); err == nil {
 		err = s.kube.AddDisk(r.Context(), ns, name, size)
 	}
 	if err != nil {
 		flash(w, r, err)
 		return
 	}
-	log.Printf("%s: add %dGi disk to %s/%s", session(r).User, size, ns, name)
+	log.Printf("%s: add disk (%s) to %s/%s", session(r).User, r.FormValue("source"), ns, name)
 	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) newDisk(w http.ResponseWriter, r *http.Request) {
+	vm, err := s.kube.GetVM(r.Context(), r.PathValue("ns"), r.PathValue("name"))
+	if err != nil {
+		flash(w, r, err)
+		return
+	}
+	vols, _ := s.kube.Volumes(r.Context())
+	var free []kube.Volume
+	for _, v := range vols {
+		if v.Standalone() && v.UsedBy == "" {
+			free = append(free, v)
+		}
+	}
+	s.render(w, r, "vms.html", "disk-modal", map[string]any{"VM": vm, "Volumes": free})
 }
 
 func (s *Server) removeDisk(w http.ResponseWriter, r *http.Request) {
