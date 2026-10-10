@@ -8,6 +8,9 @@ COPY internal internal
 COPY web web
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /app ./cmd/${CMD}
 
+FROM scratch AS bin
+COPY --from=build /app /app
+
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /app /app
 ENTRYPOINT ["/app"]

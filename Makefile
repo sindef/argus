@@ -2,7 +2,7 @@ VERSION ?= 0.1.0
 IMAGE ?= argus-os:$(VERSION)
 AURORABOOT ?= quay.io/kairos/auroraboot:v0.28.0
 
-.PHONY: app manager os iso
+.PHONY: app manager hostd os iso
 
 app:
 	docker buildx build --load -t argus:$(VERSION) .
@@ -12,7 +12,11 @@ app:
 manager:
 	docker buildx build --load --build-arg CMD=argus-manager -t argus-manager:$(VERSION) .
 
-os: app
+hostd:
+	docker buildx build --build-arg CMD=argus-hostd --target bin --output type=local,dest=os/build .
+	mv os/build/app os/build/argus-hostd
+
+os: app hostd
 	docker buildx build --load --build-arg VERSION=$(VERSION) -t $(IMAGE) os
 
 iso: os

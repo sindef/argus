@@ -1,0 +1,7 @@
+[Unit]
+Description=Argus host helper
+Requires=argus-hostd.socket
+After=argus-datastore.service
+
+[Service]
+ExecStart=/usr/sbin/argus-hostd

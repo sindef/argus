@@ -1,0 +1,11 @@
+[Unit]
+Description=Argus host helper socket
+
+[Socket]
+ListenStream=/run/argus/hostd.sock
+SocketUser=root
+SocketGroup=argus-pod
+SocketMode=0660
+
+[Install]
+WantedBy=sockets.target

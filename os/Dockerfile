@@ -49,6 +49,7 @@ RUN cd /usr/share/argus/manifests \
     && [ "$(grep -c 'name: GOMEMLIMIT' 10-cdi-operator.yaml)" = 1 ]
 COPY rootfs/ /
 COPY images/ /usr/share/argus/images/
+COPY build/argus-hostd /usr/sbin/argus-hostd
 RUN sed -i "s/argus:VERSION/argus:${VERSION}/" /usr/share/argus/manifests/40-argus.yaml
 
 RUN --mount=type=bind,from=kairos-init,src=/kairos-init,dst=/kairos-init \

@@ -9,6 +9,7 @@ import (
 	"net/url"
 
 	"argus/internal/auth"
+	"argus/internal/hostd"
 	"argus/internal/kube"
 )
 
@@ -129,4 +130,13 @@ func (s *Server) apiRemoveDisk(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("%s: remove disk %s from %s/%s", session(r).User, r.PathValue("disk"), r.PathValue("ns"), r.PathValue("name"))
 	writeJSON(w, map[string]string{})
+}
+
+func (s *Server) disksPage(w http.ResponseWriter, r *http.Request) {
+	var ds []hostd.Disk
+	err := errors.New("host helper not available")
+	if s.hostd != nil {
+		ds, err = s.hostd.Disks(r.Context())
+	}
+	s.render(w, r, "disks.html", "layout", map[string]any{"Nav": "disks", "Disks": ds, "Error": errText(err)})
 }

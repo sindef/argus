@@ -59,6 +59,7 @@
 <div class="nav-section" id="storage">
   <button class="nav-head">{{template "icon" "database"}}Storage<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-up"/></svg></button>
   <div class="nav-items">
+    {{if eq .Session.Role "admin"}}<a class="nav-link sub{{if eq .Nav "disks"}} active{{end}}" href="/disks">Disks</a>{{end}}
     <a class="nav-link sub{{if eq .Nav "images"}} active{{end}}" href="/images">Images</a>
     <a class="nav-link sub{{if eq .Nav "volumes"}} active{{end}}" href="/volumes">Volumes</a>
   </div>

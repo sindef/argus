@@ -6,9 +6,11 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 
 	"argus/internal/auth"
+	"argus/internal/hostd"
 	"argus/internal/kube"
 	"argus/internal/manager"
 	"argus/web"
@@ -21,6 +23,7 @@ type Server struct {
 	auth        *auth.Store
 	banner      func(password string)
 	runDir      string
+	hostd       *hostd.Client
 	releaseFile string
 	caPEM       []byte
 	nodeName    string
@@ -54,9 +57,12 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	if k != nil {
 		k.Guard = s.maintenance
 	}
+	if o.RunDir != "" {
+		s.hostd = hostd.NewClient(filepath.Join(o.RunDir, "hostd.sock"))
+	}
 	s.version = readEnv(o.ReleaseFile)["KAIROS_VERSION"]
 	s.sso.m = map[string]ssoFlow{}
-	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html"} {
+	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html"} {
 		t, err := template.New(p).Funcs(funcs).ParseFS(web.FS, "templates/layout.html", "templates/manager-nav.html", "templates/"+p)
 		if err != nil {
 			return nil, err
@@ -115,6 +121,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("GET /events", s.require(auth.ReadOnly, s.eventsPage))
 	s.mux.HandleFunc("GET /volumes", s.require(auth.ReadOnly, s.volumesPage))
 	s.mux.HandleFunc("POST /volumes/{op}", s.require(auth.Operator, s.volumeAction))
+	s.mux.HandleFunc("GET /disks", s.require(auth.Admin, s.disksPage))
 	s.mux.HandleFunc("GET /images", s.require(auth.ReadOnly, s.images))
 	s.mux.HandleFunc("POST /images", s.require(auth.Operator, s.importImage))
 	s.mux.HandleFunc("POST /images/upload", s.require(auth.Operator, s.uploadImage))

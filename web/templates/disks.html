@@ -1,0 +1,21 @@
+{{define "content"}}
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-hard-drive"/></svg>
+  <div><h1>Disks</h1><div class="crumbs">Storage / Disks</div></div>
+</div>
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Device</th><th>Model</th><th>Serial</th><th>Size</th><th>Media</th><th>Status</th><th>Contents</th></tr></thead>
+  <tbody>{{range .Disks}}<tr>
+    <td title="{{.ID}}">{{template "icon" "hard-drive"}}{{.Name}}</td>
+    <td>{{with .Model}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
+    <td class="mono">{{with .Serial}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
+    <td>{{bytes .Size}}</td>
+    <td><span class="badge">{{.Media}}</span>{{with .Transport}} <span class="muted">{{.}}</span>{{end}}</td>
+    <td>{{if eq .Use "os"}}<span class="dot Running">System disk</span>{{else if eq .Use "pool"}}<span class="dot Running">Pool {{.Pool}}</span>{{else if eq .Use "mounted"}}<span class="dot Warning">Mounted</span>{{else if .Blank}}<span class="dot">Available</span>{{else}}<span class="dot Warning" title="Using this disk erases it">Available, has data</span>{{end}}</td>
+    <td>{{range $i, $s := .Signatures}}{{if $i}}, {{end}}{{$s}}{{else}}<span class="muted">Empty</span>{{end}}</td>
+  </tr>{{else}}<tr><td colspan="7" class="muted">No disks found.</td></tr>{{end}}</tbody>
+</table>
+</div>
+{{end}}
