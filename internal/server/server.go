@@ -16,7 +16,12 @@ import (
 	"argus/web"
 )
 
-const cookieName = "argus_session"
+func (s *Server) cookieName() string {
+	if s.manager != nil {
+		return "argus_manager_session"
+	}
+	return "argus_session"
+}
 
 type Server struct {
 	kube        *kube.Client
@@ -262,7 +267,7 @@ func (s *Server) require(min auth.Role, h http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		c, err := r.Cookie(cookieName)
+		c, err := r.Cookie(s.cookieName())
 		if err != nil {
 			redirect(w, r, "/login")
 			return

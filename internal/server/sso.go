@@ -133,7 +133,7 @@ func (s *Server) ssoCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	session := s.auth.ForOrg(flow.org).NewSession(auth.Session{User: user, Role: role, SSO: true}, flow.remember)
-	setSessionCookie(w, session, flow.remember)
+	s.setSessionCookie(w, session, flow.remember)
 	log.Printf("sso: %s signed in to %s as %s", user, flow.org, role)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

@@ -49,12 +49,12 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.limiter.succeed(ip)
-	setSessionCookie(w, tok, remember)
+	s.setSessionCookie(w, tok, remember)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-func setSessionCookie(w http.ResponseWriter, tok string, remember bool) {
-	c := &http.Cookie{Name: cookieName, Value: tok, Path: "/", HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode}
+func (s *Server) setSessionCookie(w http.ResponseWriter, tok string, remember bool) {
+	c := &http.Cookie{Name: s.cookieName(), Value: tok, Path: "/", HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode}
 	if remember {
 		c.MaxAge = 30 * 24 * 3600
 	}
@@ -69,10 +69,10 @@ func (s *Server) users(r *http.Request) *auth.Store {
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
-	if c, err := r.Cookie(cookieName); err == nil {
+	if c, err := r.Cookie(s.cookieName()); err == nil {
 		s.auth.Logout(c.Value)
 	}
-	http.SetCookie(w, &http.Cookie{Name: cookieName, Path: "/", MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: s.cookieName(), Path: "/", MaxAge: -1})
 	redirect(w, r, "/login")
 }
 
