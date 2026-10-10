@@ -6,6 +6,7 @@ disable:
 disable-cloud-controller: true
 disable-network-policy: true
 flannel-backend: host-gw
+flannel-iface: br0
 write-kubeconfig-mode: "0600"
 kubelet-arg:
   - system-reserved=cpu=250m,memory=384Mi

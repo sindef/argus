@@ -56,6 +56,16 @@ stages:
 
             [BridgeVLAN]
             VLAN=2-4094
+        - path: /etc/systemd/network/10-argus-unused.network
+          permissions: 0644
+          content: |
+            [Match]
+            Type=ether
+            Kind=!*
+
+            [Network]
+            LinkLocalAddressing=no
+            IPv6AcceptRA=no
         - path: /etc/systemd/network/05-br0.network
           permissions: 0644
           content: |
