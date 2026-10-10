@@ -162,6 +162,9 @@ func sendName(vm string) string { return "argus-send-" + vm }
 func recvName(vm string) string { return "argus-recv-" + vm }
 
 func (c *Client) Receive(ctx context.Context, ns, name, migrationID string, spec obj) (string, error) {
+	if err := c.guard(); err != nil {
+		return "", err
+	}
 	if !c.HasMigrationNetwork(ctx) {
 		return "", errors.New("migration network not configured")
 	}

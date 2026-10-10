@@ -168,6 +168,9 @@ func (c *Client) DeleteExport(ctx context.Context, ns, name string) error {
 func importName(vm string) string { return "argus-import-" + vm }
 
 func (c *Client) ImportVM(ctx context.Context, ns, name string, ex Export) error {
+	if err := c.guard(); err != nil {
+		return err
+	}
 	if _, err := c.dyn.Resource(vmGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
 		return fmt.Errorf("%s already exists", name)
 	}

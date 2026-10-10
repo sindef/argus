@@ -36,6 +36,15 @@ type Client struct {
 	dyn  dynamic.Interface
 	http *http.Client
 	tls  *tls.Config
+
+	Guard func() error
+}
+
+func (c *Client) guard() error {
+	if c.Guard == nil {
+		return nil
+	}
+	return c.Guard()
 }
 
 type VM struct {
@@ -226,6 +235,11 @@ func (c *Client) Action(ctx context.Context, ns, name, action string) error {
 func (c *Client) Power(ctx context.Context, ns, name, action string) error {
 	if !ValidAction(action) {
 		return fmt.Errorf("unknown action %q", action)
+	}
+	if action == "start" || action == "restart" || action == "unpause" {
+		if err := c.guard(); err != nil {
+			return err
+		}
 	}
 	resource := "virtualmachines"
 	if action == "pause" || action == "unpause" {

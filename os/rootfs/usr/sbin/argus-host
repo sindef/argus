@@ -5,35 +5,49 @@ dir=/run/argus
 req=$dir/request
 [ -f "$req" ] || exit 0
 read -r action arg < "$req" || true
-rm -f "$req"
 
 status() { echo "$1" > "$dir/status"; }
+
+guests() { pgrep -c -x 'qemu-kvm|qemu-system-x86' || true; }
+
+idle() {
+    n=$(guests)
+    [ "$n" -eq 0 ] && return 0
+    status "Cancelled: $n VMs running"
+    return 1
+}
 
 case "$action" in
     reboot)
         status "Rebooting"
-        systemctl reboot
+        rm -f "$req"
+        idle && systemctl reboot
         ;;
     poweroff)
         status "Shutting down"
-        systemctl poweroff
+        rm -f "$req"
+        idle && systemctl poweroff
         ;;
     upgrade)
         case "${arg:-}" in
             "" | *[!A-Za-z0-9./:@_-]*)
+                rm -f "$req"
                 status "Update failed: invalid image reference"
                 exit 1
                 ;;
         esac
         status "Updating to $arg"
+        rm -f "$req"
+        idle || exit 1
         if kairos-agent upgrade --source "oci:$arg" > "$dir/upgrade.log" 2>&1; then
             status "Rebooting into $arg"
-            systemctl reboot
+            idle && systemctl reboot
         else
             status "Update failed, see log"
         fi
         ;;
     *)
+        rm -f "$req"
         status "Unknown request"
         ;;
 esac

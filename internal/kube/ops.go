@@ -42,6 +42,9 @@ func (c *Client) Rename(ctx context.Context, ns, name, display string) error {
 }
 
 func (c *Client) Clone(ctx context.Context, ns, name, target string) error {
+	if err := c.guard(); err != nil {
+		return err
+	}
 	vm, err := c.dyn.Resource(vmGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return err

@@ -48,12 +48,19 @@ func (s *Server) hostRequest(w http.ResponseWriter, r *http.Request) {
 		flash(w, r, errors.New("host control not available"))
 		return
 	}
-	n, err := s.kube.RunningVMs(r.Context())
+	err := s.maintenance()
+	var n int
+	if err == nil {
+		n, err = s.kube.RunningVMs(r.Context())
+	}
 	if err == nil && n > 0 {
 		err = fmt.Errorf("power off all VMs first (%d running)", n)
 	}
 	if err == nil {
-		err = os.WriteFile(filepath.Join(s.runDir, "request"), []byte(req+"\n"), 0o644)
+		tmp := filepath.Join(s.runDir, ".request")
+		if err = os.WriteFile(tmp, []byte(req+"\n"), 0o644); err == nil {
+			err = os.Rename(tmp, filepath.Join(s.runDir, "request"))
+		}
 	}
 	if err != nil {
 		flash(w, r, err)
@@ -61,6 +68,24 @@ func (s *Server) hostRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("%s: host %s", session(r).User, req)
 	w.Header().Set("HX-Refresh", "true")
+}
+
+var errMaintenance = errors.New("host maintenance in progress")
+
+func (s *Server) maintenance() error {
+	if s.runDir == "" {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(s.runDir, "request")); err == nil {
+		return errMaintenance
+	}
+	status := readFile(filepath.Join(s.runDir, "status"))
+	for _, p := range []string{"Updating", "Rebooting", "Shutting down"} {
+		if strings.HasPrefix(status, p) {
+			return errMaintenance
+		}
+	}
+	return nil
 }
 
 func readFile(path string) string {

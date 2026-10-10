@@ -27,6 +27,9 @@ type VMSpec struct {
 type obj = map[string]interface{}
 
 func (c *Client) CreateVM(ctx context.Context, s VMSpec) error {
+	if err := c.guard(); err != nil {
+		return err
+	}
 	root := s.Name + "-root"
 	source := obj{"blank": obj{}}
 	if s.Image != "" {
