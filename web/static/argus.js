@@ -71,7 +71,13 @@
   document.addEventListener("contextmenu", (e) => {
     const item = e.target.closest("[data-context]");
     if (!item) return;
-    const menu = item.querySelector(".menu-list");
+    let menu = item.querySelector(".menu-list");
+    const tpl = item.querySelector("template.ctx");
+    if (tpl) {
+      menu = document.getElementById("ctxmenu");
+      menu.innerHTML = tpl.innerHTML;
+      htmx.process(menu);
+    }
     if (!menu) return;
     e.preventDefault();
     closeMenus(menu);

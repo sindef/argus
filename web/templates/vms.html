@@ -42,9 +42,9 @@
   </tr></thead>
   <tbody>
   {{range .VMs}}
-  <tr class="clickable{{if $.Selected.Has .Namespace .Name}} selected{{end}}" data-href="/vms/{{.Namespace}}/{{.Name}}/drawer" data-page="/vms/{{.Namespace}}/{{.Name}}">
+  <tr class="clickable{{if $.Selected.Has .Namespace .Name}} selected{{end}}" data-href="/vms/{{.Namespace}}/{{.Name}}/drawer" data-page="/vms/{{.Namespace}}/{{.Name}}"{{if $.CanOperate}} data-context{{end}}>
     {{if $.CanOperate}}<td><input type="checkbox" name="sel" value="{{.Namespace}}/{{.Name}}"{{if $.Selected.Has .Namespace .Name}} checked{{end}} aria-label="Select {{.Label}}"></td>{{end}}
-    <td>{{template "icon" "monitor"}}{{.Label}}</td>
+    <td>{{template "icon" "monitor"}}{{.Label}}{{if $.CanOperate}}{{template "vm-ctx" .}}{{end}}</td>
     <td><span class="dot {{.Status}}">{{.Status}}</span></td>
     <td>{{range .IPs}}{{.}} {{else}}<span class="muted">—</span>{{end}}</td>
     <td>{{if .Node}}{{.Node}}{{else}}<span class="muted">{{$.NodeName}}</span>{{end}}</td>
@@ -60,7 +60,7 @@
 {{end}}
 
 {{define "nav-vms"}}
-{{range .VMs}}<a class="nav-vm" href="/vms/{{.Namespace}}/{{.Name}}">{{template "icon" "monitor"}}<span>{{.Label}}</span><small><span class="dot {{.Status}}">{{.Status}}</span></small></a>{{end}}
+{{range .VMs}}<a class="nav-vm" href="/vms/{{.Namespace}}/{{.Name}}"{{if $.CanOperate}} data-context{{end}}>{{template "icon" "monitor"}}<span>{{.Label}}</span><small><span class="dot {{.Status}}">{{.Status}}</span></small>{{if $.CanOperate}}{{template "vm-ctx" .}}{{end}}</a>{{end}}
 {{end}}
 
 {{define "drawer"}}
@@ -148,4 +148,28 @@
   </label>
   <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">{{template "icon" "plus"}}Add disk</button></div>
 </form>
+{{end}}
+
+{{define "vm-ctx"}}{{$p := printf "/vms/%s/%s" .Namespace .Name}}{{$sel := printf `{"sel":"%s/%s"}` .Namespace .Name}}
+<template class="ctx">
+  <a href="{{$p}}">{{template "icon" "monitor"}}Open</a>
+  <hr>
+  {{if .Running}}
+  <button hx-post="{{$p}}/stop" hx-confirm="Shut down {{.Label}}?">{{template "icon" "power"}}Shut down</button>
+  <button hx-post="{{$p}}/restart" hx-confirm="Restart {{.Label}}?">{{template "icon" "rotate-cw"}}Restart</button>
+  <button hx-post="{{$p}}/pause">{{template "icon" "pause"}}Pause</button>
+  <a href="{{$p}}/console">{{template "icon" "terminal"}}Open Console</a>
+  {{else if eq .Status "Paused"}}
+  <button hx-post="{{$p}}/unpause">{{template "icon" "play"}}Resume</button>
+  {{else}}
+  <button hx-post="{{$p}}/start">{{template "icon" "play"}}Power on</button>
+  <button hx-get="{{$p}}/disks/new" hx-target="#modal">{{template "icon" "hard-drive"}}Add disk</button>
+  {{end}}
+  <hr>
+  <button hx-post="{{$p}}/snapshots">{{template "icon" "camera"}}Snapshot</button>
+  <button hx-post="/vms/bulk/clone" hx-vals='{{$sel}}' hx-prompt="Name for the clone">{{template "icon" "copy"}}Clone</button>
+  <button hx-post="/vms/bulk/rename" hx-vals='{{$sel}}' hx-prompt="Display name (empty to clear)">{{template "icon" "pencil"}}Rename</button>
+  <hr>
+  <button class="danger" hx-post="{{$p}}/delete" hx-confirm="Delete {{.Label}} and its disks?">{{template "icon" "trash-2"}}Delete</button>
+</template>
 {{end}}

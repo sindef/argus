@@ -46,6 +46,7 @@
   <p id="flash" class="error toast" role="alert" hx-on::after-swap="clearTimeout(this.t); this.t = setTimeout(() => this.innerHTML = '', 8000)"></p>
   <aside id="drawer" class="drawer"></aside>
   <dialog id="modal" class="card wide"></dialog>
+  <div id="ctxmenu" class="menu-list" hidden hx-target="#flash"></div>
 </div>
 </body>
 </html>{{end}}

@@ -76,7 +76,7 @@ func (s *Server) vmTable(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) navVMs(w http.ResponseWriter, r *http.Request) {
 	vms, _ := s.kube.ListVMs(r.Context())
-	s.render(w, r, "vms.html", "nav-vms", map[string]any{"VMs": vms})
+	s.render(w, r, "vms.html", "nav-vms", map[string]any{"VMs": vms, "CanOperate": session(r).Role.Can(auth.Operator)})
 }
 
 func (s *Server) vmDrawer(w http.ResponseWriter, r *http.Request) {
