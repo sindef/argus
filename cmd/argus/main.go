@@ -61,6 +61,7 @@ func main() {
 		Handler:           srv,
 		TLSConfig:         &tls.Config{Certificates: []tls.Certificate{pki.Cert}, MinVersion: tls.VersionTLS12},
 		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
 	}
 	log.Printf("listening on %s", addr)
 	log.Fatal(hs.ListenAndServeTLS("", ""))

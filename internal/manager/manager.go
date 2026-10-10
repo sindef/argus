@@ -181,11 +181,15 @@ func (c *Manager) RemoveNode(ctx context.Context, org, name string) error {
 			out = append(out, n)
 		}
 	}
-	return c.save(ctx, out, rv)
+	if err := c.save(ctx, out, rv); err != nil {
+		return err
+	}
+	dropClients(name)
+	return nil
 }
 
 func fetchCA(ctx context.Context, url string) ([]byte, error) {
-	hc := &http.Client{Timeout: 15 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	hc := &http.Client{Timeout: 15 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, DisableKeepAlives: true}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/ca.pem", nil)
 	if err != nil {
 		return nil, err
@@ -201,10 +205,39 @@ func fetchCA(ctx context.Context, url string) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 }
 
+var clients = struct {
+	sync.Mutex
+	m map[string]*http.Client
+}{m: map[string]*http.Client{}}
+
 func (n Node) client() *http.Client {
+	key := n.Name + "\x00" + n.URL + "\x00" + n.CA
+	clients.Lock()
+	defer clients.Unlock()
+	if c, ok := clients.m[key]; ok {
+		return c
+	}
 	pool := x509.NewCertPool()
 	pool.AppendCertsFromPEM([]byte(n.CA))
-	return &http.Client{Timeout: 10 * time.Minute, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}}
+	c := &http.Client{Timeout: 10 * time.Minute, Transport: &http.Transport{
+		TLSClientConfig:     &tls.Config{RootCAs: pool},
+		MaxIdleConnsPerHost: 4,
+		IdleConnTimeout:     90 * time.Second,
+		TLSHandshakeTimeout: 10 * time.Second,
+	}}
+	clients.m[key] = c
+	return c
+}
+
+func dropClients(name string) {
+	clients.Lock()
+	defer clients.Unlock()
+	for k, c := range clients.m {
+		if strings.HasPrefix(k, name+"\x00") {
+			c.CloseIdleConnections()
+			delete(clients.m, k)
+		}
+	}
 }
 
 func (n Node) do(ctx context.Context, method, path string, in, out any) error {
