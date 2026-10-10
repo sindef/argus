@@ -1,10 +1,12 @@
 package kube
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -70,7 +72,20 @@ type MigrationNetwork struct {
 	RangeEnd   string `json:"rangeEnd"`
 }
 
-func (c *Client) SetMigrationNetwork(ctx context.Context, m MigrationNetwork) error {
+func (c *Client) migrationActive(ctx context.Context) (bool, error) {
+	list, err := c.dyn.Resource(vmimGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return false, err
+	}
+	for _, m := range list.Items {
+		if phase, _, _ := unstructured.NestedString(m.Object, "status", "phase"); phase != "Succeeded" && phase != "Failed" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (c *Client) SetMigrationNetwork(ctx context.Context, m MigrationNetwork) (string, error) {
 	cfg := obj{
 		"cniVersion": "0.3.1",
 		"name":       migrationNetwork,
@@ -86,10 +101,11 @@ func (c *Client) SetMigrationNetwork(ctx context.Context, m MigrationNetwork) er
 	}
 	b, err := json.Marshal(cfg)
 	if err != nil {
-		return err
+		return "", err
 	}
 	res := c.dyn.Resource(nadGVR).Namespace(kubevirtNS)
 	nad, err := res.Get(ctx, migrationNetwork, metav1.GetOptions{})
+	changed := true
 	switch {
 	case apierrors.IsNotFound(err):
 		nad = &unstructured.Unstructured{Object: obj{
@@ -98,17 +114,94 @@ func (c *Client) SetMigrationNetwork(ctx context.Context, m MigrationNetwork) er
 			"metadata":   obj{"name": migrationNetwork},
 			"spec":       obj{"config": string(b)},
 		}}
-		_, err = res.Create(ctx, nad, metav1.CreateOptions{})
+		err = nil
 	case err == nil:
-		unstructured.SetNestedField(nad.Object, string(b), "spec", "config")
-		_, err = res.Update(ctx, nad, metav1.UpdateOptions{})
+		old, _, _ := unstructured.NestedString(nad.Object, "spec", "config")
+		changed = old != string(b)
 	}
 	if err != nil {
-		return err
+		return "", err
+	}
+	if changed {
+		if active, err := c.migrationActive(ctx); err != nil || active {
+			return "", errors.New("a migration is in progress on this host; retry when it finishes")
+		}
+		unstructured.SetNestedField(nad.Object, string(b), "spec", "config")
+		if nad.GetResourceVersion() == "" {
+			_, err = res.Create(ctx, nad, metav1.CreateOptions{})
+		} else {
+			_, err = res.Update(ctx, nad, metav1.UpdateOptions{})
+		}
+		if err != nil {
+			return "", err
+		}
 	}
 	patch := []byte(`{"spec":{"configuration":{"migrations":{"network":"` + migrationNetwork + `"}}}}`)
-	_, err = c.dyn.Resource(kvGVR).Namespace(kubevirtNS).Patch(ctx, "kubevirt", types.MergePatchType, patch, metav1.PatchOptions{})
-	return err
+	if _, err := c.dyn.Resource(kvGVR).Namespace(kubevirtNS).Patch(ctx, "kubevirt", types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
+		return "", err
+	}
+	if changed {
+		if err := c.dyn.Resource(podGVR).Namespace(kubevirtNS).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: "kubevirt.io=virt-handler"}); err != nil {
+			return "", err
+		}
+	}
+	return c.waitMigrationAddress(ctx, m)
+}
+
+func (c *Client) waitMigrationAddress(ctx context.Context, m MigrationNetwork) (string, error) {
+	_, subnet, err := net.ParseCIDR(m.Subnet)
+	if err != nil {
+		return "", err
+	}
+	lo, hi := net.ParseIP(m.RangeStart).To4(), net.ParseIP(m.RangeEnd).To4()
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	defer cancel()
+	for {
+		pods, err := c.dyn.Resource(podGVR).Namespace(kubevirtNS).List(ctx, metav1.ListOptions{LabelSelector: "kubevirt.io=virt-handler"})
+		if err == nil {
+			for _, p := range pods.Items {
+				if p.GetDeletionTimestamp() != nil {
+					continue
+				}
+				var status []struct {
+					Name string   `json:"name"`
+					IPs  []string `json:"ips"`
+				}
+				json.Unmarshal([]byte(p.GetAnnotations()["k8s.v1.cni.cncf.io/network-status"]), &status)
+				for _, st := range status {
+					if st.Name != kubevirtNS+"/"+migrationNetwork {
+						continue
+					}
+					for _, a := range st.IPs {
+						ip := net.ParseIP(a).To4()
+						if ip != nil && subnet.Contains(ip) && bytes.Compare(ip, lo) >= 0 && bytes.Compare(ip, hi) <= 0 {
+							return a, nil
+						}
+					}
+				}
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return "", errors.New("virt-handler did not get a migration address in range")
+		case <-time.After(3 * time.Second):
+		}
+	}
+}
+
+func (c *Client) RemoveMigrationNetwork(ctx context.Context) error {
+	if active, err := c.migrationActive(ctx); err != nil || active {
+		return errors.New("a migration is in progress on this host")
+	}
+	patch := []byte(`{"spec":{"configuration":{"migrations":{"network":null}}}}`)
+	if _, err := c.dyn.Resource(kvGVR).Namespace(kubevirtNS).Patch(ctx, "kubevirt", types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
+		return err
+	}
+	err := c.dyn.Resource(nadGVR).Namespace(kubevirtNS).Delete(ctx, migrationNetwork, metav1.DeleteOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	return c.dyn.Resource(podGVR).Namespace(kubevirtNS).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: "kubevirt.io=virt-handler"})
 }
 
 func (c *Client) HasMigrationNetwork(ctx context.Context) bool {

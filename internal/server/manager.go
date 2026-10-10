@@ -608,7 +608,7 @@ func (s *Server) managerMigrationSettings(w http.ResponseWriter, r *http.Request
 		return
 	}
 	log.Printf("%s: migration network vlan %d %s", session(r).User, vlan, r.FormValue("subnet"))
-	s.renderSettings(w, r, "Migration network applied to all hosts.", nil)
+	s.renderSettings(w, r, "Applying the migration network; see Hosts for each host's status.", nil)
 }
 
 func parseBytes(q string) (int64, error) {

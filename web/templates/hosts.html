@@ -15,7 +15,7 @@
     <td><a href="{{.Node.URL}}" target="_blank" rel="noopener">{{.Node.URL}}</a></td>
     <td>{{.Info.Version}}</td>
     <td>{{.Running}} / {{.VMs}}</td>
-    <td>{{index $.Ranges .Node.Name}}</td>
+    <td>{{with index $.Ranges .Node.Name}}{{.}}{{end}}{{if index $.Ranges .Node.Name}}{{with .Node.MigrationAddress}} <span class="dot Applied" title="Migration handler address">{{.}}</span>{{else}} <span class="dot Warning" title="Not confirmed on this host; apply the migration network again">not applied</span>{{end}}{{end}}</td>
     <td><span class="dot {{.Status}}" title="{{.Error}}">{{.Status}}</span></td>
     <td class="row-actions">{{if $.IsAdmin}}
       <div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>

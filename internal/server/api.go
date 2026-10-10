@@ -227,11 +227,21 @@ func (s *Server) apiMigrationNetwork(w http.ResponseWriter, r *http.Request) {
 		apiError(w, r, http.StatusBadRequest, errors.New("invalid migration network"))
 		return
 	}
-	if err := s.kube.SetMigrationNetwork(r.Context(), m); err != nil {
+	ip, err := s.kube.SetMigrationNetwork(r.Context(), m)
+	if err != nil {
 		apiError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	log.Printf("%s: migration network vlan %d %s-%s", session(r).User, m.VLAN, m.RangeStart, m.RangeEnd)
+	log.Printf("%s: migration network vlan %d %s-%s, handler at %s", session(r).User, m.VLAN, m.RangeStart, m.RangeEnd, ip)
+	writeJSON(w, map[string]string{"address": ip})
+}
+
+func (s *Server) apiRemoveMigrationNetwork(w http.ResponseWriter, r *http.Request) {
+	if err := s.kube.RemoveMigrationNetwork(r.Context()); err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	log.Printf("%s: removed migration network", session(r).User)
 	writeJSON(w, map[string]string{})
 }
 

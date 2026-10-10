@@ -8,9 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"argus/internal/kube"
@@ -21,8 +23,9 @@ import (
 const settingsKey = "argus-settings"
 
 type MigrationSettings struct {
-	VLAN   int    `json:"vlan"`
-	Subnet string `json:"subnet"`
+	VLAN     int    `json:"vlan"`
+	Subnet   string `json:"subnet"`
+	Reserved []int  `json:"reserved,omitempty"`
 }
 
 func (c *Manager) MigrationSettings(ctx context.Context) (MigrationSettings, error) {
@@ -49,6 +52,13 @@ func (c *Manager) SetMigrationSettings(ctx context.Context, m MigrationSettings)
 		return errors.New("VLAN must be 0-4094")
 	}
 	m.Subnet = n.String()
+	if old, err := c.MigrationSettings(ctx); err == nil && old.Subnet == m.Subnet {
+		m.Reserved = old.Reserved
+	}
+	return c.saveMigrationSettings(ctx, m, true)
+}
+
+func (c *Manager) saveMigrationSettings(ctx context.Context, m MigrationSettings, push bool) error {
 	b, err := json.Marshal(m)
 	if err != nil {
 		return err
@@ -61,10 +71,17 @@ func (c *Manager) SetMigrationSettings(ctx context.Context, m MigrationSettings)
 	case err == nil:
 		err = c.store.Update(ctx, settingsKey, rv, data)
 	}
-	if err != nil {
+	if err != nil || !push {
 		return err
 	}
-	return c.PushMigrationNetwork(ctx)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		if err := c.PushMigrationNetwork(ctx); err != nil {
+			log.Printf("migration network: %v", err)
+		}
+	}()
+	return nil
 }
 
 func (c *Manager) PushMigrationNetwork(ctx context.Context) error {
@@ -79,6 +96,9 @@ func (c *Manager) PushMigrationNetwork(ctx context.Context) error {
 	used := map[int]bool{}
 	for _, n := range ns {
 		used[n.Slot] = true
+	}
+	for _, r := range m.Reserved {
+		used[r] = true
 	}
 	changed := false
 	for i := range ns {
@@ -95,15 +115,33 @@ func (c *Manager) PushMigrationNetwork(ctx context.Context) error {
 			return err
 		}
 	}
-	var errs []string
+	var (
+		mu      sync.Mutex
+		wg      sync.WaitGroup
+		errs    []string
+		applied = map[string]string{}
+	)
 	for _, n := range ns {
-		start, end, err := SlotRange(m.Subnet, n.Slot)
-		if err == nil {
-			err = n.do(ctx, http.MethodPost, "/api/migration-network", kube.MigrationNetwork{VLAN: m.VLAN, Subnet: m.Subnet, RangeStart: start, RangeEnd: end}, nil)
-		}
-		if err != nil {
-			errs = append(errs, err.Error())
-		}
+		wg.Add(1)
+		go func(n Node) {
+			defer wg.Done()
+			start, end, err := SlotRange(m.Subnet, n.Slot)
+			var res struct{ Address string }
+			if err == nil {
+				err = n.do(ctx, http.MethodPost, "/api/migration-network", kube.MigrationNetwork{VLAN: m.VLAN, Subnet: m.Subnet, RangeStart: start, RangeEnd: end}, &res)
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				errs = append(errs, err.Error())
+				return
+			}
+			applied[n.Name] = res.Address
+		}(n)
+	}
+	wg.Wait()
+	if err := c.recordMigrationAddresses(ctx, applied); err != nil {
+		errs = append(errs, err.Error())
 	}
 	if len(errs) > 0 {
 		return errors.New(strings.Join(errs, "; "))
@@ -120,13 +158,48 @@ func SlotRange(subnet string, slot int) (string, string, error) {
 	if slot < 1 || (slot+1)*16 > 1<<(bits-ones) {
 		return "", "", fmt.Errorf("no address block %d in %s", slot, subnet)
 	}
+	size := 1 << (bits - ones)
 	base := binary.BigEndian.Uint32(n.IP.To4())
 	ip := func(off int) string {
 		b := make([]byte, 4)
 		binary.BigEndian.PutUint32(b, base+uint32(off))
 		return net.IP(b).String()
 	}
-	return ip(slot * 16), ip(slot*16 + 15), nil
+	end := slot*16 + 15
+	if end == size-1 {
+		end--
+	}
+	return ip(slot * 16), ip(end), nil
+}
+
+func (c *Manager) recordMigrationAddresses(ctx context.Context, applied map[string]string) error {
+	ns, rv, err := c.load(ctx)
+	if err != nil {
+		return err
+	}
+	for i := range ns {
+		ns[i].MigrationAddress = applied[ns[i].Name]
+	}
+	return c.save(ctx, ns, rv)
+}
+
+func (c *Manager) releaseSlot(ctx context.Context, n Node) {
+	if n.Slot == 0 {
+		return
+	}
+	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if err := n.do(cctx, http.MethodPost, "/api/migration-network/remove", nil, nil); err == nil {
+		return
+	}
+	m, err := c.MigrationSettings(ctx)
+	if err != nil || m.Subnet == "" {
+		return
+	}
+	m.Reserved = append(m.Reserved, n.Slot)
+	if err := c.saveMigrationSettings(ctx, m, false); err != nil {
+		log.Printf("migration: reserve slot %d of %s: %v", n.Slot, n.Name, err)
+	}
 }
 
 func (c *Manager) syncCAs(ctx context.Context) error {

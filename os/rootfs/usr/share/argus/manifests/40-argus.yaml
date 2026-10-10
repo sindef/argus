@@ -58,7 +58,7 @@ rules:
     verbs: [create]
   - apiGroups: [kubevirt.io]
     resources: [virtualmachineinstancemigrations]
-    verbs: [get, create, delete]
+    verbs: [get, list, create, delete, deletecollection]
   - apiGroups: [kubevirt.io]
     resources: [kubevirts]
     verbs: [get, patch]

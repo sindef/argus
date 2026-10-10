@@ -26,14 +26,15 @@ import (
 const nodesKey = "argus-nodes"
 
 type Node struct {
-	Name       string `json:"name"`
-	URL        string `json:"url"`
-	Token      string `json:"token"`
-	CA         string `json:"ca"`
-	Slot       int    `json:"slot,omitempty"`
-	Org        string `json:"org"`
-	Datacenter string `json:"datacenter"`
-	Cluster    string `json:"cluster"`
+	Name             string `json:"name"`
+	URL              string `json:"url"`
+	Token            string `json:"token"`
+	CA               string `json:"ca"`
+	Slot             int    `json:"slot,omitempty"`
+	MigrationAddress string `json:"migrationAddress,omitempty"`
+	Org              string `json:"org"`
+	Datacenter       string `json:"datacenter"`
+	Cluster          string `json:"cluster"`
 }
 
 type NodeInfo = kube.NodeInfo
@@ -175,12 +176,19 @@ func (c *Manager) RemoveNode(ctx context.Context, org, name string) error {
 	if err != nil {
 		return err
 	}
-	out := ns[:0]
-	for _, n := range ns {
-		if n.Name != name || n.Org != org {
-			out = append(out, n)
+	var removed *Node
+	out := make([]Node, 0, len(ns))
+	for i, n := range ns {
+		if n.Name == name && n.Org == org {
+			removed = &ns[i]
+			continue
 		}
+		out = append(out, n)
 	}
+	if removed == nil {
+		return fmt.Errorf("host %s not found", name)
+	}
+	c.releaseSlot(ctx, *removed)
 	if err := c.save(ctx, out, rv); err != nil {
 		return err
 	}
