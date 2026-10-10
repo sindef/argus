@@ -41,8 +41,12 @@ ADD https://raw.githubusercontent.com/k8snetworkplumbingwg/network-attachment-de
 RUN cd /usr/share/argus/manifests \
     && sed -i 's/^  replicas: 2$/  replicas: 1/; s/^            memory: 450Mi$/            memory: 256Mi/' 10-kubevirt-operator.yaml \
     && sed -i 's/^            memory: 150Mi$/            memory: 80Mi/' 10-cdi-operator.yaml \
+    && sed -i 's/^        env:$/        env:\n        - name: GOMEMLIMIT\n          value: 160MiB\n        - name: GOGC\n          value: "50"/' 10-kubevirt-operator.yaml \
+    && sed -i 's/^      - env:$/      - env:\n        - name: GOMEMLIMIT\n          value: 64MiB\n        - name: GOGC\n          value: "50"/' 10-cdi-operator.yaml \
     && grep -q '^            memory: 256Mi$' 10-kubevirt-operator.yaml \
-    && grep -q '^            memory: 80Mi$' 10-cdi-operator.yaml
+    && grep -q '^            memory: 80Mi$' 10-cdi-operator.yaml \
+    && [ "$(grep -c 'name: GOMEMLIMIT' 10-kubevirt-operator.yaml)" = 1 ] \
+    && [ "$(grep -c 'name: GOMEMLIMIT' 10-cdi-operator.yaml)" = 1 ]
 COPY rootfs/ /
 COPY images/ /usr/share/argus/images/
 RUN sed -i "s/argus:VERSION/argus:${VERSION}/" /usr/share/argus/manifests/40-argus.yaml
