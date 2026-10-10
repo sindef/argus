@@ -282,6 +282,10 @@ func (s *Server) managerVMAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ns, name, act := r.PathValue("ns"), r.PathValue("name"), r.PathValue("action")
+	if s.manager.Busy(n.Name, name) {
+		flash(w, r, fmt.Errorf("%s has a migration in progress", name))
+		return
+	}
 	path := fmt.Sprintf("/api/vms/%s/%s/", ns, name)
 	var body any
 	switch {
@@ -363,23 +367,20 @@ func (s *Server) managerMigrate(w http.ResponseWriter, r *http.Request) {
 	if err == nil && src.Name == dst.Name {
 		err = errors.New("pick a different host")
 	}
-	running := false
+	var vm kube.VM
 	if err == nil {
-		st, _ := s.manager.NodeState(src.Name)
-		for _, v := range st.VMs {
-			if v.Namespace == r.PathValue("ns") && v.Name == r.PathValue("name") {
-				running = v.Running
-			}
+		err = src.Call(r.Context(), http.MethodGet, fmt.Sprintf("/api/vms/%s/%s", r.PathValue("ns"), r.PathValue("name")), nil, &vm)
+	}
+	if err == nil {
+		if vm.Running {
+			err = s.manager.LiveMigrate(src, dst, r.PathValue("ns"), r.PathValue("name"))
+		} else {
+			err = s.manager.Migrate(src, dst, r.PathValue("ns"), r.PathValue("name"))
 		}
 	}
 	if err != nil {
 		flash(w, r, err)
 		return
-	}
-	if running {
-		s.manager.LiveMigrate(src, dst, r.PathValue("ns"), r.PathValue("name"))
-	} else {
-		s.manager.Migrate(src, dst, r.PathValue("ns"), r.PathValue("name"))
 	}
 	log.Printf("%s: migrate %s/%s from %s to %s", session(r).User, r.PathValue("ns"), r.PathValue("name"), src.Name, dst.Name)
 	w.Header().Set("HX-Refresh", "true")
@@ -735,4 +736,13 @@ func (s *Server) managerEvents(w http.ResponseWriter, r *http.Request) {
 		evs = evs[:200]
 	}
 	s.render(w, r, "events.html", "layout", map[string]any{"Events": evs, "Error": errs, "Nav": "events", "Jobs": s.manager.Jobs(session(r).Org)})
+}
+
+func (s *Server) managerResolve(w http.ResponseWriter, r *http.Request) {
+	if err := s.manager.Resolve(r.Context(), session(r).Org, r.PathValue("id")); err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: resolved job %s", session(r).User, r.PathValue("id"))
+	w.Header().Set("HX-Refresh", "true")
 }

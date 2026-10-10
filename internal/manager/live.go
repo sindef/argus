@@ -2,15 +2,14 @@ package manager
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -202,26 +201,30 @@ func (c *Manager) releaseSlot(ctx context.Context, n Node) {
 	}
 }
 
-func (c *Manager) syncCAs(ctx context.Context) error {
+func (c *Manager) syncCAs(ctx context.Context, src, dst Node) error {
 	ns, err := c.Nodes(ctx)
 	if err != nil {
 		return err
 	}
-	cas := make([]string, len(ns))
-	for i, n := range ns {
+	cas := map[string]string{}
+	for _, n := range ns {
 		var res struct{ CA string }
-		if err := n.do(ctx, http.MethodGet, "/api/kubevirt-ca", nil, &res); err != nil {
+		err := n.do(ctx, http.MethodGet, "/api/kubevirt-ca", nil, &res)
+		if err != nil && (n.Name == src.Name || n.Name == dst.Name) {
 			return err
 		}
-		cas[i] = strings.TrimSpace(res.CA)
+		if err == nil && strings.TrimSpace(res.CA) != "" {
+			cas[n.Name] = strings.TrimSpace(res.CA)
+		}
 	}
-	for i, n := range ns {
+	for _, n := range []Node{src, dst} {
 		var others []string
-		for j, ca := range cas {
-			if j != i && ca != "" {
+		for name, ca := range cas {
+			if name != n.Name {
 				others = append(others, ca)
 			}
 		}
+		sort.Strings(others)
 		if err := n.do(ctx, http.MethodPost, "/api/kubevirt-external-ca", map[string]string{"bundle": strings.Join(others, "\n") + "\n"}, nil); err != nil {
 			return err
 		}
@@ -229,79 +232,132 @@ func (c *Manager) syncCAs(ctx context.Context) error {
 	return nil
 }
 
-func (c *Manager) LiveMigrate(src, dst Node, ns, vm string) {
-	j := &Job{Org: src.Org, VM: vm, From: src.Name, To: dst.Name, Started: time.Now(), Status: "Starting", Live: true}
-	c.mu.Lock()
-	c.jobs = append(c.jobs, j)
-	c.mu.Unlock()
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Hour)
-		defer cancel()
-		if err := c.liveMigrate(ctx, j, src, dst, ns, vm); err != nil {
-			c.update(j, "Failed: "+err.Error(), true, true)
-			return
-		}
-		c.update(j, "Completed", true, false)
-	}()
+func (c *Manager) LiveMigrate(src, dst Node, ns, vm string) error {
+	return c.startJob(&Job{Org: src.Org, Namespace: ns, VM: vm, From: src.Name, To: dst.Name, Live: true}, 6*time.Hour, func(ctx context.Context, j *Job) error {
+		return c.liveMigrate(ctx, j, src, dst, ns, vm)
+	})
+}
+
+func vmState(ctx context.Context, n Node, ns, vm string) (kube.VM, error) {
+	var v kube.VM
+	return v, n.do(ctx, http.MethodGet, vmPathIn(ns, vm, ""), nil, &v)
 }
 
 func (c *Manager) liveMigrate(ctx context.Context, j *Job, src, dst Node, ns, vm string) error {
-	if err := c.checkNetworks(ctx, src, dst, ns, vm); err != nil {
+	if err := c.preflight(ctx, src, dst, ns, vm); err != nil {
 		return err
 	}
 	c.update(j, "Exchanging certificates", false, false)
-	if err := c.syncCAs(ctx); err != nil {
+	if err := c.syncCAs(ctx, src, dst); err != nil {
 		return err
 	}
 	var spec map[string]any
-	if err := src.do(ctx, http.MethodGet, fmt.Sprintf("/api/vms/%s/%s/spec", ns, vm), nil, &spec); err != nil {
+	if err := src.do(ctx, http.MethodGet, vmPathIn(ns, vm, "spec"), nil, &spec); err != nil {
 		return err
 	}
-	id := make([]byte, 8)
-	rand.Read(id)
-	migrationID := hex.EncodeToString(id)
+	op := map[string]string{"operation": j.ID}
+	cleanup := func(cctx context.Context) {
+		src.do(cctx, http.MethodPost, vmPathIn(ns, vm, "migration-cleanup"), op, nil)
+		dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, vm, "migration-cleanup"), op, nil)
+	}
+	abort := func(cause error) error {
+		cctx, cancel := cleanupCtx()
+		defer cancel()
+		cleanup(cctx)
+		if err := dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, vm, "abort"), op, nil); err != nil {
+			return fmt.Errorf("%w; target cleanup failed: %v", cause, err)
+		}
+		return cause
+	}
+	sourceRunning := func(cctx context.Context) bool {
+		v, err := vmState(cctx, src, ns, vm)
+		return err == nil && v.Running
+	}
 
 	c.update(j, "Preparing target", false, false)
 	var recv struct{ SyncAddress string }
-	cleanup := func() {
-		bg := context.Background()
-		src.do(bg, http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/migration-cleanup", ns, vm), nil, nil)
-		dst.do(bg, http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/migration-cleanup", kube.Namespace, vm), nil, nil)
-	}
-	rollback := func() {
-		cleanup()
-		dst.do(context.Background(), http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/delete", kube.Namespace, vm), nil, nil)
-	}
-	if err := dst.do(ctx, http.MethodPost, "/api/receive", map[string]any{"name": vm, "migrationID": migrationID, "spec": spec}, &recv); err != nil {
-		rollback()
-		return err
+	if err := dst.do(ctx, http.MethodPost, "/api/receive", map[string]any{"name": vm, "migrationID": j.ID, "spec": spec}, &recv); err != nil {
+		return abort(err)
 	}
 	c.update(j, "Migrating", false, false)
-	if err := src.do(ctx, http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/send", ns, vm), map[string]string{"migrationID": migrationID, "connectURL": recv.SyncAddress}, nil); err != nil {
-		rollback()
-		return err
-	}
+	sendErr := src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "send"), map[string]string{"migrationID": j.ID, "connectURL": recv.SyncAddress}, nil)
+	phasePath := vmPathIn(ns, vm, "migration") + "?operation=" + j.ID
+	lastPhase, since := "", time.Now()
 	for {
 		var st struct{ Phase string }
-		if err := src.do(ctx, http.MethodGet, fmt.Sprintf("/api/vms/%s/%s/migration", ns, vm), nil, &st); err != nil {
-			rollback()
-			return err
+		err := src.do(ctx, http.MethodGet, phasePath, nil, &st)
+		switch {
+		case err != nil:
+			c.update(j, "Migrating (source status unavailable, retrying)", false, false)
+		case st.Phase == "Succeeded":
+			return c.finishLive(ctx, j, src, dst, ns, vm, cleanup)
+		case st.Phase == "Failed" || (st.Phase == "" && sendErr != nil):
+			cause := errors.New("migration failed")
+			if sendErr != nil {
+				cause = sendErr
+			}
+			if !sourceRunning(ctx) {
+				return fmt.Errorf("%v: %w", cause, errUnknown)
+			}
+			return abort(cause)
+		default:
+			var tst struct{ Phase string }
+			if dst.do(ctx, http.MethodGet, vmPathIn(kube.Namespace, vm, "migration")+"?operation="+j.ID, nil, &tst) == nil && tst.Phase == "Failed" {
+				cctx, cancel := cleanupCtx()
+				err := src.do(cctx, http.MethodPost, vmPathIn(ns, vm, "migration-cleanup"), op, nil)
+				running := err == nil && sourceRunning(cctx)
+				cancel()
+				if !running {
+					return fmt.Errorf("target failed to receive: %w", errUnknown)
+				}
+				return abort(errors.New("target failed to receive"))
+			}
+			if st.Phase != lastPhase {
+				lastPhase, since = st.Phase, time.Now()
+			} else if (st.Phase == "Pending" || st.Phase == "Scheduling") && time.Since(since) > 90*time.Second {
+				c.update(j, "Migrating (stalled in "+st.Phase+", checking sync controllers)", false, false)
+				src.do(ctx, http.MethodPost, "/api/sync-controller", nil, nil)
+				dst.do(ctx, http.MethodPost, "/api/sync-controller", nil, nil)
+				since = time.Now()
+			}
+			c.update(j, "Migrating ("+st.Phase+")", false, false)
 		}
-		switch st.Phase {
-		case "Succeeded":
-			c.update(j, "Cleaning up", false, false)
-			cleanup()
-			return src.do(ctx, http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/delete", ns, vm), nil, nil)
-		case "Failed":
-			rollback()
-			return errors.New("migration failed")
-		}
-		c.update(j, "Migrating ("+st.Phase+")", false, false)
 		select {
 		case <-ctx.Done():
-			rollback()
-			return ctx.Err()
+			return c.cancelLive(j, src, dst, ns, vm, op, abort, sourceRunning)
 		case <-time.After(3 * time.Second):
 		}
 	}
+}
+
+func (c *Manager) finishLive(ctx context.Context, j *Job, src, dst Node, ns, vm string, cleanup func(context.Context)) error {
+	c.update(j, "Confirming target", false, false)
+	for i := 0; i < 60; i++ {
+		if v, err := vmState(ctx, dst, kube.Namespace, vm); err == nil && v.Running {
+			c.update(j, "Cleaning up", false, false)
+			cleanup(ctx)
+			return src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "delete"), nil, nil)
+		}
+		select {
+		case <-ctx.Done():
+			return errUnknown
+		case <-time.After(5 * time.Second):
+		}
+	}
+	return errUnknown
+}
+
+func (c *Manager) cancelLive(j *Job, src, dst Node, ns, vm string, op map[string]string, abort func(error) error, sourceRunning func(context.Context) bool) error {
+	c.update(j, "Cancelling", false, false)
+	cctx, cancel := cleanupCtx()
+	defer cancel()
+	if err := src.do(cctx, http.MethodPost, vmPathIn(ns, vm, "migration-cleanup"), op, nil); err != nil {
+		return fmt.Errorf("cancel failed: %v: %w", err, errUnknown)
+	}
+	time.Sleep(10 * time.Second)
+	target, err := vmState(cctx, dst, kube.Namespace, vm)
+	if err != nil || target.Running || !sourceRunning(cctx) {
+		return fmt.Errorf("timed out: %w", errUnknown)
+	}
+	return abort(errors.New("timed out; cancelled"))
 }

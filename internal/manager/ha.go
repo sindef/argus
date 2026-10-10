@@ -125,13 +125,14 @@ func (c *Manager) Unprotect(ctx context.Context, vm string) error {
 		o.do(ctx, http.MethodPost, vmPath(vm, "ha"), map[string]bool{"enabled": false}, nil)
 	}
 	if r, err := c.Node(ctx, p.Replica); err == nil {
-		r.do(ctx, http.MethodPost, vmPath(vm, "delete"), nil, nil)
+		return r.do(ctx, http.MethodPost, vmPath(vm, "abort"), map[string]string{"operation": kube.HAReplicaOperation}, nil)
 	}
 	return nil
 }
 
 func (c *Manager) Start() {
 	c.started = time.Now()
+	c.loadJobs(context.Background())
 	go c.pollLoop()
 	go func() {
 		for range time.Tick(heartbeatEvery) {
@@ -247,8 +248,10 @@ func (c *Manager) replicate() {
 			continue
 		}
 		c.mu.Lock()
-		busy := c.syncing[p.VM]
-		c.syncing[p.VM] = true
+		busy := c.syncing[p.VM] || c.busy[busyKey(p.Owner, p.VM)] || c.busy[busyKey(p.Replica, p.VM)]
+		if !busy {
+			c.syncing[p.VM] = true
+		}
 		c.mu.Unlock()
 		if busy {
 			continue
@@ -308,7 +311,9 @@ func (c *Manager) sync(ctx context.Context, p Protected) error {
 	if err != nil {
 		return err
 	}
-	replica.do(ctx, http.MethodPost, vmPath(p.VM, "delete"), nil, nil)
+	if err := replica.do(ctx, http.MethodPost, vmPath(p.VM, "abort"), map[string]string{"operation": kube.HAReplicaOperation}, nil); err != nil {
+		return err
+	}
 	for {
 		vms, err := replica.VMs(ctx)
 		if err != nil {
@@ -327,7 +332,7 @@ func (c *Manager) sync(ctx context.Context, p Protected) error {
 		case <-time.After(3 * time.Second):
 		}
 	}
-	if err := replica.do(ctx, http.MethodPost, "/api/import", map[string]any{"name": p.VM, "export": ex}, nil); err != nil {
+	if err := replica.do(ctx, http.MethodPost, "/api/import", map[string]any{"name": p.VM, "operation": kube.HAReplicaOperation, "export": ex}, nil); err != nil {
 		return err
 	}
 	defer replica.do(context.Background(), http.MethodPost, vmPath(p.VM, "imported"), nil, nil)

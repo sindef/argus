@@ -57,7 +57,15 @@ func (c *Client) export(ctx context.Context, ns, name, baseURL, caPEM string, vm
 	rand.Read(b)
 	token := hex.EncodeToString(b)
 	exp := exportName(name)
-	if err := c.Secrets(ns).Create(ctx, exp, "Opaque", map[string][]byte{"token": []byte(token)}); err != nil && !apierrors.IsAlreadyExists(err) {
+	for _, gvr := range []schema.GroupVersionResource{vmExportGVR, secGVR} {
+		if err := c.dyn.Resource(gvr).Namespace(ns).Delete(ctx, exp, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			return Export{}, err
+		}
+	}
+	if err := c.waitGone(ctx, ns, exp); err != nil {
+		return Export{}, err
+	}
+	if err := c.Secrets(ns).Create(ctx, exp, "Opaque", map[string][]byte{"token": []byte(token)}); err != nil {
 		return Export{}, err
 	}
 	ve := &unstructured.Unstructured{Object: obj{
@@ -67,7 +75,7 @@ func (c *Client) export(ctx context.Context, ns, name, baseURL, caPEM string, vm
 		"spec": obj{
 			"source":         source,
 			"tokenSecretRef": exp,
-			"ttlDuration":    "4h",
+			"ttlDuration":    "13h",
 		},
 	}}
 	if _, err := c.dyn.Resource(vmExportGVR).Namespace(ns).Create(ctx, ve, metav1.CreateOptions{}); err != nil {
@@ -88,6 +96,22 @@ func (c *Client) export(ctx context.Context, ns, name, baseURL, caPEM string, vm
 		ex.Disks = append(ex.Disks, ExportDisk{DataVolume: dv, URL: fmt.Sprintf("%s/export/%s/%s/%s", baseURL, ns, exp, dv)})
 	}
 	return ex, nil
+}
+
+func (c *Client) waitGone(ctx context.Context, ns, exp string) error {
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	for {
+		_, err := c.dyn.Resource(vmExportGVR).Namespace(ns).Get(ctx, exp, metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return errors.New("previous export did not go away")
+		case <-time.After(time.Second):
+		}
+	}
 }
 
 func migratable(vm *unstructured.Unstructured) error {
@@ -167,12 +191,15 @@ func (c *Client) DeleteExport(ctx context.Context, ns, name string) error {
 
 func importName(vm string) string { return "argus-import-" + vm }
 
-func (c *Client) ImportVM(ctx context.Context, ns, name string, ex Export) error {
+func (c *Client) ImportVM(ctx context.Context, ns, name, operation string, ex Export) error {
 	if err := c.guard(); err != nil {
 		return err
 	}
 	if _, err := c.dyn.Resource(vmGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
 		return fmt.Errorf("%s already exists", name)
+	}
+	if err := c.FinishImport(ctx, ns, name); err != nil {
+		return err
 	}
 	src := importName(name)
 	cm := &unstructured.Unstructured{Object: obj{
@@ -184,6 +211,14 @@ func (c *Client) ImportVM(ctx context.Context, ns, name string, ex Export) error
 	if _, err := c.dyn.Resource(cmGVR).Namespace(ns).Create(ctx, cm, metav1.CreateOptions{}); err != nil {
 		return err
 	}
+	err := c.createImportVM(ctx, ns, name, operation, src, ex)
+	if err != nil {
+		c.FinishImport(context.Background(), ns, name)
+	}
+	return err
+}
+
+func (c *Client) createImportVM(ctx context.Context, ns, name, operation, src string, ex Export) error {
 	if err := c.Secrets(ns).Create(ctx, src, "Opaque", map[string][]byte{"token": []byte("x-kubevirt-export-token: " + ex.Token)}); err != nil {
 		return err
 	}
@@ -213,7 +248,7 @@ func (c *Client) ImportVM(ctx context.Context, ns, name string, ex Export) error
 	vm := &unstructured.Unstructured{Object: obj{
 		"apiVersion": "kubevirt.io/v1",
 		"kind":       "VirtualMachine",
-		"metadata":   obj{"name": name},
+		"metadata":   obj{"name": name, "annotations": obj{operationAnnotation: operation}},
 		"spec":       spec,
 	}}
 	_, err := c.dyn.Resource(vmGVR).Namespace(ns).Create(ctx, vm, metav1.CreateOptions{})

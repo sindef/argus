@@ -132,15 +132,15 @@ func (s *Server) apiUnexport(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiImport(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name   string      `json:"name"`
-		Export kube.Export `json:"export"`
+		Name      string      `json:"name"`
+		Operation string      `json:"operation"`
+		Export    kube.Export `json:"export"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || !validObject.MatchString(req.Name) {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || !validObject.MatchString(req.Name) || req.Operation == "" {
 		apiError(w, r, http.StatusBadRequest, errors.New("invalid import request"))
 		return
 	}
-	if err := s.kube.ImportVM(r.Context(), kube.Namespace, req.Name, req.Export); err != nil {
-		s.kube.FinishImport(context.Background(), kube.Namespace, req.Name)
+	if err := s.kube.ImportVM(r.Context(), kube.Namespace, req.Name, req.Operation, req.Export); err != nil {
 		apiError(w, r, http.StatusConflict, err)
 		return
 	}
@@ -292,19 +292,48 @@ func (s *Server) apiSend(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiMigrationPhase(w http.ResponseWriter, r *http.Request) {
-	phase, err := s.kube.MigrationPhase(r.Context(), r.PathValue("ns"), r.PathValue("name"))
+	op := r.URL.Query().Get("operation")
+	if op == "" {
+		apiError(w, r, http.StatusBadRequest, errors.New("operation required"))
+		return
+	}
+	phase, err := s.kube.MigrationPhase(r.Context(), r.PathValue("ns"), op)
 	if err != nil {
-		apiError(w, r, http.StatusNotFound, err)
+		apiError(w, r, http.StatusBadGateway, err)
 		return
 	}
 	writeJSON(w, map[string]string{"phase": phase})
 }
 
+type operationReq struct {
+	Operation string `json:"operation"`
+}
+
 func (s *Server) apiMigrationCleanup(w http.ResponseWriter, r *http.Request) {
-	if err := s.kube.CleanupMigration(r.Context(), r.PathValue("ns"), r.PathValue("name")); err != nil {
+	var req operationReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Operation == "" {
+		apiError(w, r, http.StatusBadRequest, errors.New("operation required"))
+		return
+	}
+	if err := s.kube.CleanupMigration(r.Context(), r.PathValue("ns"), req.Operation); err != nil {
 		apiError(w, r, http.StatusBadGateway, err)
 		return
 	}
+	writeJSON(w, map[string]string{})
+}
+
+func (s *Server) apiAbort(w http.ResponseWriter, r *http.Request) {
+	var req operationReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Operation == "" {
+		apiError(w, r, http.StatusBadRequest, errors.New("operation required"))
+		return
+	}
+	ns, name := r.PathValue("ns"), r.PathValue("name")
+	if err := s.kube.DeleteOwnedVM(r.Context(), ns, name, req.Operation); err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	log.Printf("%s: abort %s for %s/%s", session(r).User, req.Operation, ns, name)
 	writeJSON(w, map[string]string{})
 }
 
@@ -435,4 +464,12 @@ func memInfo() (total, used int64) {
 		}
 	}
 	return total, total - avail
+}
+
+func (s *Server) apiSyncController(w http.ResponseWriter, r *http.Request) {
+	if err := s.kube.EnsureSyncController(r.Context()); err != nil {
+		apiError(w, r, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, map[string]string{})
 }

@@ -43,11 +43,15 @@ func (c *Client) syncLeaseAge(ctx context.Context) (time.Duration, error) {
 	return time.Since(t), nil
 }
 
-func (c *Client) ensureSyncController(ctx context.Context) error {
-	if age, err := c.syncLeaseAge(ctx); err == nil && age < 30*time.Second {
+func (c *Client) EnsureSyncController(ctx context.Context) error {
+	age, err := c.syncLeaseAge(ctx)
+	switch {
+	case err == nil && age < 30*time.Second:
 		return nil
+	case err != nil && !apierrors.IsNotFound(err):
+		return fmt.Errorf("migration sync controller status unknown: %w", err)
 	}
-	err := c.dyn.Resource(podGVR).Namespace(kubevirtNS).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: "kubevirt.io=" + syncController})
+	err = c.dyn.Resource(podGVR).Namespace(kubevirtNS).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: "kubevirt.io=" + syncController})
 	if err != nil {
 		return err
 	}
@@ -251,8 +255,38 @@ func (c *Client) VMSpec(ctx context.Context, ns, name string) (obj, error) {
 	return spec, nil
 }
 
-func sendName(vm string) string { return "argus-send-" + vm }
-func recvName(vm string) string { return "argus-recv-" + vm }
+const (
+	operationAnnotation = "argus.io/operation"
+	operationLabel      = "argus.io/operation"
+	HAReplicaOperation  = "ha-replica"
+)
+
+func sendName(vm, op string) string { return "argus-send-" + vm + "-" + op }
+func recvName(vm, op string) string { return "argus-recv-" + vm + "-" + op }
+
+func (c *Client) DeleteOwnedVM(ctx context.Context, ns, name, operation string) error {
+	vm, err := c.dyn.Resource(vmGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	owned := operation != "" && vm.GetAnnotations()[operationAnnotation] == operation
+	if operation == HAReplicaOperation && vm.GetLabels()[haLabel] == "true" {
+		owned = true
+	}
+	if !owned {
+		return fmt.Errorf("%s was not created by this operation; leaving it in place", name)
+	}
+	uid := vm.GetUID()
+	fg := metav1.DeletePropagationForeground
+	err = c.dyn.Resource(vmGVR).Namespace(ns).Delete(ctx, name, metav1.DeleteOptions{PropagationPolicy: &fg, Preconditions: &metav1.Preconditions{UID: &uid}})
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	return err
+}
 
 func (c *Client) Receive(ctx context.Context, ns, name, migrationID string, spec obj) (string, error) {
 	if err := c.guard(); err != nil {
@@ -261,7 +295,7 @@ func (c *Client) Receive(ctx context.Context, ns, name, migrationID string, spec
 	if !c.HasMigrationNetwork(ctx) {
 		return "", errors.New("migration network not configured")
 	}
-	if err := c.ensureSyncController(ctx); err != nil {
+	if err := c.EnsureSyncController(ctx); err != nil {
 		return "", err
 	}
 	if _, err := c.dyn.Resource(vmGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
@@ -280,7 +314,7 @@ func (c *Client) Receive(ctx context.Context, ns, name, migrationID string, spec
 	vm := &unstructured.Unstructured{Object: obj{
 		"apiVersion": "kubevirt.io/v1",
 		"kind":       "VirtualMachine",
-		"metadata":   obj{"name": name, "annotations": obj{"kubevirt.io/restore-run-strategy": "Always"}},
+		"metadata":   obj{"name": name, "annotations": obj{"kubevirt.io/restore-run-strategy": "Always", operationAnnotation: migrationID}},
 		"spec":       spec,
 	}}
 	if _, err := c.dyn.Resource(vmGVR).Namespace(ns).Create(ctx, vm, metav1.CreateOptions{}); err != nil {
@@ -301,14 +335,14 @@ func (c *Client) Receive(ctx context.Context, ns, name, migrationID string, spec
 	mig := &unstructured.Unstructured{Object: obj{
 		"apiVersion": "kubevirt.io/v1",
 		"kind":       "VirtualMachineInstanceMigration",
-		"metadata":   obj{"name": recvName(name)},
+		"metadata":   obj{"name": recvName(name, migrationID), "labels": obj{operationLabel: migrationID}},
 		"spec":       obj{"vmiName": name, "receive": obj{"migrationID": migrationID}},
 	}}
 	if _, err := c.dyn.Resource(vmimGVR).Namespace(ns).Create(ctx, mig, metav1.CreateOptions{}); err != nil {
 		return "", err
 	}
 	for {
-		m, err := c.dyn.Resource(vmimGVR).Namespace(ns).Get(ctx, recvName(name), metav1.GetOptions{})
+		m, err := c.dyn.Resource(vmimGVR).Namespace(ns).Get(ctx, recvName(name, migrationID), metav1.GetOptions{})
 		if err != nil {
 			return "", err
 		}
@@ -330,39 +364,32 @@ func (c *Client) Send(ctx context.Context, ns, name, migrationID, connectURL str
 	if _, err := c.dyn.Resource(vmiGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err != nil {
 		return fmt.Errorf("%s is not running", name)
 	}
-	if err := c.ensureSyncController(ctx); err != nil {
+	if err := c.EnsureSyncController(ctx); err != nil {
 		return err
 	}
 	mig := &unstructured.Unstructured{Object: obj{
 		"apiVersion": "kubevirt.io/v1",
 		"kind":       "VirtualMachineInstanceMigration",
-		"metadata":   obj{"name": sendName(name)},
+		"metadata":   obj{"name": sendName(name, migrationID), "labels": obj{operationLabel: migrationID}},
 		"spec":       obj{"vmiName": name, "sendTo": obj{"migrationID": migrationID, "connectURL": connectURL}},
 	}}
 	_, err := c.dyn.Resource(vmimGVR).Namespace(ns).Create(ctx, mig, metav1.CreateOptions{})
 	return err
 }
 
-func (c *Client) MigrationPhase(ctx context.Context, ns, name string) (string, error) {
-	for _, n := range []string{sendName(name), recvName(name)} {
-		m, err := c.dyn.Resource(vmimGVR).Namespace(ns).Get(ctx, n, metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
-			continue
-		}
-		if err != nil {
-			return "", err
-		}
-		phase, _, _ := unstructured.NestedString(m.Object, "status", "phase")
-		return phase, nil
+func (c *Client) MigrationPhase(ctx context.Context, ns, migrationID string) (string, error) {
+	list, err := c.dyn.Resource(vmimGVR).Namespace(ns).List(ctx, metav1.ListOptions{LabelSelector: operationLabel + "=" + migrationID})
+	if err != nil || len(list.Items) == 0 {
+		return "", err
 	}
-	return "", errors.New("no migration")
+	phase, _, _ := unstructured.NestedString(list.Items[0].Object, "status", "phase")
+	return phase, nil
 }
 
-func (c *Client) CleanupMigration(ctx context.Context, ns, name string) error {
-	for _, n := range []string{sendName(name), recvName(name)} {
-		if err := c.dyn.Resource(vmimGVR).Namespace(ns).Delete(ctx, n, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
-			return err
-		}
+func (c *Client) CleanupMigration(ctx context.Context, ns, migrationID string) error {
+	err := c.dyn.Resource(vmimGVR).Namespace(ns).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: operationLabel + "=" + migrationID})
+	if apierrors.IsNotFound(err) {
+		return nil
 	}
-	return nil
+	return err
 }

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"sort"
 	"strings"
@@ -44,7 +45,9 @@ type Manager struct {
 	store auth.Secrets
 
 	mu       sync.Mutex
+	jobsMu   sync.Mutex
 	jobs     []*Job
+	busy     map[string]bool
 	lastSeen map[string]time.Time
 	syncing  map[string]bool
 	started  time.Time
@@ -53,19 +56,8 @@ type Manager struct {
 	tel      *telemetry
 }
 
-type Job struct {
-	Org      string
-	VM       string
-	From, To string
-	Started  time.Time
-	Status   string
-	Done     bool
-	Failed   bool
-	Live     bool
-}
-
 func New(store auth.Secrets, metricsPath string) *Manager {
-	return &Manager{store: store, lastSeen: map[string]time.Time{}, syncing: map[string]bool{}, started: time.Now(), inv: inventory{nodes: map[string]NodeState{}}, tel: newTelemetry(metricsPath)}
+	return &Manager{store: store, lastSeen: map[string]time.Time{}, busy: map[string]bool{}, syncing: map[string]bool{}, started: time.Now(), inv: inventory{nodes: map[string]NodeState{}}, tel: newTelemetry(metricsPath)}
 }
 
 func (c *Manager) Nodes(ctx context.Context) ([]Node, error) {
@@ -297,7 +289,7 @@ func (n Node) Action(ctx context.Context, ns, vm, action string) error {
 	return n.do(ctx, http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/%s", ns, vm, action), nil, nil)
 }
 
-func (c *Manager) checkNetworks(ctx context.Context, src, dst Node, ns, vm string) error {
+func (c *Manager) preflight(ctx context.Context, src, dst Node, ns, vm string) error {
 	vms, err := src.VMs(ctx)
 	if err != nil {
 		return err
@@ -374,85 +366,92 @@ func (c *Manager) Jobs(org string) []Job {
 	return out
 }
 
-func (c *Manager) update(j *Job, status string, done, failed bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	j.Status, j.Done, j.Failed = status, done, failed
+func (c *Manager) Migrate(src, dst Node, ns, vm string) error {
+	return c.startJob(&Job{Org: src.Org, Namespace: ns, VM: vm, From: src.Name, To: dst.Name}, 12*time.Hour, func(ctx context.Context, j *Job) error {
+		return c.migrate(ctx, j, src, dst, ns, vm)
+	})
 }
 
-func (c *Manager) Migrate(src, dst Node, ns, vm string) {
-	j := &Job{Org: src.Org, VM: vm, From: src.Name, To: dst.Name, Started: time.Now(), Status: "Starting"}
-	c.mu.Lock()
-	c.jobs = append(c.jobs, j)
-	c.mu.Unlock()
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
-		defer cancel()
-		if err := c.migrate(ctx, j, src, dst, ns, vm); err != nil {
-			c.update(j, "Failed: "+err.Error(), true, true)
-			return
-		}
-		c.update(j, "Completed", true, false)
-	}()
+func vmPathIn(ns, vm, action string) string {
+	if action == "" {
+		return fmt.Sprintf("/api/vms/%s/%s", ns, vm)
+	}
+	return fmt.Sprintf("/api/vms/%s/%s/%s", ns, vm, action)
+}
+
+func cleanupCtx() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), 2*time.Minute)
 }
 
 func (c *Manager) migrate(ctx context.Context, j *Job, src, dst Node, ns, vm string) error {
-	if err := c.checkNetworks(ctx, src, dst, ns, vm); err != nil {
+	if err := c.preflight(ctx, src, dst, ns, vm); err != nil {
 		return err
 	}
+	op := map[string]string{"operation": j.ID}
 
 	c.update(j, "Exporting", false, false)
 	var ex kube.Export
-	if err := src.do(ctx, http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/export", ns, vm), map[string]string{"baseURL": src.URL}, &ex); err != nil {
+	if err := src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "export"), map[string]string{"baseURL": src.URL}, &ex); err != nil {
 		return err
 	}
 	unexport := func() {
-		src.do(context.Background(), http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/unexport", ns, vm), nil, nil)
+		cctx, cancel := cleanupCtx()
+		defer cancel()
+		if err := src.do(cctx, http.MethodPost, vmPathIn(ns, vm, "unexport"), nil, nil); err != nil {
+			log.Printf("migrate %s: unexport: %v", vm, err)
+		}
 	}
 
 	c.update(j, "Importing", false, false)
-	if err := dst.do(ctx, http.MethodPost, "/api/import", map[string]any{"name": vm, "export": ex}, nil); err != nil {
+	if err := dst.do(ctx, http.MethodPost, "/api/import", map[string]any{"name": vm, "operation": j.ID, "export": ex}, nil); err != nil {
 		unexport()
 		return err
 	}
-	rollback := func() {
-		dst.do(context.Background(), http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/delete", kube.Namespace, vm), nil, nil)
-		dst.do(context.Background(), http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/imported", kube.Namespace, vm), nil, nil)
+	rollback := func(cause error) error {
+		cctx, cancel := cleanupCtx()
+		defer cancel()
+		err := dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, vm, "abort"), op, nil)
+		dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, vm, "imported"), nil, nil)
 		unexport()
+		if err != nil {
+			return fmt.Errorf("%w; target cleanup failed: %v", cause, err)
+		}
+		return cause
 	}
 	for {
 		var disks []kube.DiskStatus
-		if err := dst.do(ctx, http.MethodGet, fmt.Sprintf("/api/vms/%s/%s/disks", kube.Namespace, vm), nil, &disks); err != nil {
-			rollback()
-			return err
-		}
-		done, progress := true, []string{}
-		for _, d := range disks {
-			if d.Phase == "Failed" {
-				rollback()
-				return fmt.Errorf("disk %s failed to copy", d.Name)
+		if err := dst.do(ctx, http.MethodGet, vmPathIn(kube.Namespace, vm, "disks"), nil, &disks); err != nil {
+			if ctx.Err() != nil {
+				return rollback(ctx.Err())
 			}
-			if d.Phase != "Succeeded" {
-				done = false
+			c.update(j, "Copying (target unreachable, retrying)", false, false)
+		} else {
+			done, progress := true, []string{}
+			for _, d := range disks {
+				if d.Phase == "Failed" {
+					return rollback(fmt.Errorf("disk %s failed to copy", d.Name))
+				}
+				if d.Phase != "Succeeded" {
+					done = false
+				}
+				progress = append(progress, d.Name+" "+d.Progress)
 			}
-			progress = append(progress, d.Name+" "+d.Progress)
+			if done {
+				break
+			}
+			c.update(j, "Copying "+strings.Join(progress, ", "), false, false)
 		}
-		if done {
-			break
-		}
-		c.update(j, "Copying "+strings.Join(progress, ", "), false, false)
 		select {
 		case <-ctx.Done():
-			rollback()
-			return ctx.Err()
+			return rollback(ctx.Err())
 		case <-time.After(5 * time.Second):
 		}
 	}
 
 	c.update(j, "Cleaning up", false, false)
-	dst.do(ctx, http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/imported", kube.Namespace, vm), nil, nil)
+	dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, vm, "imported"), nil, nil)
 	unexport()
-	return src.do(ctx, http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/delete", ns, vm), nil, nil)
+	return src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "delete"), nil, nil)
 }
 
 func (n Node) Call(ctx context.Context, method, path string, in, out any) error {
