@@ -2,6 +2,7 @@
 <div class="page-head">
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-network"/></svg>
   <div><h1>Networks</h1><div class="crumbs">Network / Networks</div></div>
+  {{if and .CanEdit (not .Manager)}}<div class="actions"><button class="btn primary" data-dialog="new-network">{{template "icon" "plus"}}Add network</button></div>{{end}}
 </div>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
 {{if .Manager}}{{template "fleet-networks" .}}{{else}}
@@ -22,12 +23,18 @@
 </table>
 </div>
 {{if .CanEdit}}
-<form hx-post="/networks" hx-target="#flash" class="inline spaced">
-  <input name="name" placeholder="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required>
-  <input name="vlan" type="number" min="1" max="4094" placeholder="VLAN" class="num">
-  {{with .Bridges}}<select name="bridge" title="Bridge">{{range .}}<option>{{.}}</option>{{end}}</select>{{end}}
-  <button class="btn primary" type="submit">{{template "icon" "plus"}}Add network</button>
-</form>
+<dialog id="new-network" class="card">
+  <form class="form" hx-post="/networks" hx-target="#network-form-error">
+    <h2>Add network</h2>
+    <p id="network-form-error" class="error form-error"></p>
+    <div class="row">
+      <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
+      <label>VLAN <input name="vlan" type="number" min="1" max="4094" placeholder="untagged"></label>
+      {{with .Bridges}}<label>Bridge <select name="bridge">{{range .}}<option>{{.}}</option>{{end}}</select></label>{{end}}
+    </div>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">{{template "icon" "plus"}}Add network</button></div>
+  </form>
+</dialog>
 {{end}}
 {{end}}
 {{end}}
