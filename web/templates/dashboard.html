@@ -4,7 +4,7 @@
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-gauge"/></svg>
   <div><h1>{{.NodeName}}</h1><div class="crumbs">Host dashboard <span class="muted" id="dash-uptime"></span></div></div>
 </div>
-<p class="error" id="dash-error"></p>
+<p class="error" id="dash-error" data-src="{{.Base}}/dashboard/stats"></p>
 <div class="stats">
   <div class="stat">{{template "icon" "cpu"}}<div><div class="label">CPU</div><div class="value" id="dash-cpu">—</div><div class="detail" id="dash-load"></div><div class="bar ok"><span id="dash-cpu-bar"></span></div></div></div>
   <div class="stat">{{template "icon" "memory-stick"}}<div><div class="label">Memory</div><div class="value" id="dash-mem">—</div><div class="detail" id="dash-mem-detail"></div><div class="bar"><span id="dash-mem-bar"></span></div></div></div>

@@ -9,7 +9,7 @@
 <table>
   <thead><tr><th>Name</th><th>Datacenter</th><th>Cluster</th><th>Address</th><th>Version</th><th>VMs</th><th>Migration IPs</th><th>Status</th><th></th></tr></thead>
   <tbody>{{range .Hosts}}<tr data-context>
-    <td>{{template "icon" "server"}}{{.Node.Name}}</td>
+    <td><a href="/hosts/{{.Node.Name}}/dashboard">{{template "icon" "server"}}{{.Node.Name}}</a></td>
     <td>{{with .Node.Datacenter}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
     <td>{{with .Node.Cluster}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
     <td><a href="{{.Node.URL}}" target="_blank" rel="noopener">{{.Node.URL}}</a></td>

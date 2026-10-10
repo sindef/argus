@@ -104,7 +104,7 @@
     <ul>{{range .Clusters}}{{$c := .}}
     <li data-id="cl:{{.Name}}"><span class="row">{{template "twisty"}}{{template "icon" "layers"}}{{.Name}}</span>
       <ul>{{range .Hosts}}{{$h := .}}
-      <li data-id="h:{{.Node.Name}}"><span class="row" title="{{.Error}}">{{template "twisty"}}{{template "icon" "server"}}<span class="dot {{.Status}}"></span>{{.Node.Name}}</span>
+      <li data-id="h:{{.Node.Name}}"><span class="row{{if eq $.Nav (printf "host:%s" .Node.Name)}} active{{end}}" title="{{.Error}}">{{template "twisty"}}<a href="/hosts/{{.Node.Name}}/dashboard">{{template "icon" "server"}}<span class="dot {{.Status}}"></span>{{.Node.Name}}</a></span>
         <ul>{{range index $c.VMsByHost .Node.Name}}
         <li data-context><a class="row{{if eq $.Nav (printf "vm:%s/%s" .Host .Name)}} active{{end}}" href="/nodes/{{.Host}}/vms/{{.Namespace}}/{{.Name}}">{{template "icon" "monitor"}}<span class="dot {{.Status}}"></span>{{.Label}}</a>{{template "vm-menu" (vmCtx . $)}}</li>
         {{end}}</ul>

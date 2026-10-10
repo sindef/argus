@@ -31,7 +31,7 @@
   }
   async function tick() {
     try {
-      const r = await fetch("/dashboard/stats", { credentials: "same-origin" });
+      const r = await fetch($("dash-error").dataset.src, { credentials: "same-origin" });
       if (!r.ok) throw new Error(await r.text());
       const d = await r.json(), h = d.host;
       $("dash-error").textContent = "";

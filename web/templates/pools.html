@@ -2,7 +2,7 @@
 <div class="page-head">
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-database"/></svg>
   <div><h1>Pools</h1><div class="crumbs">Storage / Pools</div></div>
-  <div class="actions"><button class="btn primary" hx-get="/pools/new" hx-target="#modal">{{template "icon" "plus"}}Create pool</button></div>
+  <div class="actions"><button class="btn primary" hx-get="{{$.Base}}/pools/new" hx-target="#modal">{{template "icon" "plus"}}Create pool</button></div>
 </div>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
 <div class="table-wrap">
@@ -21,10 +21,10 @@
     <td class="row-actions">
       <div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
         <div class="menu-list" hidden hx-target="#flash">
-          <button hx-get="/pools/{{.Name}}/add" hx-target="#modal">{{template "icon" "plus"}}Add devices</button>
+          <button hx-get="{{$.Base}}/pools/{{.Name}}/add" hx-target="#modal">{{template "icon" "plus"}}Add devices</button>
           {{if not .System}}<hr>
-          <button hx-post="/pools/{{.Name}}/export" hx-confirm="Export {{.Name}}? Its disks keep their data and can be imported again.">{{template "icon" "upload"}}Export</button>
-          <button class="danger" hx-post="/pools/{{.Name}}/destroy" hx-prompt="Type {{.Name}} to destroy the pool and erase its disks">{{template "icon" "trash-2"}}Destroy</button>{{end}}
+          <button hx-post="{{$.Base}}/pools/{{.Name}}/export" hx-confirm="Export {{.Name}}? Its disks keep their data and can be imported again.">{{template "icon" "upload"}}Export</button>
+          <button class="danger" hx-post="{{$.Base}}/pools/{{.Name}}/destroy" hx-prompt="Type {{.Name}} to destroy the pool and erase its disks">{{template "icon" "trash-2"}}Destroy</button>{{end}}
         </div>
       </div>
     </td>
@@ -37,7 +37,7 @@
   <div class="table-wrap"><table>
     <thead><tr><th>Name</th><th>State</th><th>ID</th><th></th></tr></thead>
     <tbody>{{range .}}<tr><td>{{.Name}}</td><td>{{.State}}</td><td class="mono">{{.ID}}</td>
-      <td class="row-actions"><button class="link" hx-post="/pools/{{.Name}}/import" hx-target="#flash" hx-confirm="Import pool {{.Name}}?">Import</button><button class="link danger" hx-post="/pools/{{.Name}}/force-import" hx-target="#flash" hx-confirm="Force import {{.Name}}? Only do this if no other host is using these disks.">Force import</button></td></tr>{{end}}</tbody>
+      <td class="row-actions"><button class="link" hx-post="{{$.Base}}/pools/{{.Name}}/import" hx-target="#flash" hx-confirm="Import pool {{.Name}}?">Import</button><button class="link danger" hx-post="{{$.Base}}/pools/{{.Name}}/force-import" hx-target="#flash" hx-confirm="Force import {{.Name}}? Only do this if no other host is using these disks.">Force import</button></td></tr>{{end}}</tbody>
   </table></div>
 </div>
 {{end}}
@@ -54,7 +54,7 @@
 {{end}}
 
 {{define "pool-modal"}}
-<form hx-post="{{if .Pool}}/pools/{{.Pool}}/add{{else}}/pools{{end}}" hx-target="#pool-form-error" class="form pool-form">
+<form hx-post="{{.Base}}{{if .Pool}}/pools/{{.Pool}}/add{{else}}/pools{{end}}" hx-target="#pool-form-error" class="form pool-form">
   <h2>{{if .Pool}}Add devices to {{.Pool}}{{else}}Create pool{{end}}</h2>
   <p id="pool-form-error" class="error form-error">{{.Error}}</p>
   {{if not .Pool}}<label>Name <span class="help" title="The name is the tier you pick when creating disks, e.g. fast-ssd or bulk-hdd.">?</span><input name="name" pattern="[a-z][a-z0-9-]{0,30}" required placeholder="fast-ssd"></label>{{end}}

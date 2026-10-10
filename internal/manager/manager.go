@@ -275,6 +275,18 @@ func (n Node) do(ctx context.Context, method, path string, in, out any) error {
 	return nil
 }
 
+func (n Node) Proxy(ctx context.Context, method, path string, body io.Reader, h http.Header) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, n.URL+path, body)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range h {
+		req.Header[k] = v
+	}
+	req.Header.Set("Authorization", "Bearer "+n.Token)
+	return n.client().Do(req)
+}
+
 func (n Node) Info(ctx context.Context) (NodeInfo, error) {
 	var info NodeInfo
 	return info, n.do(ctx, http.MethodGet, "/api/node", nil, &info)

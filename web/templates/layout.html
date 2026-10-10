@@ -42,7 +42,7 @@
 </header>
 <div class="shell">
   {{if not .Session.MustChange}}<aside class="sidebar">{{if .Manager}}{{template "manager-nav" .}}{{else}}{{template "node-nav" .}}{{end}}</aside>{{end}}
-  <main class="content"{{if .Session.MustChange}} style="margin-left:0"{{end}}>{{with .NetPending}}<div class="net-banner">{{template "icon" "triangle-alert"}}<span>Network change “{{.Description}}” rolls back at {{.Deadline.Local.Format "15:04:05"}} unless confirmed.</span><button class="btn sm primary" hx-post="/network/host/confirm" hx-target="#flash">Keep it</button><button class="btn sm" hx-post="/network/host/rollback" hx-target="#flash">Roll back now</button></div>{{end}}{{template "content" .}}</main>
+  <main class="content"{{if .Session.MustChange}} style="margin-left:0"{{end}}>{{template "net-banner" .}}{{template "content" .}}</main>
   <p id="flash" class="error toast" role="alert" hx-on::after-swap="clearTimeout(this.t); this.t = setTimeout(() => this.innerHTML = '', 8000)"></p>
   <aside id="drawer" class="drawer"></aside>
   <dialog id="modal" class="card wide"></dialog>
@@ -50,6 +50,10 @@
 </div>
 </body>
 </html>{{end}}
+
+{{define "net-banner"}}{{with .NetPending}}<div class="net-banner">{{template "icon" "triangle-alert"}}<span>Network change “{{.Description}}” rolls back at {{.Deadline.Local.Format "15:04:05"}} unless confirmed.</span><button class="btn sm primary" hx-post="{{$.Base}}/network/host/confirm" hx-target="#flash">Keep it</button><button class="btn sm" hx-post="{{$.Base}}/network/host/rollback" hx-target="#flash">Roll back now</button></div>{{end}}{{end}}
+
+{{define "remote"}}{{template "scripts" .}}{{template "net-banner" .}}{{template "content" .}}{{end}}
 
 {{define "node-nav"}}
 <a class="nav-link{{if eq .Nav "dashboard"}} active{{end}}" href="/dashboard">{{template "icon" "gauge"}}Dashboard</a>

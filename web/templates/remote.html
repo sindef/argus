@@ -1,0 +1,4 @@
+{{define "content"}}
+<nav class="tabs">{{range .Tabs}}<a href="/hosts/{{$.Host}}/{{.Path}}"{{if eq $.Tab .Path}} class="active"{{end}}>{{.Label}}</a>{{end}}</nav>
+{{.Body}}
+{{end}}

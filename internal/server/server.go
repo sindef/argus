@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"argus/internal/auth"
@@ -41,6 +42,7 @@ type Server struct {
 	pages       map[string]*template.Template
 	limiter     *loginLimiter
 	mux         *http.ServeMux
+	ui          *http.ServeMux
 }
 
 type Options struct {
@@ -60,7 +62,7 @@ type reqAuth struct {
 }
 
 func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
-	s := &Server{kube: k, auth: a, banner: o.Banner, runDir: o.RunDir, releaseFile: o.ReleaseFile, caPEM: o.CAPEM, nodeName: o.NodeName, manager: o.Manager, pages: map[string]*template.Template{}, mux: http.NewServeMux(), limiter: newLoginLimiter()}
+	s := &Server{kube: k, auth: a, banner: o.Banner, runDir: o.RunDir, releaseFile: o.ReleaseFile, caPEM: o.CAPEM, nodeName: o.NodeName, manager: o.Manager, pages: map[string]*template.Template{}, mux: http.NewServeMux(), ui: http.NewServeMux(), limiter: newLoginLimiter()}
 	if k != nil {
 		k.Guard = s.maintenance
 	}
@@ -69,7 +71,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	}
 	s.version = readEnv(o.ReleaseFile)["KAIROS_VERSION"]
 	s.sso.m = map[string]ssoFlow{}
-	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html", "hostnet.html", "dashboard.html"} {
+	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html", "hostnet.html", "dashboard.html", "remote.html"} {
 		t, err := template.New(p).Funcs(funcs).ParseFS(web.FS, "templates/layout.html", "templates/manager-nav.html", "templates/"+p)
 		if err != nil {
 			return nil, err
@@ -118,6 +120,8 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("POST /hosts", s.require(auth.Admin, s.managerAddNode))
 		s.mux.HandleFunc("POST /hosts/{node}/group", s.require(auth.Admin, s.managerGroupNode))
 		s.mux.HandleFunc("POST /hosts/{node}/delete", s.require(auth.Admin, s.managerRemoveNode))
+		s.mux.HandleFunc("GET /hosts/{node}/{path...}", s.require(auth.ReadOnly, s.managerHostUI))
+		s.mux.HandleFunc("POST /hosts/{node}/{path...}", s.require(auth.Admin, s.managerHostUI))
 		s.mux.HandleFunc("GET /settings", s.require(auth.Admin, s.managerSettings))
 		s.mux.HandleFunc("POST /settings/sso", s.require(auth.Admin, s.managerSSO))
 		s.mux.HandleFunc("POST /settings/orgs", s.require(auth.Admin, s.managerAddOrg))
@@ -128,22 +132,22 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("GET /events", s.require(auth.ReadOnly, s.eventsPage))
 	s.mux.HandleFunc("GET /volumes", s.require(auth.ReadOnly, s.volumesPage))
 	s.mux.HandleFunc("POST /volumes/{op}", s.require(auth.Operator, s.volumeAction))
-	s.mux.HandleFunc("GET /dashboard", s.require(auth.ReadOnly, s.dashboard))
-	s.mux.HandleFunc("GET /dashboard/stats", s.require(auth.ReadOnly, s.dashboardStats))
-	s.mux.HandleFunc("GET /disks", s.require(auth.Admin, s.disksPage))
-	s.mux.HandleFunc("GET /disks/{name}", s.require(auth.Admin, s.diskModal))
-	s.mux.HandleFunc("POST /disks/{name}/{action}", s.require(auth.Admin, s.diskAction))
-	s.mux.HandleFunc("GET /network/host", s.require(auth.Admin, s.hostNetworkPage))
-	s.mux.HandleFunc("GET /network/host/iface/{name}", s.require(auth.Admin, s.ifaceModal))
-	s.mux.HandleFunc("POST /network/host/{op}", s.require(auth.Admin, s.hostNetworkAction))
-	s.mux.HandleFunc("GET /pools", s.require(auth.Admin, s.poolsPage))
-	s.mux.HandleFunc("GET /pools/new", s.require(auth.Admin, s.poolModal))
-	s.mux.HandleFunc("GET /pools/{name}/add", s.require(auth.Admin, s.poolModal))
-	s.mux.HandleFunc("POST /pools", s.require(auth.Admin, func(w http.ResponseWriter, r *http.Request) {
+	s.hostRoute("GET /dashboard", auth.ReadOnly, s.dashboard)
+	s.hostRoute("GET /dashboard/stats", auth.ReadOnly, s.dashboardStats)
+	s.hostRoute("GET /disks", auth.Admin, s.disksPage)
+	s.hostRoute("GET /disks/{name}", auth.Admin, s.diskModal)
+	s.hostRoute("POST /disks/{name}/{action}", auth.Admin, s.diskAction)
+	s.hostRoute("GET /network/host", auth.Admin, s.hostNetworkPage)
+	s.hostRoute("GET /network/host/iface/{name}", auth.Admin, s.ifaceModal)
+	s.hostRoute("POST /network/host/{op}", auth.Admin, s.hostNetworkAction)
+	s.hostRoute("GET /pools", auth.Admin, s.poolsPage)
+	s.hostRoute("GET /pools/new", auth.Admin, s.poolModal)
+	s.hostRoute("GET /pools/{name}/add", auth.Admin, s.poolModal)
+	s.hostRoute("POST /pools", auth.Admin, func(w http.ResponseWriter, r *http.Request) {
 		r.SetPathValue("op", "create")
 		s.poolAction(w, r)
-	}))
-	s.mux.HandleFunc("POST /pools/{name}/{op}", s.require(auth.Admin, s.poolAction))
+	})
+	s.hostRoute("POST /pools/{name}/{op}", auth.Admin, s.poolAction)
 	s.mux.HandleFunc("GET /images", s.require(auth.ReadOnly, s.images))
 	s.mux.HandleFunc("POST /images", s.require(auth.Operator, s.importImage))
 	s.mux.HandleFunc("POST /images/upload", s.require(auth.Operator, s.uploadImage))
@@ -157,6 +161,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /tokens/{name}/delete", s.require(auth.Admin, s.deleteToken))
 	s.mux.HandleFunc("GET /ca.pem", s.caCert)
 	s.mux.HandleFunc("GET /export/{ns}/{export}/{volume}", s.exportPassthrough)
+	s.mux.HandleFunc("/api/ui/", s.require(auth.Admin, s.serveUI))
 	s.mux.HandleFunc("GET /api/node", s.require(auth.Admin, s.apiNode))
 	s.mux.HandleFunc("GET /api/vms", s.require(auth.Admin, s.apiVMs))
 	s.mux.HandleFunc("GET /api/metrics", s.require(auth.Admin, s.apiMetrics))
@@ -246,9 +251,39 @@ func sameOrigin(r *http.Request) bool {
 	return origin == "https://"+r.Host
 }
 
+func (s *Server) hostRoute(pattern string, min auth.Role, h http.HandlerFunc) {
+	s.mux.HandleFunc(pattern, s.require(min, h))
+	s.ui.HandleFunc(pattern, h)
+}
+
+const BaseHeader = "X-Argus-Base"
+
+var validBase = regexp.MustCompile(`^/hosts/[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
+
+type baseKey struct{}
+
+func (s *Server) serveUI(w http.ResponseWriter, r *http.Request) {
+	base := r.Header.Get(BaseHeader)
+	if !validBase.MatchString(base) {
+		http.Error(w, "invalid base", http.StatusBadRequest)
+		return
+	}
+	r2 := r.Clone(context.WithValue(r.Context(), baseKey{}, base))
+	r2.URL.Path, r2.URL.RawPath = strings.TrimPrefix(r.URL.Path, "/api/ui"), ""
+	s.ui.ServeHTTP(w, r2)
+}
+
 func (s *Server) render(w http.ResponseWriter, r *http.Request, page, tmpl string, data map[string]any) {
 	if data == nil {
 		data = map[string]any{}
+	}
+	base, remote := r.Context().Value(baseKey{}).(string)
+	data["Base"] = base
+	if remote && tmpl == "layout" {
+		tmpl = "remote"
+	}
+	if w.Header().Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	}
 	data["Session"] = session(r)
 	data["Manager"] = s.manager != nil
