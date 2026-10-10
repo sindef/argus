@@ -145,3 +145,30 @@ func (s *Server) disksPage(w http.ResponseWriter, r *http.Request) {
 	}
 	s.render(w, r, "disks.html", "layout", map[string]any{"Nav": "disks", "Disks": ds, "Error": errText(err)})
 }
+
+func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
+	s.render(w, r, "dashboard.html", "layout", map[string]any{"Nav": "dashboard"})
+}
+
+func (s *Server) dashboardStats(w http.ResponseWriter, r *http.Request) {
+	if s.hostd == nil {
+		http.Error(w, "host helper not available", http.StatusServiceUnavailable)
+		return
+	}
+	st, err := s.hostd.Stats(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	vms, _ := s.kube.ListVMs(r.Context())
+	var running, cores int
+	var mem int64
+	for _, v := range vms {
+		if v.Running {
+			running++
+			cores += int(v.Cores)
+			mem += quantityBytes(v.Memory)
+		}
+	}
+	writeJSON(w, map[string]any{"host": st, "vms": len(vms), "running": running, "vcpus": cores, "vmMem": mem})
+}

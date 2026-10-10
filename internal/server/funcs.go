@@ -84,3 +84,11 @@ func humanBytes(n int64) string {
 	}
 	return fmt.Sprintf("%.1f %s", v, units[i])
 }
+
+func quantityBytes(q string) int64 {
+	v, err := resource.ParseQuantity(q)
+	if err != nil {
+		return 0
+	}
+	return v.Value()
+}

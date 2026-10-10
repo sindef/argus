@@ -265,3 +265,5 @@ h1 .dot { font-size: 14px; font-weight: 400; }
 .addr-form:has(input[value=dhcp]:checked) .static-only { display: none; }
 .addr-mode { align-self: flex-end; }
 .net-banner { display: flex; align-items: center; gap: 12px; padding: 10px 16px; margin-bottom: 16px; border: 1px solid var(--warn); border-radius: var(--radius); background: var(--panel); }
+.dash-charts { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+.stat .value.sm { font-size: 18px; line-height: 1.6; }

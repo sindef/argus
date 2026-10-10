@@ -69,7 +69,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	}
 	s.version = readEnv(o.ReleaseFile)["KAIROS_VERSION"]
 	s.sso.m = map[string]ssoFlow{}
-	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html", "hostnet.html"} {
+	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html", "hostnet.html", "dashboard.html"} {
 		t, err := template.New(p).Funcs(funcs).ParseFS(web.FS, "templates/layout.html", "templates/manager-nav.html", "templates/"+p)
 		if err != nil {
 			return nil, err
@@ -128,6 +128,8 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("GET /events", s.require(auth.ReadOnly, s.eventsPage))
 	s.mux.HandleFunc("GET /volumes", s.require(auth.ReadOnly, s.volumesPage))
 	s.mux.HandleFunc("POST /volumes/{op}", s.require(auth.Operator, s.volumeAction))
+	s.mux.HandleFunc("GET /dashboard", s.require(auth.ReadOnly, s.dashboard))
+	s.mux.HandleFunc("GET /dashboard/stats", s.require(auth.ReadOnly, s.dashboardStats))
 	s.mux.HandleFunc("GET /disks", s.require(auth.Admin, s.disksPage))
 	s.mux.HandleFunc("GET /network/host", s.require(auth.Admin, s.hostNetworkPage))
 	s.mux.HandleFunc("POST /network/host/{op}", s.require(auth.Admin, s.hostNetworkAction))

@@ -112,6 +112,11 @@ func (c *Client) NetworkDecision(ctx context.Context, op string) error {
 	return c.do(ctx, http.MethodPost, "/network/"+op, nil, nil)
 }
 
+func (c *Client) Stats(ctx context.Context) (Stats, error) {
+	var st Stats
+	return st, c.do(ctx, http.MethodGet, "/stats", nil, &st)
+}
+
 type accessKey struct{}
 
 func WithAccess(ctx context.Context, host string) context.Context {
