@@ -294,3 +294,4 @@ h1 .dot { font-size: 14px; font-weight: 400; }
 .stat .value.sm { font-size: 18px; line-height: 1.6; }
 tr.bad td { color: var(--bad); }
 .section .body > p:first-child { margin-top: 0; }
+.cluster-row .right { margin-left: auto; }

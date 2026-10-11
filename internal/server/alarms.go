@@ -307,8 +307,12 @@ func (s *Server) fleetAlarms(ctx context.Context) []Alarm {
 		}(n)
 	}
 	wg.Wait()
+	auto := s.manager.HASettings(ctx).Automatic
 	if ps, err := s.manager.Protected(ctx); err == nil {
 		for _, p := range ps {
+			if !auto && s.manager.Down(p.Owner) && !p.LastSync.IsZero() {
+				out = append(out, Alarm{Key: "ha-down:" + p.VM, Severity: "critical", Host: p.Owner, Object: "VM " + p.VM, Message: "host down; fail over manually to " + p.Replica + " once it is confirmed off"})
+			}
 			if p.LastError != "" {
 				out = append(out, Alarm{Key: "ha:" + p.VM, Severity: "warning", Host: p.Owner, Object: "VM " + p.VM, Message: "replication: " + p.LastError})
 			}

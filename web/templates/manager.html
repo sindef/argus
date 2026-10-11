@@ -62,7 +62,7 @@
   <div class="card">
     <div class="card-head"><h2>High Availability</h2></div>
     {{with .HAList}}
-    {{range .}}<div class="cluster-row"><span class="dot {{if .LastError}}Failed{{else if .LastSync.IsZero}}Pending{{else}}Protected{{end}}" title="{{.LastError}}"></span><div><div>{{.VM}}</div><div class="muted">{{.Owner}} → {{.Replica}}{{if not .LastSync.IsZero}} | synced {{since .LastSync}} ago{{end}}</div></div></div>{{end}}
+    {{range .}}<div class="cluster-row"><span class="dot {{if .OwnerDown}}Failed{{else if .LastError}}Failed{{else if .LastSync.IsZero}}Pending{{else}}Protected{{end}}" title="{{.LastError}}"></span><div><div>{{.VM}}</div><div class="muted">{{.Owner}} → {{.Replica}}{{if not .LastSync.IsZero}} | synced {{since .LastSync}} ago{{end}}</div></div>{{if and .OwnerDown (not .LastSync.IsZero) $.IsAdmin}}<button class="btn sm danger right" hx-post="/ha/failover" hx-vals='{"owner":"{{.Owner}}","vm":"{{.VM}}"}' hx-target="#flash" hx-confirm="Start {{.VM}} on {{.Replica}}? Only continue if {{.Owner}} is powered off or isolated; otherwise two copies will run.">Fail over</button>{{end}}</div>{{end}}
     {{else}}<p class="muted">No VMs protected.</p>{{end}}
   </div>
 </div>

@@ -96,14 +96,14 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 		visible[st.Node.Name] = true
 	}
 	protected := map[string]manager.Protected{}
-	var haList []manager.Protected
+	var haList []haRow
 	for _, p := range ps {
 		if !visible[p.Owner] && !visible[p.Replica] {
 			continue
 		}
 		protected[p.Owner+"/"+p.VM] = p
 		protected[p.Replica+"/"+p.VM] = p
-		haList = append(haList, p)
+		haList = append(haList, haRow{Protected: p, OwnerDown: s.manager.Down(p.Owner)})
 	}
 	var rows []vmRow
 	var hosts []hostRow
@@ -578,6 +578,7 @@ func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, notice s
 		data["Orgs"], _ = s.manager.Orgs(r.Context())
 		data["Migration"], _ = s.manager.MigrationSettings(r.Context())
 		data["Notify"], _, _ = s.loadNotify(r.Context())
+		data["HA"] = s.manager.HASettings(r.Context())
 		data["Cert"] = s.certInfo()
 	}
 	if err != nil {
@@ -900,4 +901,44 @@ func (s *Server) managerBackup(w http.ResponseWriter, r *http.Request) {
 	tw.Close()
 	gz.Close()
 	log.Printf("%s: downloaded configuration backup", session(r).User)
+}
+
+type haRow struct {
+	manager.Protected
+	OwnerDown bool
+}
+
+func (s *Server) managerFailover(w http.ResponseWriter, r *http.Request) {
+	owner, vm := r.FormValue("owner"), r.FormValue("vm")
+	_, err := s.nodeIn(r, owner)
+	if err == nil {
+		ps, _ := s.manager.Protected(r.Context())
+		for _, p := range ps {
+			if p.VM == vm && p.Owner == owner {
+				_, err = s.nodeIn(r, p.Replica)
+			}
+		}
+	}
+	if err == nil {
+		err = s.manager.ManualFailover(r.Context(), owner, vm)
+	}
+	if err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: manual failover of %s from %s", session(r).User, vm, owner)
+	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) managerHASettings(w http.ResponseWriter, r *http.Request) {
+	if !superAdmin(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if err := s.manager.SetHASettings(r.Context(), manager.HASettings{Automatic: r.FormValue("automatic") != ""}); err != nil {
+		s.renderSettings(w, r, "", err)
+		return
+	}
+	log.Printf("%s: automatic failover %v", session(r).User, r.FormValue("automatic") != "")
+	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }

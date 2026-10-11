@@ -32,6 +32,14 @@
       <div class="actions"><button class="btn primary" type="submit">Apply to all hosts</button></div>
     </form>
   </details>
+  <details class="section" id="sec-ha">
+    <summary>{{template "icon" "shield-check"}}High availability<span class="summary">{{if .HA.Automatic}}Automatic failover{{else}}Manual failover{{end}}</span>{{template "icon" "chevron-down"}}</summary>
+    <form method="post" action="/settings/ha" class="form body">
+      <label class="check"><input type="checkbox" name="automatic"{{if .HA.Automatic}} checked{{end}}> Fail over automatically <span class="help" title="Starts protected VMs on their replica when the owner stops responding. Without power fencing, a network partition can leave two copies running.">?</span></label>
+      <p class="muted">When off, a lost host raises an alarm and its protected VMs get a Fail over button on the home page.</p>
+      <div class="actions"><button class="btn primary" type="submit">Save</button></div>
+    </form>
+  </details>
   {{template "notify-section" .}}
   {{template "cert-section" .}}
   <details class="section" id="sec-orgs">

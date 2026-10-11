@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -203,7 +205,84 @@ func (c *Manager) down(node string) bool {
 	return time.Since(seen) > failoverAfter
 }
 
+const haSettingsKey = "argus-ha-settings"
+
+type HASettings struct {
+	Automatic bool `json:"automatic"`
+}
+
+func (c *Manager) HASettings(ctx context.Context) HASettings {
+	var h HASettings
+	if data, _, err := c.store.Get(ctx, haSettingsKey); err == nil {
+		json.Unmarshal(data["ha"], &h)
+	}
+	return h
+}
+
+func (c *Manager) SetHASettings(ctx context.Context, h HASettings) error {
+	b, _ := json.Marshal(h)
+	data := map[string][]byte{"ha": b}
+	_, rv, err := c.store.Get(ctx, haSettingsKey)
+	if apierrors.IsNotFound(err) {
+		return c.store.Create(ctx, haSettingsKey, "Opaque", data)
+	}
+	if err != nil {
+		return err
+	}
+	return c.store.Update(ctx, haSettingsKey, rv, data)
+}
+
+func (c *Manager) Down(node string) bool { return c.down(node) }
+
+func (c *Manager) ManualFailover(ctx context.Context, owner, vm string) error {
+	ps, err := c.Protected(ctx)
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(ps, func(p Protected) bool { return p.VM == vm && p.Owner == owner })
+	switch {
+	case i < 0:
+		return fmt.Errorf("%s is not protected on %s", vm, owner)
+	case !c.down(owner):
+		return fmt.Errorf("%s is still reachable; migrate instead", owner)
+	case c.down(ps[i].Replica):
+		return fmt.Errorf("replica host %s is down too", ps[i].Replica)
+	case ps[i].LastSync.IsZero():
+		return errors.New("the replica has no completed copy")
+	}
+	return c.promote(ctx, ps[i], "Failed over (manual)")
+}
+
+func (c *Manager) promote(ctx context.Context, p Protected, status string) error {
+	owner, err1 := c.Node(ctx, p.Owner)
+	replica, err2 := c.Node(ctx, p.Replica)
+	if err1 != nil || err2 != nil {
+		return errors.Join(err1, err2)
+	}
+	err := c.updateHA(ctx, func(ps []Protected) ([]Protected, error) {
+		for i := range ps {
+			if ps[i].VM == p.VM && ps[i].Owner == p.Owner {
+				ps[i].Owner, ps[i].Replica = ps[i].Replica, ps[i].Owner
+				ps[i].LastSync = time.Time{}
+			}
+		}
+		return ps, nil
+	})
+	if err != nil {
+		return err
+	}
+	log.Printf("ha: %s %s from %s to %s", p.VM, strings.ToLower(status), owner.Name, replica.Name)
+	c.mu.Lock()
+	c.jobs = append(c.jobs, &Job{Org: owner.Org, VM: p.VM, From: owner.Name, To: replica.Name, Started: time.Now(), Status: status, Done: true})
+	c.mu.Unlock()
+	c.saveJobs()
+	return nil
+}
+
 func (c *Manager) failover(ctx context.Context) {
+	if !c.HASettings(ctx).Automatic {
+		return
+	}
 	ps, err := c.Protected(ctx)
 	if err != nil {
 		return
@@ -221,23 +300,7 @@ func (c *Manager) failover(ctx context.Context) {
 		if err := replica.do(ctx, http.MethodGet, "/api/probe?url="+url.QueryEscape(owner.URL), nil, &probe); err != nil || probe.Reachable {
 			continue
 		}
-		vm, prev := p.VM, p.Owner
-		err := c.updateHA(ctx, func(ps []Protected) ([]Protected, error) {
-			for i := range ps {
-				if ps[i].VM == vm && ps[i].Owner == prev {
-					ps[i].Owner, ps[i].Replica = ps[i].Replica, ps[i].Owner
-					ps[i].LastSync = time.Time{}
-				}
-			}
-			return ps, nil
-		})
-		if err != nil {
-			continue
-		}
-		log.Printf("ha: %s failed over from %s to %s", vm, owner.Name, replica.Name)
-		c.mu.Lock()
-		c.jobs = append(c.jobs, &Job{Org: owner.Org, VM: vm, From: owner.Name, To: replica.Name, Started: time.Now(), Status: "Failed over (HA)", Done: true})
-		c.mu.Unlock()
+		c.promote(ctx, p, "Failed over (HA)")
 	}
 }
 
