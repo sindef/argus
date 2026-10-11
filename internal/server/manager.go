@@ -2,6 +2,7 @@ package server
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"errors"
@@ -20,6 +21,7 @@ import (
 	"argus/internal/auth"
 	"argus/internal/kube"
 	"argus/internal/manager"
+	"argus/internal/sealed"
 
 	"github.com/gorilla/websocket"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -879,34 +881,42 @@ func (s *Server) managerBackup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	files, err := filepath.Glob(filepath.Join(s.dataDir, "*.json"))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	pass := r.FormValue("passphrase")
+	if len(pass) < 12 {
+		s.renderSettings(w, r, "", errors.New("backup passphrase must be at least 12 characters"))
 		return
 	}
-	contents := map[string][]byte{}
+	files, err := filepath.Glob(filepath.Join(s.dataDir, "*.json"))
+	if err != nil {
+		s.renderSettings(w, r, "", err)
+		return
+	}
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	sort.Strings(files)
 	for _, f := range files {
 		if filepath.Base(f) == "argus-sessions.json" {
 			continue
 		}
 		b, err := os.ReadFile(f)
 		if err != nil {
-			http.Error(w, "cannot read "+filepath.Base(f)+": "+err.Error(), http.StatusInternalServerError)
+			s.renderSettings(w, r, "", fmt.Errorf("cannot read %s: %w", filepath.Base(f), err))
 			return
 		}
-		contents[filepath.Base(f)] = b
-	}
-	w.Header().Set("Content-Type", "application/gzip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="argus-manager-%s.tar.gz"`, time.Now().Format("20060102-1504")))
-	gz := gzip.NewWriter(w)
-	tw := tar.NewWriter(gz)
-	for _, name := range sortedKeys(contents) {
-		b := contents[name]
-		tw.WriteHeader(&tar.Header{Name: name, Mode: 0o600, Size: int64(len(b)), ModTime: time.Now()})
+		tw.WriteHeader(&tar.Header{Name: filepath.Base(f), Mode: 0o600, Size: int64(len(b)), ModTime: time.Now()})
 		tw.Write(b)
 	}
 	tw.Close()
 	gz.Close()
+	out, err := sealed.Seal(pass, buf.Bytes())
+	if err != nil {
+		s.renderSettings(w, r, "", err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="argus-manager-%s.backup"`, time.Now().Format("20060102-1504")))
+	w.Write(out)
 	s.record(s.auditUser(session(r).Org, session(r).User), "download configuration backup", true, "")
 }
 

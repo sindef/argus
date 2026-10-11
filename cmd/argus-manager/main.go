@@ -1,19 +1,28 @@
 package main
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/tls"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	"argus/internal/auth"
 	"argus/internal/filestore"
 	"argus/internal/manager"
+	"argus/internal/sealed"
 	"argus/internal/server"
 	"argus/internal/tlscert"
 )
@@ -21,6 +30,16 @@ import (
 func main() {
 	addr := env("ARGUS_ADDR", ":8443")
 	data := env("ARGUS_DATA", "/var/lib/argus-manager")
+	restoreFile := flag.String("restore", "", "restore an encrypted configuration backup into ARGUS_DATA and exit; passphrase from ARGUS_BACKUP_PASSPHRASE")
+	force := flag.Bool("force", false, "with -restore, overwrite an existing configuration")
+	flag.Parse()
+	if *restoreFile != "" {
+		if err := restore(*restoreFile, data, os.Getenv("ARGUS_BACKUP_PASSPHRASE"), *force); err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("configuration restored into %s", data)
+		return
+	}
 	fs, err := filestore.New(data)
 	if err != nil {
 		log.Fatal(err)
@@ -76,4 +95,49 @@ func env(k, def string) string {
 		return v
 	}
 	return def
+}
+
+func restore(file, data, passphrase string, force bool) error {
+	if passphrase == "" {
+		return errors.New("set ARGUS_BACKUP_PASSPHRASE")
+	}
+	if _, err := os.Stat(filepath.Join(data, "argus-nodes.json")); err == nil && !force {
+		return fmt.Errorf("%s already holds a configuration; stop Argus Manager and pass -force to overwrite it", data)
+	}
+	enc, err := os.ReadFile(file)
+	if err != nil {
+		return err
+	}
+	plain, err := sealed.Open(passphrase, enc)
+	if err != nil {
+		return err
+	}
+	gz, err := gzip.NewReader(bytes.NewReader(plain))
+	if err != nil {
+		return err
+	}
+	tr := tar.NewReader(gz)
+	if err := os.MkdirAll(data, 0o700); err != nil {
+		return err
+	}
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		name := filepath.Base(h.Name)
+		if name != h.Name || !strings.HasSuffix(name, ".json") {
+			return fmt.Errorf("unexpected entry %q in backup", h.Name)
+		}
+		b, err := io.ReadAll(io.LimitReader(tr, 64<<20))
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(data, name), b, 0o600); err != nil {
+			return err
+		}
+	}
 }

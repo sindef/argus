@@ -55,10 +55,10 @@
   </details>
   <details class="section" id="sec-backup">
     <summary>{{template "icon" "download"}}Configuration backup<span class="summary">Hosts, groups, networks, users and settings</span>{{template "icon" "chevron-down"}}</summary>
-    <div class="body">
-      <p class="muted">Contains credentials for every host; store it securely. To restore, stop Argus Manager and extract the archive into its data directory.</p>
-      <div class="actions"><a class="btn" href="/settings/backup">{{template "icon" "download"}}Download</a></div>
-    </div>
+    <form method="post" action="/settings/backup" class="form body">
+      <label>Passphrase <span class="help" title="Encrypts the backup, which holds credentials for every host. To restore: stop Argus Manager and run argus-manager -restore FILE with ARGUS_BACKUP_PASSPHRASE set.">?</span><input name="passphrase" type="password" minlength="12" required autocomplete="new-password"></label>
+      <div class="actions"><button class="btn primary" type="submit">{{template "icon" "download"}}Download encrypted backup</button></div>
+    </form>
   </details>
   <dialog id="add-org" class="card">
     <form method="post" action="/settings/orgs" class="form">

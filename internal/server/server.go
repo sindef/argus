@@ -157,7 +157,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("POST /settings/sso", s.requireOrg(auth.Admin, s.managerSSO))
 		s.mux.HandleFunc("POST /settings/orgs", s.requireOrg(auth.Admin, s.managerAddOrg))
 		s.mux.HandleFunc("POST /settings/orgs/{id}/delete", s.requireOrg(auth.Admin, s.managerDeleteOrg))
-		s.mux.HandleFunc("GET /settings/backup", s.requireOrg(auth.Admin, s.managerBackup))
+		s.mux.HandleFunc("POST /settings/backup", s.requireOrg(auth.Admin, s.managerBackup))
 		s.mux.HandleFunc("POST /settings/ha", s.requireOrg(auth.Admin, s.managerHASettings))
 		s.mux.HandleFunc("POST /ha/failover", s.require(auth.Admin, s.managerFailover))
 		s.mux.HandleFunc("POST /settings/migration", s.requireOrg(auth.Admin, s.managerMigrationSettings))
