@@ -127,19 +127,32 @@
     document.querySelectorAll("[data-needs-selection]").forEach((b) => { b.disabled = n === 0; });
   }
 
-  document.addEventListener("toggle", (e) => {
-    if (e.target.matches("details.section[id]")) store.set("sec:" + e.target.id, e.target.open ? "open" : "closed");
-  }, true);
+  const showSetting = (root, id) => {
+    const links = [...root.querySelectorAll(".settings-nav a")];
+    if (!links.length) return;
+    const has = (v) => links.some((a) => a.hash === "#" + v);
+    if (!has(id)) id = store.get("set:" + location.pathname);
+    if (!has(id)) id = links[0].hash.slice(1);
+    links.forEach((a) => a.classList.toggle("active", a.hash === "#" + id));
+    root.querySelectorAll(".settings-section").forEach((s) => s.classList.toggle("active", s.id === id));
+    root.classList.add("ready");
+  };
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest(".settings-nav a");
+    if (!a) return;
+    e.preventDefault();
+    const id = a.hash.slice(1);
+    store.set("set:" + location.pathname, id);
+    history.replaceState(null, "", a.hash);
+    showSetting(a.closest(".settings"), id);
+  });
 
   const restore = () => {
     document.querySelectorAll(".nav-section[id]").forEach((s) => {
       const v = store.get("nav:" + s.id);
       if (v) s.classList.toggle("closed", v === "closed");
     });
-    document.querySelectorAll("details.section[id]").forEach((d) => {
-      const v = store.get("sec:" + d.id);
-      if (v) d.open = v === "open";
-    });
+    document.querySelectorAll(".settings").forEach((root) => showSetting(root, location.hash.slice(1)));
     document.querySelectorAll(".tree li[data-id]").forEach((li) => {
       const v = store.get("tree:" + li.dataset.id);
       if (v) li.classList.toggle("closed", v === "closed");

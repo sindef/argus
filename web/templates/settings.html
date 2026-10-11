@@ -5,71 +5,82 @@
 </div>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
 {{with .Notice}}<p class="notice">{{.}}</p>{{end}}
-<div class="sections">
-  <details class="section" id="sec-sso">
-    <summary>{{template "icon" "key-round"}}Single sign-on<span class="summary">{{with .Org.OIDC}}{{if .Issuer}}{{.Issuer}}{{else}}Off{{end}}{{else}}Off{{end}}</span>{{template "icon" "chevron-down"}}</summary>
-    <form method="post" action="/settings/sso" class="form body">
-      <label>Issuer URL <input name="issuer" type="url" placeholder="https://idp.example.com/realms/argus" value="{{with .Org.OIDC}}{{.Issuer}}{{end}}"></label>
-      <div class="row">
-        <label>Client ID <input name="client" value="{{with .Org.OIDC}}{{.ClientID}}{{end}}"></label>
-        <label>Client secret <input name="secret" type="password" autocomplete="new-password" placeholder="{{with .Org.OIDC}}{{if .ClientSecret}}unchanged{{end}}{{end}}"></label>
+<div class="settings">
+  <nav class="settings-nav">
+    <a href="#s-sso">{{template "icon" "key-round"}}Single sign-on</a>
+    {{if .Super}}
+    <a href="#s-migration">{{template "icon" "network"}}Migration network</a>
+    <a href="#s-ha">{{template "icon" "shield-check"}}High availability</a>
+    <a href="#s-notify">{{template "icon" "bell"}}Notifications</a>
+    <a href="#s-cert">{{template "icon" "lock"}}Certificate</a>
+    <a href="#s-orgs">{{template "icon" "building-2"}}Organizations</a>
+    <a href="#s-backup">{{template "icon" "download"}}Backup</a>
+    {{end}}
+  </nav>
+  <div class="settings-body">
+    <section class="settings-section" id="s-sso">
+      <header><h2>Single sign-on</h2></header>
+      <form method="post" action="/settings/sso" class="form">
+        <label>Issuer URL <input name="issuer" type="url" placeholder="https://idp.example.com/realms/argus" value="{{with .Org.OIDC}}{{.Issuer}}{{end}}"></label>
+        <div class="row">
+          <label>Client ID <input name="client" value="{{with .Org.OIDC}}{{.ClientID}}{{end}}"></label>
+          <label>Client secret <input name="secret" type="password" autocomplete="new-password" placeholder="{{with .Org.OIDC}}{{if .ClientSecret}}unchanged{{end}}{{end}}"></label>
+        </div>
         <label>Groups claim <input name="claim" placeholder="groups" value="{{with .Org.OIDC}}{{.GroupsClaim}}{{end}}"></label>
-      </div>
-      <label>Role mapping <span class="help" title="One group=role per line. Roles: admin, operator, readonly. Users in no listed group are refused.">?</span>
-        <textarea name="roles" rows="3" placeholder="argus-admins=admin">{{.RoleMap}}</textarea></label>
-      <div class="muted">Redirect URI: <span class="mono">https://&lt;manager&gt;/sso/callback</span></div>
-      <div class="actions"><button class="btn primary" type="submit">Save</button></div>
-    </form>
-  </details>
-  {{if .Super}}
-  <details class="section" id="sec-migration">
-    <summary>{{template "icon" "network"}}Migration network<span class="summary">{{with .Migration.Subnet}}{{.}}{{if $.Migration.VLAN}} · VLAN {{$.Migration.VLAN}}{{end}}{{else}}Not set{{end}}</span>{{template "icon" "chevron-down"}}</summary>
-    <form method="post" action="/settings/migration" class="form body">
-      <div class="row">
-        <label>Subnet <input name="subnet" placeholder="10.99.0.0/24" value="{{.Migration.Subnet}}" required></label>
-        <label>VLAN <input name="vlan" type="number" min="0" max="4094" value="{{if .Migration.VLAN}}{{.Migration.VLAN}}{{end}}" placeholder="untagged"></label>
-      </div>
-      <div class="actions"><button class="btn primary" type="submit">Apply to all hosts</button></div>
-    </form>
-  </details>
-  <details class="section" id="sec-ha">
-    <summary>{{template "icon" "shield-check"}}High availability<span class="summary">{{if .HA.Automatic}}Automatic failover{{else}}Manual failover{{end}}</span>{{template "icon" "chevron-down"}}</summary>
-    <form method="post" action="/settings/ha" class="form body">
-      <label class="check"><input type="checkbox" name="automatic"{{if .HA.Automatic}} checked{{end}}> Fail over automatically <span class="help" title="Starts protected VMs on their replica when the owner stops responding. Without power fencing, a network partition can leave two copies running.">?</span></label>
-      <p class="muted">When off, a lost host raises an alarm and its protected VMs get a Fail over button on the home page.</p>
-      <div class="actions"><button class="btn primary" type="submit">Save</button></div>
-    </form>
-  </details>
-  {{template "notify-section" .}}
-  {{template "cert-section" .}}
-  <details class="section" id="sec-orgs">
-    <summary>{{template "icon" "building-2"}}Organizations<span class="summary">{{len .Orgs}}</span>{{template "icon" "chevron-down"}}</summary>
-    <div class="body">
+        <label>Role mapping <span class="help" title="One group=role per line. Roles: admin, operator, readonly. Users in no listed group are refused.">?</span>
+          <textarea name="roles" rows="3" placeholder="argus-admins=admin">{{.RoleMap}}</textarea></label>
+        <dl class="kv"><dt>Redirect URI</dt><dd class="mono">https://&lt;manager&gt;/sso/callback</dd></dl>
+        <div class="actions"><button class="btn primary" type="submit">Save</button></div>
+      </form>
+    </section>
+    {{if .Super}}
+    <section class="settings-section" id="s-migration">
+      <header><h2>Migration network</h2></header>
+      <form method="post" action="/settings/migration" class="form">
+        <div class="row">
+          <label>Subnet <input name="subnet" placeholder="10.99.0.0/24" value="{{.Migration.Subnet}}" required></label>
+          <label>VLAN <input name="vlan" type="number" min="0" max="4094" value="{{if .Migration.VLAN}}{{.Migration.VLAN}}{{end}}" placeholder="untagged"></label>
+        </div>
+        <div class="actions"><button class="btn primary" type="submit">Apply to all hosts</button></div>
+      </form>
+    </section>
+    <section class="settings-section" id="s-ha">
+      <header><h2>High availability</h2></header>
+      <form method="post" action="/settings/ha" class="form">
+        <label class="check"><input type="checkbox" name="automatic"{{if .HA.Automatic}} checked{{end}}>Fail over automatically<span class="help" title="Starts protected VMs on their replica when the owner stops responding. Without power fencing, a network partition can leave two copies running. When off, a lost host raises an alarm and its VMs get a Fail over button.">?</span></label>
+        <div class="actions"><button class="btn primary" type="submit">Save</button></div>
+      </form>
+    </section>
+    {{template "notify-section" .}}
+    {{template "cert-section" .}}
+    <section class="settings-section" id="s-orgs">
+      <header><h2>Organizations</h2><div class="actions"><button class="btn" data-dialog="add-org">{{template "icon" "plus"}}Add organization</button></div></header>
       <div class="table-wrap"><table>
         <thead><tr><th>Name</th><th>ID</th><th>SSO</th><th></th></tr></thead>
         <tbody>{{range .Orgs}}<tr><td>{{.Name}}</td><td class="mono">{{.ID}}</td><td>{{if .SSO}}On{{else}}<span class="muted">Off</span>{{end}}</td>
           <td class="row-actions">{{if ne .ID "default"}}<form method="post" action="/settings/orgs/{{.ID}}/delete" onsubmit="return confirm('Delete {{.Name}}?')"><button type="submit" class="link danger">Delete</button></form>{{end}}</td></tr>{{end}}</tbody>
       </table></div>
-      <div class="actions spaced"><button class="btn" data-dialog="add-org">{{template "icon" "plus"}}Add organization</button></div>
-    </div>
-  </details>
-  <details class="section" id="sec-backup">
-    <summary>{{template "icon" "download"}}Configuration backup<span class="summary">Hosts, groups, networks, users and settings</span>{{template "icon" "chevron-down"}}</summary>
-    <form method="post" action="/settings/backup" class="form body">
-      <label>Passphrase <span class="help" title="Encrypts the backup, which holds credentials for every host. To restore: stop Argus Manager and run argus-manager -restore FILE with ARGUS_BACKUP_PASSPHRASE set.">?</span><input name="passphrase" type="password" minlength="12" required autocomplete="new-password"></label>
-      <div class="actions"><button class="btn primary" type="submit">{{template "icon" "download"}}Download encrypted backup</button></div>
-    </form>
-  </details>
-  <dialog id="add-org" class="card">
-    <form method="post" action="/settings/orgs" class="form">
-      <h2>Add organization</h2>
-      <div class="row">
-        <label>Name <input name="name" required></label>
-        <label>ID <input name="id" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
-      </div>
-      <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Add</button></div>
-    </form>
-  </dialog>
-  {{end}}
+    </section>
+    <section class="settings-section" id="s-backup">
+      <header><h2>Configuration backup</h2></header>
+      <form method="post" action="/settings/backup" class="form">
+        <label>Passphrase <span class="help" title="Encrypts the backup, which holds credentials for every host. To restore: stop Argus Manager and run argus-manager -restore FILE with ARGUS_BACKUP_PASSPHRASE set.">?</span><input name="passphrase" type="password" minlength="12" required autocomplete="new-password"></label>
+        <div class="actions"><button class="btn primary" type="submit">{{template "icon" "download"}}Download</button></div>
+      </form>
+    </section>
+    {{end}}
+  </div>
 </div>
+{{if .Super}}
+<dialog id="add-org" class="card">
+  <form method="post" action="/settings/orgs" class="form">
+    <h2>Add organization</h2>
+    <div class="row">
+      <label>Name <input name="name" required></label>
+      <label>ID <input name="id" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
+    </div>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Add</button></div>
+  </form>
+</dialog>
+{{end}}
 {{end}}

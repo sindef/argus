@@ -130,22 +130,23 @@
 {{end}}
 
 {{define "notify-section"}}{{with .Notify}}
-<details class="section" id="sec-notify">
-  <summary>{{template "icon" "bell"}}Notifications<span class="summary">{{if or .Webhook .SMTPHost}}{{if .Webhook}}Webhook{{end}}{{if and .Webhook .SMTPHost}} · {{end}}{{if .SMTPHost}}Email to {{.To}}{{end}}{{else}}Off{{end}}</span>{{template "icon" "chevron-down"}}</summary>
-  <form hx-post="/notify" hx-target="#flash" class="form body">
+<section class="settings-section" id="s-notify">
+  <header><h2>Notifications</h2></header>
+  <form hx-post="/notify" hx-target="#flash" class="form">
     <label>Webhook URL <span class="help" title="JSON POST with text and content fields; works with Slack and Discord incoming webhooks.">?</span><input name="webhook" type="url" value="{{.Webhook}}" placeholder="https://hooks.slack.com/…"></label>
+    <h3>Email</h3>
     <div class="row">
       <label>SMTP server <input name="smtp_host" value="{{.SMTPHost}}" placeholder="smtp.example.com:587"></label>
-      <label>SMTP user <input name="smtp_user" value="{{.SMTPUser}}" autocomplete="off"></label>
-      <label>SMTP password <input name="smtp_pass" type="password" placeholder="{{if .SMTPPass}}unchanged{{end}}" autocomplete="new-password"></label>
+      <label>From <input name="from" value="{{.From}}" placeholder="argus@example.com"></label>
     </div>
     <div class="row">
-      <label>From <input name="from" value="{{.From}}" placeholder="argus@example.com"></label>
-      <label>To <input name="to" value="{{.To}}" placeholder="ops@example.com"></label>
+      <label>User <input name="smtp_user" value="{{.SMTPUser}}" autocomplete="off"></label>
+      <label>Password <input name="smtp_pass" type="password" placeholder="{{if .SMTPPass}}unchanged{{end}}" autocomplete="new-password"></label>
     </div>
-    <div class="actions"><button class="btn" type="submit" name="test" value="1">Save and send test</button><button class="btn primary" type="submit">Save</button></div>
+    <label>To <input name="to" value="{{.To}}" placeholder="ops@example.com"></label>
+    <div class="actions"><button class="btn primary" type="submit">Save</button><button class="btn" type="submit" name="test" value="1">Save and send test</button></div>
   </form>
-</details>
+</section>
 {{end}}{{end}}
 
 {{define "move-disk"}}
@@ -162,15 +163,17 @@
 {{end}}
 
 {{define "cert-section"}}{{with .Cert}}
-<details class="section" id="sec-cert">
-  <summary>{{template "icon" "lock"}}Web certificate<span class="summary">{{if .Custom}}{{.Subject}} · until {{.Expires.Local.Format "2006-01-02"}}{{else}}Built-in self-signed{{end}}</span>{{template "icon" "chevron-down"}}</summary>
-  <form hx-post="/certificate" hx-target="#flash" hx-encoding="multipart/form-data" class="form body">
-    <p class="muted">Presented to browsers that connect by host name. Connections by IP address, from Argus Manager and from imports keep the built-in certificate.</p>
-    <div class="row">
-      <label>Certificate <span class="help" title="PEM file with the certificate followed by any intermediates.">?</span><input name="cert" type="file" accept=".pem,.crt,.cer" required></label>
-      <label>Private key <input name="key" type="file" accept=".pem,.key" required></label>
-    </div>
-    <div class="actions">{{if .Custom}}<button class="btn" type="button" hx-post="/certificate" hx-vals='{"revert":"1"}' hx-target="#flash" hx-confirm="Go back to the built-in certificate?">Use built-in</button>{{end}}<button class="btn primary" type="submit">Upload</button></div>
+<section class="settings-section" id="s-cert">
+  <header><h2>Web certificate</h2>{{if .Custom}}<div class="actions"><button class="btn" type="button" hx-post="/certificate" hx-vals='{"revert":"1"}' hx-target="#flash" hx-confirm="Go back to the built-in certificate?">Use built-in</button></div>{{end}}</header>
+  <dl class="kv">
+    <dt>Current</dt><dd>{{if .Custom}}{{.Subject}}{{else}}Built-in self-signed{{end}}</dd>
+    {{if .Custom}}<dt>Expires</dt><dd>{{.Expires.Local.Format "2006-01-02"}}</dd>{{end}}
+  </dl>
+  <h3>Upload <span class="help" title="Presented to browsers that connect by host name. Connections by IP address, from Argus Manager and from imports keep the built-in certificate.">?</span></h3>
+  <form hx-post="/certificate" hx-target="#flash" hx-encoding="multipart/form-data" class="form">
+    <label>Certificate <span class="help" title="PEM file with the certificate followed by any intermediates.">?</span><input name="cert" type="file" accept=".pem,.crt,.cer" required></label>
+    <label>Private key <input name="key" type="file" accept=".pem,.key" required></label>
+    <div class="actions"><button class="btn primary" type="submit">Upload</button></div>
   </form>
-</details>
+</section>
 {{end}}{{end}}
