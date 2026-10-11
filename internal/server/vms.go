@@ -98,6 +98,10 @@ func (s *Server) vmDrawer(w http.ResponseWriter, r *http.Request) {
 		data["Snapshots"], err = s.kube.ListSnapshots(r.Context(), vm.Namespace, vm.Name)
 	case "logs":
 		data["Events"], err = s.kube.Events(r.Context(), vm.Namespace, vm.Name, 50)
+	case "hardware":
+		pools := s.poolChoices(r.Context())
+		data["Move"] = map[string]any{"P": "/vms/" + vm.Namespace + "/" + vm.Name, "Pools": pools}
+		data["PoolOf"] = poolNames(pools)
 	case "backups":
 		data["Backups"] = map[string]any{"B": s.vmBackupInfo(r.Context(), vm.Namespace, vm.Name), "P": "/vms/" + vm.Namespace + "/" + vm.Name, "Name": vm.Name, "CanOperate": data["CanOperate"]}
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"time"
 	"net/http"
 	"net/url"
 
@@ -198,4 +199,62 @@ func (s *Server) dashboardStats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, map[string]any{"host": st, "vms": len(vms), "running": running, "vcpus": cores, "vmMem": mem})
+}
+
+func (s *Server) moveDisk(ctx context.Context, ns, name, disk, pool string) error {
+	class, err := s.poolClass(ctx, pool)
+	if err != nil {
+		return err
+	}
+	old, moved, err := s.kube.MoveDisk(ctx, ns, name, disk, class)
+	if err != nil {
+		return err
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
+		defer cancel()
+		for ctx.Err() == nil {
+			phase, err := s.kube.DataVolumePhase(ctx, ns, moved)
+			switch {
+			case err == nil && phase == "Succeeded":
+				if err := s.kube.DeleteDataVolume(ctx, ns, old); err != nil {
+					log.Printf("move disk %s/%s: delete %s: %v", name, disk, old, err)
+				}
+				log.Printf("move disk %s/%s to %s: done", name, disk, pool)
+				return
+			case err == nil && phase == "Failed":
+				log.Printf("move disk %s/%s to %s: copy failed, %s kept", name, disk, pool, old)
+				return
+			}
+			time.Sleep(10 * time.Second)
+		}
+	}()
+	return nil
+}
+
+func poolNames(pools []kube.Pool) map[string]string {
+	m := map[string]string{}
+	for _, p := range pools {
+		m[p.StorageClass] = p.Name
+	}
+	return m
+}
+
+func (s *Server) moveDiskForm(w http.ResponseWriter, r *http.Request) {
+	if err := s.moveDisk(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.FormValue("disk"), r.FormValue("pool")); err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: move disk %s of %s to %s", session(r).User, r.FormValue("disk"), r.PathValue("name"), r.FormValue("pool"))
+	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) apiMoveDisk(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Disk, Pool string }
+	json.NewDecoder(r.Body).Decode(&req)
+	if err := s.moveDisk(r.Context(), r.PathValue("ns"), r.PathValue("name"), req.Disk, req.Pool); err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, map[string]string{})
 }

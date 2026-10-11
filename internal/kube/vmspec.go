@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"slices"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -320,4 +321,59 @@ func (c *Client) Templates(ctx context.Context) ([]Template, error) {
 		}
 	}
 	return out, nil
+}
+
+func (c *Client) MoveDisk(ctx context.Context, ns, name, disk, class string) (string, string, error) {
+	var old, moved string
+	err := c.editStoppedVM(ctx, ns, name, func(o obj) error {
+		volumes, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")
+		templates, _, _ := unstructured.NestedSlice(o, "spec", "dataVolumeTemplates")
+		vi := slices.IndexFunc(volumes, func(v any) bool { return v.(obj)["name"] == disk })
+		if vi < 0 {
+			return fmt.Errorf("disk %s not found", disk)
+		}
+		old, _, _ = unstructured.NestedString(volumes[vi].(obj), "dataVolume", "name")
+		ti := slices.IndexFunc(templates, func(t any) bool {
+			n, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
+			return old != "" && n == old
+		})
+		if ti < 0 {
+			return fmt.Errorf("disk %s is not a managed disk and cannot be moved", disk)
+		}
+		storage, _, _ := unstructured.NestedMap(templates[ti].(obj), "spec", "storage")
+		if storage["storageClassName"] == class {
+			return fmt.Errorf("disk %s is already on that pool", disk)
+		}
+		storage["storageClassName"] = class
+		if class == "" {
+			delete(storage, "storageClassName")
+		}
+		b := make([]byte, 2)
+		rand.Read(b)
+		moved = fmt.Sprintf("%s-%s-%x", name, disk, b)
+		templates[ti] = obj{"metadata": obj{"name": moved}, "spec": obj{"source": obj{"pvc": obj{"namespace": ns, "name": old}}, "storage": storage}}
+		unstructured.SetNestedField(volumes[vi].(obj), moved, "dataVolume", "name")
+		if err := unstructured.SetNestedSlice(o, templates, "spec", "dataVolumeTemplates"); err != nil {
+			return err
+		}
+		return unstructured.SetNestedSlice(o, volumes, "spec", "template", "spec", "volumes")
+	})
+	return old, moved, err
+}
+
+func (c *Client) DataVolumePhase(ctx context.Context, ns, name string) (string, error) {
+	dv, err := c.dyn.Resource(dvGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+	phase, _, _ := unstructured.NestedString(dv.Object, "status", "phase")
+	return phase, nil
+}
+
+func (c *Client) DeleteDataVolume(ctx context.Context, ns, name string) error {
+	err := c.dyn.Resource(dvGVR).Namespace(ns).Delete(ctx, name, metav1.DeleteOptions{})
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	return err
 }

@@ -139,3 +139,16 @@
   </form>
 </div>
 {{end}}{{end}}
+
+{{define "move-disk"}}
+<dialog id="move-disk" class="card">
+  <form hx-post="{{.P}}/disks/move" hx-target="#move-error" class="form">
+    <h2>Move disk</h2>
+    <p id="move-error" class="error form-error"></p>
+    <input type="hidden" name="disk">
+    <label>Target pool <select name="pool">{{range .Pools}}<option value="{{.Name}}">{{.Name}} ({{bytes .Free}} free)</option>{{end}}</select></label>
+    <p class="muted">The VM stays off while the disk is copied; the old copy is deleted when done.</p>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Move</button></div>
+  </form>
+</dialog>
+{{end}}

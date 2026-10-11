@@ -283,6 +283,11 @@ func (s *Server) managerVM(w http.ResponseWriter, r *http.Request) {
 		var snaps []kube.Snapshot
 		err = n.Call(r.Context(), http.MethodGet, fmt.Sprintf("/api/vms/%s/%s/snapshots", ns, name), nil, &snaps)
 		data["Snapshots"] = snaps
+	case "hardware":
+		var st storageInfo
+		if n.Call(r.Context(), http.MethodGet, "/api/storage", nil, &st) == nil {
+			data["Move"] = map[string]any{"P": fmt.Sprintf("/nodes/%s/vms/%s/%s", n.Name, ns, name), "Pools": slices.DeleteFunc(st.Pools, func(p kube.Pool) bool { return p.StorageClass == "" })}
+		}
 	case "backups":
 		var b VMBackups
 		err = n.Call(r.Context(), http.MethodGet, fmt.Sprintf("/api/vms/%s/%s/backups", ns, name), nil, &b)
@@ -776,5 +781,18 @@ func (s *Server) managerBackupOp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("%s: backup %s %s on %s", session(r).User, r.PathValue("op"), r.PathValue("name"), n.Name)
+	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) managerMoveDisk(w http.ResponseWriter, r *http.Request) {
+	n, err := s.orgNode(r)
+	if err == nil {
+		err = n.Call(r.Context(), http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/disks/move", r.PathValue("ns"), r.PathValue("name")), map[string]string{"disk": r.FormValue("disk"), "pool": r.FormValue("pool")}, nil)
+	}
+	if err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: move disk %s of %s to %s", session(r).User, r.FormValue("disk"), r.PathValue("name"), r.FormValue("pool"))
 	w.Header().Set("HX-Refresh", "true")
 }
