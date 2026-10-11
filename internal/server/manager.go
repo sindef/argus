@@ -652,6 +652,7 @@ func (s *Server) managerDeleteOrg(w http.ResponseWriter, r *http.Request) {
 		s.renderSettings(w, r, "", err)
 		return
 	}
+	s.auth.DropOrg(r.PathValue("id"))
 	log.Printf("%s: deleted organization %s", session(r).User, r.PathValue("id"))
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }

@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -83,9 +85,10 @@ type Session struct {
 }
 
 type Sessions struct {
-	mu    sync.Mutex
-	m     map[string]Session
-	dirty bool
+	mu      sync.Mutex
+	flushMu sync.Mutex
+	m       map[string]Session
+	dirty   bool
 }
 
 const sessionsSecret = "argus-sessions"
@@ -95,45 +98,99 @@ func tokenKey(tok string) string {
 	return hex.EncodeToString(h[:])
 }
 
+func (s *Store) storeFor(org string) *Store {
+	if org == s.org {
+		return s
+	}
+	return s.ForOrg(org)
+}
+
 func (s *Store) PersistSessions(ctx context.Context) {
 	if data, _, err := s.secrets.Get(ctx, sessionsSecret); err == nil {
 		var m map[string]Session
 		if json.Unmarshal(data["sessions"], &m) == nil {
+			users := map[string][]User{}
+			for k, v := range m {
+				us, ok := users[v.Org]
+				if !ok {
+					us, _ = s.storeFor(v.Org).Users(ctx)
+					users[v.Org] = us
+				}
+				if time.Now().After(v.Expires) || !slices.ContainsFunc(us, func(u User) bool {
+					return u.Name == v.User && u.Role == v.Role && slices.Equal(u.Scopes, v.Scopes)
+				}) {
+					delete(m, k)
+				}
+			}
 			s.sessions.mu.Lock()
 			for k, v := range m {
-				if _, ok := s.sessions.m[k]; !ok && time.Now().Before(v.Expires) {
+				if _, ok := s.sessions.m[k]; !ok {
 					s.sessions.m[k] = v
 				}
 			}
 			s.sessions.mu.Unlock()
 		}
 	}
-	for range time.Tick(5 * time.Second) {
-		s.sessions.mu.Lock()
-		if !s.sessions.dirty {
-			s.sessions.mu.Unlock()
-			continue
-		}
-		b, err := json.Marshal(s.sessions.m)
-		s.sessions.dirty = false
-		s.sessions.mu.Unlock()
-		if err != nil {
-			continue
-		}
-		data := map[string][]byte{"sessions": b}
-		_, rv, err := s.secrets.Get(ctx, sessionsSecret)
-		switch {
-		case apierrors.IsNotFound(err):
-			err = s.secrets.Create(ctx, sessionsSecret, "Opaque", data)
-		case err == nil:
-			err = s.secrets.Update(ctx, sessionsSecret, rv, data)
-		}
-		if err != nil {
-			s.sessions.mu.Lock()
-			s.sessions.dirty = true
-			s.sessions.mu.Unlock()
+	t := time.NewTicker(5 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			s.flushSessions(ctx)
 		}
 	}
+}
+
+func (s *Store) flushSessions(ctx context.Context) error {
+	s.sessions.flushMu.Lock()
+	defer s.sessions.flushMu.Unlock()
+	s.sessions.mu.Lock()
+	if !s.sessions.dirty {
+		s.sessions.mu.Unlock()
+		return nil
+	}
+	b, err := json.Marshal(s.sessions.m)
+	s.sessions.dirty = false
+	s.sessions.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	data := map[string][]byte{"sessions": b}
+	_, rv, err := s.secrets.Get(ctx, sessionsSecret)
+	switch {
+	case apierrors.IsNotFound(err):
+		err = s.secrets.Create(ctx, sessionsSecret, "Opaque", data)
+	case err == nil:
+		err = s.secrets.Update(ctx, sessionsSecret, rv, data)
+	}
+	if err != nil {
+		s.sessions.mu.Lock()
+		s.sessions.dirty = true
+		s.sessions.mu.Unlock()
+	}
+	return err
+}
+
+func (s *Store) revoked() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := s.flushSessions(ctx); err != nil {
+		log.Printf("sessions: persist revocation: %v", err)
+	}
+}
+
+func (s *Store) DropOrg(org string) {
+	s.sessions.mu.Lock()
+	for k, v := range s.sessions.m {
+		if v.Org == org {
+			delete(s.sessions.m, k)
+			s.sessions.dirty = true
+		}
+	}
+	s.sessions.mu.Unlock()
+	s.revoked()
 }
 
 func NewStore(secrets Secrets) *Store {
@@ -252,18 +309,24 @@ func (s *Store) Add(ctx context.Context, name string, role Role, password string
 }
 
 func (s *Store) UpsertSSO(ctx context.Context, name string, role Role) error {
-	return s.modify(ctx, func(us []User) ([]User, error) {
+	changed := false
+	err := s.modify(ctx, func(us []User) ([]User, error) {
 		for i := range us {
 			if us[i].Name == name {
 				if !us[i].SSO {
 					return nil, fmt.Errorf("local user %s already exists", name)
 				}
+				changed = us[i].Role != role
 				us[i].Role = role
 				return us, nil
 			}
 		}
 		return append(us, User{Name: name, Role: role, SSO: true}), nil
 	})
+	if err == nil && changed {
+		s.dropSessions(name)
+	}
+	return err
 }
 
 func (s *Store) Delete(ctx context.Context, name string) error {
@@ -354,7 +417,6 @@ func (s *Store) ChangePassword(ctx context.Context, tok, current, password strin
 		return err
 	}
 	s.sessions.mu.Lock()
-	defer s.sessions.mu.Unlock()
 	for k, v := range s.sessions.m {
 		if v.Org == s.org && v.User == sess.User && k != tokenKey(tok) {
 			delete(s.sessions.m, k)
@@ -363,6 +425,8 @@ func (s *Store) ChangePassword(ctx context.Context, tok, current, password strin
 	sess.MustChange = false
 	s.sessions.m[tokenKey(tok)] = sess
 	s.sessions.dirty = true
+	s.sessions.mu.Unlock()
+	s.revoked()
 	return nil
 }
 
@@ -421,20 +485,22 @@ func (s *Store) Session(tok string) (Session, bool) {
 
 func (s *Store) Logout(tok string) {
 	s.sessions.mu.Lock()
-	defer s.sessions.mu.Unlock()
 	delete(s.sessions.m, tokenKey(tok))
 	s.sessions.dirty = true
+	s.sessions.mu.Unlock()
+	s.revoked()
 }
 
 func (s *Store) dropSessions(name string) {
 	s.sessions.mu.Lock()
-	defer s.sessions.mu.Unlock()
 	for k, v := range s.sessions.m {
 		if v.Org == s.org && v.User == name {
 			delete(s.sessions.m, k)
 			s.sessions.dirty = true
 		}
 	}
+	s.sessions.mu.Unlock()
+	s.revoked()
 }
 
 func (s *Store) EnsureAdmin(ctx context.Context, seed string) (string, error) {
