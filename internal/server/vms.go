@@ -216,8 +216,8 @@ func (s *Server) sessionValid(r *http.Request) bool {
 		return ok
 	}
 	if tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
-		_, valid := s.auth.CheckToken(r.Context(), tok)
-		return valid
+		t, valid := s.auth.CheckToken(r.Context(), tok)
+		return valid && t.Scope == ""
 	}
 	return false
 }

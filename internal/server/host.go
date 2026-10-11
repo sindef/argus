@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"argus/internal/auth"
 	"argus/internal/hostd"
 	"argus/internal/tlscert"
 )
@@ -185,7 +186,11 @@ func (s *Server) createToken(w http.ResponseWriter, r *http.Request) {
 		s.renderHost(w, r, "", errors.New("invalid token name"))
 		return
 	}
-	tok, err := s.auth.CreateToken(r.Context(), name)
+	scope := ""
+	if r.FormValue("scope") == auth.MetricsScope {
+		scope = auth.MetricsScope
+	}
+	tok, err := s.auth.CreateToken(r.Context(), name, scope)
 	if err != nil {
 		s.renderHost(w, r, "", err)
 		return

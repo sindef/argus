@@ -48,7 +48,7 @@
       <div class="table-wrap spaced"><table>
         <thead><tr><th>Token</th><th>Created</th><th></th></tr></thead>
         <tbody>{{range .Tokens}}<tr><td>{{.Name}}</td><td>{{.Created.Local.Format "2006-01-02 15:04"}}</td>
-          <td class="row-actions"><form method="post" action="/tokens/{{.Name}}/delete" onsubmit="return confirm('Revoke {{.Name}}?')"><button type="submit" class="link danger">Revoke</button></form></td></tr>{{end}}</tbody>
+          <td class="row-actions">{{if .Scope}}<span class="badge muted-badge">{{.Scope}}</span> {{end}}<form method="post" action="/tokens/{{.Name}}/delete" onsubmit="return confirm('Revoke {{.Name}}?')"><button type="submit" class="link danger">Revoke</button></form></td></tr>{{end}}</tbody>
       </table></div>
       {{end}}
       <div class="actions spaced"><button class="btn" data-dialog="add-token">{{template "icon" "plus"}}Create token</button></div>
@@ -59,6 +59,7 @@
   <form method="post" action="/tokens" class="form">
     <h2>Create token</h2>
     <label>Name <input name="name" pattern="[a-z][a-z0-9._-]{0,31}" placeholder="manager" required></label>
+    <label>Access <select name="scope"><option value="">Argus Manager (full)</option><option value="metrics">Prometheus metrics only</option></select></label>
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Create token</button></div>
   </form>
 </dialog>

@@ -19,7 +19,10 @@ type Token struct {
 	Name    string    `json:"name"`
 	Hash    string    `json:"hash"`
 	Created time.Time `json:"created"`
+	Scope   string    `json:"scope,omitempty"`
 }
+
+const MetricsScope = "metrics"
 
 func (s *Store) tokens(ctx context.Context) ([]Token, string, error) {
 	data, rv, err := s.secrets.Get(ctx, tokenSecret)
@@ -51,7 +54,7 @@ func (s *Store) Tokens(ctx context.Context) ([]Token, error) {
 	return ts, err
 }
 
-func (s *Store) CreateToken(ctx context.Context, name string) (string, error) {
+func (s *Store) CreateToken(ctx context.Context, name, scope string) (string, error) {
 	ts, rv, err := s.tokens(ctx)
 	if err != nil {
 		return "", err
@@ -64,7 +67,7 @@ func (s *Store) CreateToken(ctx context.Context, name string) (string, error) {
 	b := make([]byte, 32)
 	rand.Read(b)
 	plain := "argus_" + hex.EncodeToString(b)
-	ts = append(ts, Token{Name: name, Hash: tokenHash(plain), Created: time.Now().UTC()})
+	ts = append(ts, Token{Name: name, Hash: tokenHash(plain), Created: time.Now().UTC(), Scope: scope})
 	return plain, s.saveTokens(ctx, ts, rv)
 }
 
@@ -85,18 +88,18 @@ func (s *Store) DeleteToken(ctx context.Context, name string) error {
 	return s.saveTokens(ctx, out, rv)
 }
 
-func (s *Store) CheckToken(ctx context.Context, plain string) (string, bool) {
+func (s *Store) CheckToken(ctx context.Context, plain string) (Token, bool) {
 	ts, _, err := s.tokens(ctx)
 	if err != nil {
-		return "", false
+		return Token{}, false
 	}
 	h := tokenHash(plain)
 	for _, t := range ts {
 		if subtle.ConstantTimeCompare([]byte(t.Hash), []byte(h)) == 1 {
-			return t.Name, true
+			return t, true
 		}
 	}
-	return "", false
+	return Token{}, false
 }
 
 func tokenHash(plain string) string {

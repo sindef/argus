@@ -24,6 +24,13 @@ stages:
           permissions: 0644
           content: |
             ARGUS_DEVICE=/dev/disk/by-id/CHANGEME-vm-disk
+    - name: management
+      if: '[ ! -e /usr/local/argus/management ]'
+      files:
+        - path: /usr/local/argus/management
+          permissions: 0644
+          content: |
+            br0
     - name: br0
       files:
         - path: /etc/systemd/network/05-br0.netdev

@@ -5,3 +5,9 @@ After=argus-datastore.service
 
 [Service]
 ExecStart=/usr/sbin/argus-hostd
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes

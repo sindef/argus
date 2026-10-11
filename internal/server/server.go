@@ -425,12 +425,16 @@ func (s *Server) requireOrg(min auth.Role, h http.HandlerFunc) http.HandlerFunc 
 func (s *Server) require(min auth.Role, h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
-			name, valid := s.auth.CheckToken(r.Context(), tok)
+			t, valid := s.auth.CheckToken(r.Context(), tok)
 			if !valid || !strings.HasPrefix(r.URL.Path, "/api/") {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
-			sess := auth.Session{User: "token:" + name, Role: auth.Admin}
+			if t.Scope == auth.MetricsScope && r.URL.Path != "/api/prometheus" {
+				http.Error(w, "forbidden", http.StatusForbidden)
+				return
+			}
+			sess := auth.Session{User: "token:" + t.Name, Role: auth.Admin}
 			r2 := r.WithContext(context.WithValue(r.Context(), ctxKey{}, reqAuth{Session: sess}))
 			s.audited(w, r2, sess.User, func(w http.ResponseWriter) { h(w, r2) })
 			return
