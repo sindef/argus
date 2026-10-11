@@ -2,7 +2,13 @@ VERSION ?= 0.1.0
 IMAGE ?= argus-os:$(VERSION)
 AURORABOOT ?= quay.io/kairos/auroraboot:v0.28.0@sha256:9a3ae40ca2f4e5856055502ad72ff3b6343758b78a97968387ee3af0233892c2
 
-.PHONY: app manager hostd os iso
+.PHONY: app manager hostd os iso notices notices-check source-bundle
+
+notices:
+	sh scripts/update-notices.sh
+
+notices-check:
+	sh scripts/update-notices.sh --check
 
 app:
 	docker buildx build --load -t argus:$(VERSION) .
@@ -22,3 +28,15 @@ os: app hostd
 iso: os
 	docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v $(CURDIR)/build:/output \
 		$(AURORABOOT) build-iso --output /output/ oci:$(IMAGE)
+
+source-bundle: os
+	rm -rf build/third-party-sources
+	docker buildx build --build-arg VERSION=$(VERSION) --target source-bundle --output type=local,dest=build/third-party-sources os
+	docker buildx build --target source-bundle --output type=local,dest=build/third-party-sources .
+	cd build/third-party-sources && find . -type f ! -name SHA256SUMS -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > SHA256SUMS
+	rm -f build/argus-third-party-sources-$(VERSION).tar.gz*
+	tar -czf build/argus-third-party-sources-$(VERSION).tar.gz -C build/third-party-sources .
+	if [ "$$(stat -c %s build/argus-third-party-sources-$(VERSION).tar.gz)" -ge 1900000000 ]; then \
+		split -b 1900000000 build/argus-third-party-sources-$(VERSION).tar.gz build/argus-third-party-sources-$(VERSION).tar.gz.part-; \
+		rm build/argus-third-party-sources-$(VERSION).tar.gz; \
+	fi

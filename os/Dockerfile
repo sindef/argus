@@ -1,10 +1,31 @@
 ARG KAIROS_INIT_VERSION=v4.3.0
+ARG K3S_VERSION=v1.35.8+k3s1
+
+FROM golang:1.27.2@sha256:5bc7f572bbaa98885a3a1fd9c0aa76b59e3e14e8628bfc316bbfd0c701e4818c AS infrastructure
+ARG KAIROS_INIT_VERSION
+ARG K3S_VERSION
+RUN apt-get update && apt-get install -y --no-install-recommends jq && rm -rf /var/lib/apt/lists/*
+COPY infrastructure-sources.tsv /infrastructure-sources.tsv
+COPY infrastructure-licenses /infrastructure-licenses
+COPY third-party-infrastructure.sh /third-party-infrastructure.sh
+RUN --mount=type=cache,target=/go/pkg/mod sh /third-party-infrastructure.sh
+
+FROM ubuntu:26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7 AS k3s-root-notices
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates make gcc g++ rsync wget patch file perl unzip cpio bc bzip2 xz-utils m4 && rm -rf /var/lib/apt/lists/*
+COPY --from=infrastructure /upstream/k3s-root/ /usr/src/k3s-root/
+COPY --from=infrastructure /upstream/buildroot/ /usr/src/buildroot/
+WORKDIR /usr/src/k3s-root
+ENV BUILDARCH=${TARGETARCH} FORCE_UNSAFE_CONFIGURE=1
+RUN --mount=type=cache,target=/usr/src/buildroot/dl scripts/patch && cd /usr/src/buildroot && make olddefconfig \
+    && make legal-info BR2_PRIMARY_SITE=https://sources.buildroot.net BR2_WGET='wget --passive-ftp -nd -t 3 -T 30' \
+    && rm -rf output/build output/per-package
 
 FROM quay.io/kairos/kairos-init:${KAIROS_INIT_VERSION}@sha256:c8c5d46234ddda93908f090f136fb12826e312286f63e0b6f316e4063edeea53 AS kairos-init
 
 FROM ubuntu:26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7 AS build
 ARG VERSION=0.1.0
-ARG K3S_VERSION=v1.35.8+k3s1
+ARG K3S_VERSION
 ARG KUBEVIRT_VERSION=v1.9.0
 ARG CDI_VERSION=v1.66.1
 ARG NAD_VERSION=v1.7.7
@@ -56,6 +77,21 @@ RUN --mount=type=bind,from=kairos-init,src=/kairos-init,dst=/kairos-init \
     /kairos-init -s init -m generic -p k3s --provider-k3s-version "${K3S_VERSION}" --version "${VERSION}"
 
 RUN systemctl disable fail2ban && dpkg --purge fail2ban && rm -rf /etc/fail2ban
+COPY build/usr/share/doc/argus/ /usr/share/doc/argus/
+COPY --from=infrastructure /notices/ /usr/share/doc/argus/third_party/infrastructure/
+COPY --from=k3s-root-notices /usr/src/buildroot/output/legal-info/licenses/ /usr/share/doc/argus/third_party/licenses/k3s-root/
+COPY --from=k3s-root-notices /usr/src/buildroot/output/legal-info/manifest.csv /usr/share/doc/argus/third_party/k3s-root-manifest.csv
+COPY third-party-packages.sh /tmp/third-party-packages.sh
+RUN sh /tmp/third-party-packages.sh && rm /tmp/third-party-packages.sh
+
+FROM build AS sources
+COPY --from=infrastructure /source-bundle/ /source-bundle/
+COPY --from=k3s-root-notices /usr/src/buildroot/output/legal-info/ /source-bundle/k3s-root/
+COPY third-party-sources.sh /tmp/third-party-sources.sh
+RUN sh /tmp/third-party-sources.sh && rm /tmp/third-party-sources.sh
+
+FROM scratch AS source-bundle
+COPY --from=sources /source-bundle/ /
 
 FROM scratch
 COPY --from=build / /
