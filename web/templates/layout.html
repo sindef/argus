@@ -28,7 +28,7 @@
     {{template "icon" "search"}}
     <input name="q" placeholder="{{if .Manager}}Search VMs, hosts…{{else}}Search…{{end}}" value="{{.Query}}" aria-label="Search">
   </form>
-  <a class="icon-btn" href="/events" title="Events">{{template "icon" "bell"}}</a>
+  <a class="icon-btn bell" href="/events" title="Events{{with .Alarms}}: {{len .}} active alarms{{end}}">{{template "icon" "bell"}}{{with .Alarms}}<span class="count">{{len .}}</span>{{end}}</a>
   <span class="icon-btn" title="{{if .Manager}}Argus Manager{{else}}Argus{{end}} {{.Version}}">{{template "icon" "circle-help"}}</span>
   {{end}}
   <div class="menu user-menu">
@@ -120,3 +120,22 @@
 </dialog>
 {{end}}
 {{end}}
+
+{{define "notify-card"}}{{with .Notify}}
+<div class="card">
+  <div class="card-head">{{template "icon" "bell"}}<h2>Notifications</h2><span class="help right" title="Sent when an alarm is raised or resolved.">?</span></div>
+  <form hx-post="/notify" hx-target="#flash" class="form">
+    <label>Webhook URL <span class="help" title="JSON POST with text and content fields; works with Slack and Discord incoming webhooks.">?</span><input name="webhook" type="url" value="{{.Webhook}}" placeholder="https://hooks.slack.com/…"></label>
+    <div class="row">
+      <label>SMTP server <input name="smtp_host" value="{{.SMTPHost}}" placeholder="smtp.example.com:587"></label>
+      <label>SMTP user <input name="smtp_user" value="{{.SMTPUser}}" autocomplete="off"></label>
+      <label>SMTP password <input name="smtp_pass" type="password" placeholder="{{if .SMTPPass}}unchanged{{end}}" autocomplete="new-password"></label>
+    </div>
+    <div class="row">
+      <label>From <input name="from" value="{{.From}}" placeholder="argus@example.com"></label>
+      <label>To <input name="to" value="{{.To}}" placeholder="ops@example.com"></label>
+    </div>
+    <div class="actions"><button class="btn" type="submit" name="test" value="1">Save and send test</button><button class="btn primary" type="submit">Save</button></div>
+  </form>
+</div>
+{{end}}{{end}}

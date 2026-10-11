@@ -45,6 +45,7 @@ type Server struct {
 	ui          *http.ServeMux
 	backups     backupState
 	auditLog    auditLog
+	alarms      alarmState
 }
 
 type Options struct {
@@ -82,8 +83,12 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	}
 
 	go s.auditLoop()
+	if k != nil || s.manager != nil {
+		go s.alarmLoop()
+	}
 	s.mux.Handle("GET /static/", http.FileServerFS(web.FS))
 	s.mux.HandleFunc("GET /audit", s.require(auth.Admin, s.auditPage))
+	s.mux.HandleFunc("POST /notify", s.require(auth.Admin, s.notifyForm))
 	s.mux.HandleFunc("GET /login", s.loginPage)
 	s.mux.HandleFunc("POST /login", s.login)
 	s.mux.HandleFunc("POST /logout", s.logout)
@@ -187,6 +192,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("GET /api/host/network", s.require(auth.Admin, s.apiHostNetwork))
 	s.mux.HandleFunc("GET /api/host/status", s.require(auth.Admin, s.apiHostStatus))
 	s.mux.HandleFunc("GET /api/images", s.require(auth.Admin, s.apiImages))
+	s.mux.HandleFunc("GET /api/alarms", s.require(auth.Admin, s.apiAlarms))
 	s.mux.HandleFunc("POST /api/images/import", s.require(auth.Admin, s.apiImportImage))
 	s.mux.HandleFunc("POST /api/images/{name}/{op}", s.require(auth.Admin, s.apiImageOp))
 	s.mux.HandleFunc("GET /api/host/settings", s.require(auth.Admin, s.apiHostSettings))
@@ -321,6 +327,7 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page, tmpl strin
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	}
 	data["Session"] = session(r)
+	data["Alarms"] = s.activeAlarms()
 	data["Manager"] = s.manager != nil
 	data["Query"] = r.FormValue("q")
 	data["Version"] = s.version

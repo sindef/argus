@@ -4,6 +4,15 @@
   <h1>Events</h1>
 </div>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
+{{with .Alarms}}
+<div class="card spaced">
+  <div class="card-head">{{template "icon" "triangle-alert"}}<h2>Active alarms</h2></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Severity</th>{{if $.Manager}}<th>Host</th>{{end}}<th>Object</th><th>Message</th><th>Since</th></tr></thead>
+    <tbody>{{range .}}<tr><td><span class="dot {{if eq .Severity "critical"}}Failed{{else}}Warning{{end}}">{{.Severity}}</span></td>{{if $.Manager}}<td>{{.Host}}</td>{{end}}<td>{{.Object}}</td><td>{{.Message}}</td><td>{{since .Since}}</td></tr>{{end}}</tbody>
+  </table></div>
+</div>
+{{end}}
 {{with .Jobs}}
 <div class="card">
   <div class="card-head"><h2>Tasks</h2></div>

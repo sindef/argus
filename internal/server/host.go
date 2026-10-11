@@ -158,6 +158,7 @@ func (s *Server) renderHost(w http.ResponseWriter, r *http.Request, notice strin
 	if st, serr := s.hostSettings(r.Context()); serr == nil {
 		data["Settings"] = st
 	}
+	data["Notify"], _, _ = s.loadNotify(r.Context())
 	s.render(w, r, "host.html", "layout", data)
 }
 
