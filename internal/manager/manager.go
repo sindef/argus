@@ -84,20 +84,6 @@ func (c *Manager) NodeIn(ctx context.Context, org, name string) (Node, error) {
 	return n, err
 }
 
-func (c *Manager) SetNodeGroup(ctx context.Context, org, name, datacenter, cluster string) error {
-	ns, rv, err := c.load(ctx)
-	if err != nil {
-		return err
-	}
-	for i := range ns {
-		if ns[i].Name == name && ns[i].Org == org {
-			ns[i].Datacenter, ns[i].Cluster = datacenter, cluster
-			return c.save(ctx, ns, rv)
-		}
-	}
-	return fmt.Errorf("node %s not found", name)
-}
-
 func (c *Manager) Node(ctx context.Context, name string) (Node, error) {
 	ns, _, err := c.load(ctx)
 	if err != nil {

@@ -142,6 +142,17 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 		c.VMs += h.VMs
 		c.Status = worse(c.Status, h.Status)
 	}
+	groups, _ := s.manager.Groups(r.Context(), session(r).Org)
+	for _, g := range groups {
+		if dcs[g.Datacenter] == nil {
+			dcs[g.Datacenter] = map[string]*clusterView{}
+		}
+		for _, cl := range g.Clusters {
+			if dcs[g.Datacenter][cl] == nil {
+				dcs[g.Datacenter][cl] = &clusterView{Name: cl, Status: "Healthy", VMsByHost: map[string][]vmRow{}}
+			}
+		}
+	}
 	for _, v := range rows {
 		c := dcs[v.Datacenter][v.Cluster]
 		c.VMsByHost[v.Host] = append(c.VMsByHost[v.Host], v)
@@ -440,6 +451,7 @@ func (s *Server) renderHosts(w http.ResponseWriter, r *http.Request, err error) 
 	}
 	data["Ranges"] = ranges
 	data["Migration"] = mig
+	data["DC"], data["Cluster"] = r.FormValue("dc"), r.FormValue("cluster")
 	s.render(w, r, "hosts.html", "layout", data)
 }
 
@@ -463,24 +475,19 @@ func (s *Server) managerAddNode(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/hosts", http.StatusSeeOther)
 }
 
-func (s *Server) managerGroupNode(w http.ResponseWriter, r *http.Request) {
-	if err := s.manager.SetNodeGroup(r.Context(), session(r).Org, r.PathValue("node"), strings.TrimSpace(r.FormValue("datacenter")), strings.TrimSpace(r.FormValue("cluster"))); err != nil {
-		s.renderHosts(w, r, err)
-		return
-	}
-	s.manager.Refresh(r.PathValue("node"))
-	http.Redirect(w, r, "/hosts", http.StatusSeeOther)
-}
-
 func (s *Server) managerRemoveNode(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("node")
 	if err := s.manager.RemoveNode(r.Context(), session(r).Org, name); err != nil {
+		if r.Header.Get("HX-Request") != "" {
+			flash(w, r, err)
+			return
+		}
 		s.renderHosts(w, r, err)
 		return
 	}
 	s.manager.PollAll(r.Context())
 	log.Printf("%s: removed host %s", session(r).User, name)
-	http.Redirect(w, r, "/hosts", http.StatusSeeOther)
+	redirect(w, r, "/hosts")
 }
 
 func (s *Server) managerSettings(w http.ResponseWriter, r *http.Request) {

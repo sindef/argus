@@ -106,7 +106,14 @@ func (s *Server) fleetHostNets(ctx context.Context, org string) []hostNetRow {
 }
 
 func (s *Server) managerHostNets(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, "hostnets.html", "layout", map[string]any{"Nav": "hostnets", "Rows": s.fleetHostNets(r.Context(), session(r).Org)})
+	rows := s.fleetHostNets(r.Context(), session(r).Org)
+	pre := map[string]bool{}
+	if dc := r.FormValue("dc"); dc != "" {
+		for _, row := range rows {
+			pre[row.Node.Name] = inGroup(row.Node, dc, r.FormValue("cluster"))
+		}
+	}
+	s.render(w, r, "hostnets.html", "layout", map[string]any{"Nav": "hostnets", "Rows": rows, "Pre": pre})
 }
 
 func (s *Server) managerBridgeRollout(w http.ResponseWriter, r *http.Request) {
