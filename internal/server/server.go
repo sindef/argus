@@ -260,6 +260,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/disks/move", s.require(auth.Operator, s.moveDiskForm))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/tags", s.require(auth.Operator, s.setTags))
 	s.hostRoute("GET /vms/{ns}/{name}/hardware", auth.Operator, s.hardwareModal)
+	s.hostRoute("GET /vms/{ns}/{name}/disks/{disk}/download", auth.Operator, s.downloadDisk)
 	s.hostRoute("POST /vms/{ns}/{name}/hardware/{op}", auth.Operator, s.hardwareAction)
 	s.mux.HandleFunc("GET /vms/{ns}/{name}/disks/new", s.require(auth.Operator, s.newDisk))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/disks/{disk}/delete", s.require(auth.Operator, s.removeDisk))

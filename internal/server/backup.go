@@ -430,3 +430,57 @@ func (s *Server) vmBackupForm(w http.ResponseWriter, r *http.Request) {
 	log.Printf("%s: backup %s %s/%s", session(r).User, r.PathValue("op"), r.PathValue("ns"), r.PathValue("name"))
 	w.Header().Set("HX-Refresh", "true")
 }
+
+func (s *Server) downloadDisk(w http.ResponseWriter, r *http.Request) {
+	ns, name, disk := r.PathValue("ns"), r.PathValue("name"), r.PathValue("disk")
+	hw, err := s.kube.Hardware(r.Context(), ns, name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	i := slices.IndexFunc(hw.Disks, func(d kube.HardwareDisk) bool { return d.Name == disk })
+	if i < 0 {
+		http.Error(w, "disk not found", http.StatusNotFound)
+		return
+	}
+	key := ns + "/" + name
+	if !s.backups.start(key) {
+		http.Error(w, "a backup or download of this VM is already running", http.StatusConflict)
+		return
+	}
+	var copied int64
+	defer func() {
+		s.backups.mu.Lock()
+		delete(s.backups.running, key)
+		s.backups.mu.Unlock()
+	}()
+	ex, err := s.kube.BackupExport(r.Context(), ns, name)
+	defer s.kube.DeleteBackupExport(context.Background(), ns, name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	src, cert, err := s.kube.BackupSource(r.Context(), ns, name, hw.Disks[i].PVC)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM([]byte(cert))
+	hc := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}, ResponseHeaderTimeout: time.Minute}}
+	req, _ := http.NewRequestWithContext(r.Context(), http.MethodGet, src, nil)
+	req.Header.Set("x-kubevirt-export-token", ex.Token)
+	resp, err := hc.Do(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-%s.img.gz"`, name, disk))
+	if v := resp.Header.Get("Content-Length"); v != "" {
+		w.Header().Set("Content-Length", v)
+	}
+	copied, _ = io.Copy(w, resp.Body)
+	log.Printf("%s: downloaded %s/%s disk %s (%d bytes)", session(r).User, ns, name, disk, copied)
+}

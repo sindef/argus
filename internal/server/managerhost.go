@@ -43,20 +43,20 @@ func (s *Server) managerHostUI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-	if err != nil {
-		flash(w, r, err)
-		return
-	}
 	page := r.Method == http.MethodGet && r.Header.Get("HX-Request") == "" && resp.StatusCode == http.StatusOK && strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html")
 	if !page {
 		for k, v := range resp.Header {
-			if strings.HasPrefix(k, "Hx-") || k == "Content-Type" {
+			if strings.HasPrefix(k, "Hx-") || k == "Content-Type" || k == "Content-Length" || k == "Content-Disposition" {
 				w.Header()[k] = v
 			}
 		}
 		w.WriteHeader(resp.StatusCode)
-		w.Write(body)
+		io.Copy(w, resp.Body)
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		flash(w, r, err)
 		return
 	}
 	s.render(w, r, "remote.html", "layout", map[string]any{"Nav": "host:" + n.Name, "Host": n.Name, "Tabs": hostTabs, "Tab": r.PathValue("path"), "Body": template.HTML(body)})
