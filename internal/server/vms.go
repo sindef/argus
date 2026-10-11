@@ -314,6 +314,10 @@ func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("%s: create vm %s", session(r).User, spec.Name)
+	if base, ok := r.Context().Value(baseKey{}).(string); ok {
+		redirect(w, r, strings.Replace(base, "/hosts/", "/nodes/", 1)+"/vms/"+kube.Namespace+"/"+spec.Name)
+		return
+	}
 	redirect(w, r, "/vms/"+kube.Namespace+"/"+spec.Name)
 }
 

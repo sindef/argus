@@ -157,3 +157,15 @@ func (s *Server) rolloutBridge(ctx context.Context, n manager.Node, spec hostd.B
 	}
 	return n.Call(ctx, http.MethodPost, "/api/host/network/confirm", nil, nil)
 }
+
+func (s *Server) managerNewVM(w http.ResponseWriter, r *http.Request) {
+	host := r.FormValue("host")
+	if host == "" {
+		s.render(w, r, "manager-vms.html", "pick-host", s.managerData(r))
+		return
+	}
+	r.SetPathValue("node", host)
+	r.SetPathValue("path", "vms/new")
+	r.URL.RawQuery = ""
+	s.managerHostUI(w, r)
+}

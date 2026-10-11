@@ -126,6 +126,7 @@
           <a href="/hosts/{{.Node.Name}}/pools">{{template "icon" "database"}}Pools</a>
           <a href="/hosts/{{.Node.Name}}/disks">{{template "icon" "hard-drive"}}Disks</a>
           <a href="/hosts/{{.Node.Name}}/network/host">{{template "icon" "cable"}}Network</a>
+          <button hx-get="/hosts/{{.Node.Name}}/vms/new" hx-target="#modal">{{template "icon" "plus"}}New VM…</button>
           <hr>
           {{if .Node.Maintenance}}<button hx-post="/groups/exit-maintenance" hx-vals='{"host":"{{.Node.Name}}"}'>{{template "icon" "play"}}Exit maintenance</button>
           {{else}}<button hx-get="/groups/modal/enter-maintenance?host={{.Node.Name}}" hx-target="#modal">{{template "icon" "pause"}}Enter maintenance…</button>{{end}}

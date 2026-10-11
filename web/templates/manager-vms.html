@@ -2,6 +2,7 @@
 <div class="page-head">
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-monitor"/></svg>
   <h1>Virtual Machines</h1>
+  {{if .CanOperate}}<div class="actions"><button class="btn primary" hx-get="/vm-new" hx-target="#modal">{{template "icon" "plus"}}Create VM</button></div>{{end}}
 </div>
 <div class="toolbar">
   <form class="grow input-icon" hx-get="/vms" hx-target="#vms" hx-trigger="input changed delay:300ms from:find input, submit">
@@ -34,4 +35,12 @@
 </table>
 <div class="table-foot">{{with .Rows}}{{len .}} result{{if ne (len .) 1}}s{{end}}{{else}}No virtual machines{{if $.Query}} match “{{$.Query}}”{{end}}.{{end}}</div>
 </div>
+{{end}}
+
+{{define "pick-host"}}
+<form hx-get="/vm-new" hx-target="#modal" class="form">
+  <h2>Create VM</h2>
+  <label>Host <select name="host">{{range .Hosts}}{{if eq .Status "Healthy"}}<option>{{.Node.Name}}</option>{{end}}{{end}}</select></label>
+  <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Next</button></div>
+</form>
 {{end}}
