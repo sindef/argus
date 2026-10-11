@@ -311,3 +311,27 @@ func RenameSpec(spec obj, from, to string) map[string]string {
 	unstructured.SetNestedSlice(spec, ifaces, "template", "spec", "domain", "devices", "interfaces")
 	return names
 }
+
+func ValidateRestoreSpec(spec obj) error {
+	owned := map[string]bool{}
+	templates, _, _ := unstructured.NestedSlice(spec, "dataVolumeTemplates")
+	for _, t := range templates {
+		n, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
+		owned[n] = true
+	}
+	volumes, _, _ := unstructured.NestedSlice(spec, "template", "spec", "volumes")
+	for _, v := range volumes {
+		vo := v.(obj)
+		switch {
+		case vo["cloudInitNoCloud"] != nil:
+		case vo["persistentVolumeClaim"] != nil && vo["name"] == "cdrom":
+		case vo["dataVolume"] != nil:
+			if dv, _ := vo["dataVolume"].(obj); !owned[fmt.Sprint(dv["name"])] {
+				return fmt.Errorf("backup disk %v is not part of the backup", vo["name"])
+			}
+		default:
+			return fmt.Errorf("backup volume %v has an unsupported type", vo["name"])
+		}
+	}
+	return nil
+}

@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"log"
 	"net/http"
@@ -68,14 +70,23 @@ type backupState struct {
 	mu       sync.Mutex
 	running  map[string]bool
 	last     map[string]string
-	restores map[string]string
+	restores map[string]restoreJob
 }
+
+type restoreJob struct {
+	Rel       string `json:"rel"`
+	Namespace string `json:"namespace"`
+	Target    string `json:"target"`
+	Key       string `json:"key"`
+}
+
+const restoresKey = "argus-restores"
 
 func (b *backupState) start(key string) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.running == nil {
-		b.running, b.last, b.restores = map[string]bool{}, map[string]string{}, map[string]string{}
+		b.running, b.last = map[string]bool{}, map[string]string{}
 	}
 	if b.running[key] {
 		return false
@@ -95,6 +106,15 @@ func (b *backupState) finish(key string, err error) {
 	b.last[key] = msg
 }
 
+func (b *backupState) note(key, msg string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.last == nil {
+		b.last = map[string]string{}
+	}
+	b.last[key] = msg + " " + time.Now().Format("2006-01-02 15:04")
+}
+
 func (b *backupState) status(key string) string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -105,6 +125,7 @@ func (b *backupState) status(key string) string {
 }
 
 func (s *Server) backupLoop() {
+	s.resumeRestores()
 	for range time.Tick(time.Minute) {
 		ctx := context.Background()
 		vms, err := s.kube.ListVMs(ctx)
@@ -213,49 +234,86 @@ func (s *Server) offsite(ctx context.Context, ns, name string) error {
 		return err
 	}
 	stamp := time.Now().UTC().Format("20060102-150405")
+	rel := name + "/" + stamp
 	meta := backupMeta{Namespace: ns, Spec: ex.Spec, Created: time.Now()}
+	man := hostd.Manifest{Files: map[string]hostd.ManifestFile{}}
+	fail := func(err error) error {
+		s.hostd.DeleteBackup(context.Background(), rel)
+		return err
+	}
 	templates, _, _ := unstructured.NestedSlice(ex.Spec, "dataVolumeTemplates")
 	for _, t := range templates {
 		dv, _, _ := unstructured.NestedString(t.(map[string]any), "metadata", "name")
-		if err := s.copyDisk(ctx, ns, name, dv, ex.Token, name+"/"+stamp+"/"+dv+".img.gz"); err != nil {
-			s.hostd.DeleteBackup(context.Background(), name+"/"+stamp)
-			return fmt.Errorf("disk %s: %w", dv, err)
+		mf, err := s.copyDisk(ctx, ns, name, dv, ex.Token, rel+"/"+dv+".img.gz")
+		if err != nil {
+			return fail(fmt.Errorf("disk %s: %w", dv, err))
 		}
+		man.Files[dv+".img.gz"] = mf
 		meta.Disks = append(meta.Disks, dv)
 	}
 	b, err := json.Marshal(meta)
 	if err != nil {
-		return err
+		return fail(err)
 	}
-	return s.hostd.PutBackupFile(ctx, name+"/"+stamp+"/vm.json", bytes.NewReader(b))
+	sum := sha256.Sum256(b)
+	man.Files["vm.json"] = hostd.ManifestFile{SHA256: hex.EncodeToString(sum[:]), Size: int64(len(b))}
+	if err := s.hostd.PutBackupFile(ctx, rel+"/vm.json", bytes.NewReader(b)); err != nil {
+		return fail(err)
+	}
+	mb, _ := json.Marshal(man)
+	if err := s.hostd.PutBackupFile(ctx, rel+"/manifest.json", bytes.NewReader(mb)); err != nil {
+		return fail(err)
+	}
+	return nil
 }
 
-func (s *Server) copyDisk(ctx context.Context, ns, name, dv, token, rel string) error {
+type hashReader struct {
+	r io.Reader
+	h hash.Hash
+	n int64
+}
+
+func (h *hashReader) Read(p []byte) (int, error) {
+	n, err := h.r.Read(p)
+	h.h.Write(p[:n])
+	h.n += int64(n)
+	return n, err
+}
+
+func (s *Server) copyDisk(ctx context.Context, ns, name, dv, token, rel string) (hostd.ManifestFile, error) {
+	var mf hostd.ManifestFile
 	src, cert, err := s.kube.BackupSource(ctx, ns, name, dv)
 	if err != nil {
-		return err
+		return mf, err
 	}
 	pool := x509.NewCertPool()
 	pool.AppendCertsFromPEM([]byte(cert))
 	hc := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}, ResponseHeaderTimeout: time.Minute}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src, nil)
 	if err != nil {
-		return err
+		return mf, err
 	}
 	req.Header.Set("x-kubevirt-export-token", token)
 	resp, err := hc.Do(req)
 	if err != nil {
-		return err
+		return mf, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("export returned %s", resp.Status)
+		return mf, fmt.Errorf("export returned %s", resp.Status)
 	}
-	return s.hostd.PutBackupFile(ctx, rel, resp.Body)
+	hr := &hashReader{r: resp.Body, h: sha256.New()}
+	if err := s.hostd.PutBackupFile(ctx, rel, hr); err != nil {
+		return mf, err
+	}
+	return hostd.ManifestFile{SHA256: hex.EncodeToString(hr.h.Sum(nil)), Size: hr.n}, nil
 }
 
 func (s *Server) restoreBackup(ctx context.Context, vm, stamp, target string) error {
 	rel := vm + "/" + stamp
+	if err := s.hostd.VerifyBackup(ctx, rel); err != nil {
+		return err
+	}
 	resp, err := s.hostd.GetBackupFile(ctx, rel+"/vm.json")
 	if err != nil {
 		return err
@@ -272,6 +330,12 @@ func (s *Server) restoreBackup(ctx context.Context, vm, stamp, target string) er
 	if !validObject.MatchString(target) {
 		return errors.New("invalid VM name")
 	}
+	if meta.Namespace != kube.Namespace {
+		return fmt.Errorf("backup is for namespace %q, which this host does not use", meta.Namespace)
+	}
+	if err := kube.ValidateRestoreSpec(meta.Spec); err != nil {
+		return err
+	}
 	names := map[string]string{}
 	for _, d := range meta.Disks {
 		names[d] = d
@@ -286,46 +350,105 @@ func (s *Server) restoreBackup(ctx context.Context, vm, stamp, target string) er
 	for _, d := range meta.Disks {
 		ex.Disks = append(ex.Disks, kube.ExportDisk{DataVolume: names[d], URL: fmt.Sprintf("https://%s/backups/%s/%s.img.gz", os.Getenv("HOST_IP"), rel, d)})
 	}
-	s.backups.mu.Lock()
-	if s.backups.restores == nil {
-		s.backups.restores = map[string]string{}
-	}
-	s.backups.restores[token] = rel
-	s.backups.mu.Unlock()
-	revoke := func() {
-		s.backups.mu.Lock()
-		delete(s.backups.restores, token)
-		s.backups.mu.Unlock()
-	}
+	job := restoreJob{Rel: rel, Namespace: meta.Namespace, Target: target, Key: meta.Namespace + "/" + vm}
+	s.trackRestore(token, job)
 	if err := s.kube.ImportVM(ctx, meta.Namespace, target, "restore-"+stamp, ex); err != nil {
-		revoke()
+		s.untrackRestore(token)
 		return err
 	}
-	go func() {
-		defer revoke()
-		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
-		defer cancel()
-		for ctx.Err() == nil {
-			disks, err := s.kube.DiskStatus(ctx, meta.Namespace, target)
-			done := err == nil && len(disks) > 0
-			for _, d := range disks {
-				done = done && (d.Phase == "Succeeded" || d.Phase == "Failed")
-			}
-			if done {
-				break
-			}
-			time.Sleep(10 * time.Second)
-		}
-		s.kube.FinishImport(context.Background(), meta.Namespace, target)
-		log.Printf("restore of %s %s as %s finished", vm, stamp, target)
-	}()
+	s.backups.note(job.Key, "Restoring "+stamp+" as "+target)
+	go s.watchRestore(token, job)
 	return nil
+}
+
+func (s *Server) saveRestores() {
+	s.backups.mu.Lock()
+	b, _ := json.Marshal(s.backups.restores)
+	s.backups.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	store := s.auth.Secrets()
+	data := map[string][]byte{"restores": b}
+	_, rv, err := store.Get(ctx, restoresKey)
+	if err != nil {
+		err = store.Create(ctx, restoresKey, "Opaque", data)
+	} else {
+		err = store.Update(ctx, restoresKey, rv, data)
+	}
+	if err != nil {
+		log.Printf("restores: save: %v", err)
+	}
+}
+
+func (s *Server) trackRestore(token string, job restoreJob) {
+	s.backups.mu.Lock()
+	if s.backups.restores == nil {
+		s.backups.restores = map[string]restoreJob{}
+	}
+	s.backups.restores[token] = job
+	s.backups.mu.Unlock()
+	s.saveRestores()
+}
+
+func (s *Server) untrackRestore(token string) {
+	s.backups.mu.Lock()
+	delete(s.backups.restores, token)
+	s.backups.mu.Unlock()
+	s.saveRestores()
+}
+
+func (s *Server) resumeRestores() {
+	data, _, err := s.auth.Secrets().Get(context.Background(), restoresKey)
+	if err != nil {
+		return
+	}
+	var m map[string]restoreJob
+	if json.Unmarshal(data["restores"], &m) != nil {
+		return
+	}
+	s.backups.mu.Lock()
+	s.backups.restores = m
+	s.backups.mu.Unlock()
+	for token, job := range m {
+		go s.watchRestore(token, job)
+	}
+}
+
+func (s *Server) watchRestore(token string, job restoreJob) {
+	defer s.untrackRestore(token)
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
+	defer cancel()
+	failed := ""
+	for ctx.Err() == nil {
+		disks, err := s.kube.DiskStatus(ctx, job.Namespace, job.Target)
+		done := err == nil && len(disks) > 0
+		for _, d := range disks {
+			if d.Phase == "Failed" {
+				failed = d.Name
+			}
+			done = done && (d.Phase == "Succeeded" || d.Phase == "Failed")
+		}
+		if done {
+			break
+		}
+		time.Sleep(10 * time.Second)
+	}
+	s.kube.FinishImport(context.Background(), job.Namespace, job.Target)
+	switch {
+	case failed != "":
+		s.backups.note(job.Key, "Failed restore as "+job.Target+": disk "+failed+" did not copy")
+	case ctx.Err() != nil:
+		s.backups.note(job.Key, "Failed restore as "+job.Target+": timed out")
+	default:
+		s.backups.note(job.Key, "Restored as "+job.Target)
+	}
+	log.Printf("restore of %s as %s finished (failed disk: %q)", job.Rel, job.Target, failed)
 }
 
 func (s *Server) serveBackup(w http.ResponseWriter, r *http.Request) {
 	rel := r.PathValue("vm") + "/" + r.PathValue("stamp")
 	s.backups.mu.Lock()
-	ok := s.backups.restores[strings.TrimSpace(r.Header.Get("x-kubevirt-export-token"))] == rel
+	ok := s.backups.restores[strings.TrimSpace(r.Header.Get("x-kubevirt-export-token"))].Rel == rel
 	s.backups.mu.Unlock()
 	if !ok || s.hostd == nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -489,6 +612,10 @@ func (s *Server) downloadDisk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, "export returned "+resp.Status, http.StatusBadGateway)
+		return
+	}
 	w.Header().Set("Content-Type", "application/gzip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-%s.img.gz"`, name, disk))
 	if v := resp.Header.Get("Content-Length"); v != "" {

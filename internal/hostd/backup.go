@@ -2,6 +2,9 @@ package hostd
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -25,11 +28,23 @@ var (
 )
 
 type Backup struct {
-	VM    string   `json:"vm"`
-	Stamp string   `json:"stamp"`
-	Size  int64    `json:"size"`
-	Files []string `json:"files"`
+	VM       string   `json:"vm"`
+	Stamp    string   `json:"stamp"`
+	Size     int64    `json:"size"`
+	Files    []string `json:"files"`
+	Complete bool     `json:"complete"`
 }
+
+type Manifest struct {
+	Files map[string]ManifestFile `json:"files"`
+}
+
+type ManifestFile struct {
+	SHA256 string `json:"sha256"`
+	Size   int64  `json:"size"`
+}
+
+const manifestFile = "manifest.json"
 
 func backupTarget() string {
 	b, _ := os.ReadFile(backupTargetFile)
@@ -139,6 +154,7 @@ func listBackups(ctx context.Context) ([]Backup, error) {
 				if info, err := f.Info(); err == nil && info.Mode().IsRegular() && !strings.HasPrefix(f.Name(), ".") {
 					b.Size += info.Size()
 					b.Files = append(b.Files, f.Name())
+					b.Complete = b.Complete || f.Name() == manifestFile
 				}
 			}
 			out = append(out, b)
@@ -217,4 +233,43 @@ func deleteBackup(ctx context.Context, rel string) error {
 	}
 	defer root.Close()
 	return root.RemoveAll(rel)
+}
+
+func verifyBackup(ctx context.Context, rel string) error {
+	if !validRel.MatchString(rel) || strings.Count(rel, "/") != 1 {
+		return errors.New("invalid backup path")
+	}
+	root, err := backupRoot(ctx)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	return verifyIn(root, rel)
+}
+
+func verifyIn(root *os.Root, rel string) error {
+	b, err := fs.ReadFile(root.FS(), rel+"/"+manifestFile)
+	if err != nil {
+		return errors.New("backup is incomplete: no manifest")
+	}
+	var m Manifest
+	if err := json.Unmarshal(b, &m); err != nil || len(m.Files) == 0 {
+		return errors.New("backup manifest is unreadable")
+	}
+	for name, want := range m.Files {
+		f, err := root.Open(rel + "/" + name)
+		if err != nil {
+			return fmt.Errorf("%s is missing", name)
+		}
+		h := sha256.New()
+		n, err := io.Copy(h, f)
+		f.Close()
+		if err != nil {
+			return err
+		}
+		if n != want.Size || hex.EncodeToString(h.Sum(nil)) != want.SHA256 {
+			return fmt.Errorf("%s does not match its checksum", name)
+		}
+	}
+	return nil
 }

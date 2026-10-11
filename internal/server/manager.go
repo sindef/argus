@@ -883,19 +883,25 @@ func (s *Server) managerBackup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/gzip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="argus-manager-%s.tar.gz"`, time.Now().Format("20060102-1504")))
-	gz := gzip.NewWriter(w)
-	tw := tar.NewWriter(gz)
+	contents := map[string][]byte{}
 	for _, f := range files {
 		if filepath.Base(f) == "argus-sessions.json" {
 			continue
 		}
 		b, err := os.ReadFile(f)
 		if err != nil {
-			continue
+			http.Error(w, "cannot read "+filepath.Base(f)+": "+err.Error(), http.StatusInternalServerError)
+			return
 		}
-		tw.WriteHeader(&tar.Header{Name: filepath.Base(f), Mode: 0o600, Size: int64(len(b)), ModTime: time.Now()})
+		contents[filepath.Base(f)] = b
+	}
+	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="argus-manager-%s.tar.gz"`, time.Now().Format("20060102-1504")))
+	gz := gzip.NewWriter(w)
+	tw := tar.NewWriter(gz)
+	for _, name := range sortedKeys(contents) {
+		b := contents[name]
+		tw.WriteHeader(&tar.Header{Name: name, Mode: 0o600, Size: int64(len(b)), ModTime: time.Now()})
 		tw.Write(b)
 	}
 	tw.Close()

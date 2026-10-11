@@ -113,8 +113,8 @@
 <h2 class="spaced">On backup target</h2>
 <div class="table-wrap"><table>
   <thead><tr><th>Taken</th><th>Size</th><th></th></tr></thead>
-  <tbody>{{range $b.Backups}}<tr><td title="{{.Stamp}}">{{stamp .Stamp}}</td><td>{{bytes .Size}}</td>
-    <td class="row-actions">{{if $.CanOperate}}<button class="link" data-dialog="restore-backup" data-fill='{"stamp":"{{.Stamp}}"}'>Restore</button><button class="link danger" hx-post="{{$.P}}/backups/delete" hx-vals='{"stamp":"{{.Stamp}}"}' hx-target="#flash" hx-confirm="Delete this backup from the target?">Delete</button>{{end}}</td></tr>
+  <tbody>{{range $b.Backups}}<tr><td title="{{.Stamp}}">{{stamp .Stamp}}{{if not .Complete}} <span class="dot Warning" title="No completion manifest; the copy was interrupted">incomplete</span>{{end}}</td><td>{{bytes .Size}}</td>
+    <td class="row-actions">{{if $.CanOperate}}{{if .Complete}}<button class="link" data-dialog="restore-backup" data-fill='{"stamp":"{{.Stamp}}"}'>Restore</button>{{end}}<button class="link danger" hx-post="{{$.P}}/backups/delete" hx-vals='{"stamp":"{{.Stamp}}"}' hx-target="#flash" hx-confirm="Delete this backup from the target?">Delete</button>{{end}}</td></tr>
   {{else}}<tr><td colspan="3" class="muted">No backups yet.</td></tr>{{end}}</tbody>
 </table></div>
 <dialog id="restore-backup" class="card">
