@@ -42,14 +42,16 @@ func main() {
 		log.Fatal(err)
 	}
 	mgr.Start()
-	srv, err := server.New(nil, store, server.Options{Banner: func(string) {}, Manager: mgr})
+	certs := tlscert.NewHolder(pki.Cert)
+	certs.Load(ctx, fs)
+	srv, err := server.New(nil, store, server.Options{Banner: func(string) {}, Manager: mgr, Certs: certs})
 	if err != nil {
 		log.Fatal(err)
 	}
 	hs := &http.Server{
 		Addr:              addr,
 		Handler:           srv,
-		TLSConfig:         &tls.Config{Certificates: []tls.Certificate{pki.Cert}, MinVersion: tls.VersionTLS12},
+		TLSConfig:         &tls.Config{GetCertificate: certs.GetCertificate, MinVersion: tls.VersionTLS12},
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 	}

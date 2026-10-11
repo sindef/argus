@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"argus/internal/hostd"
 	"argus/internal/tlscert"
@@ -159,6 +160,7 @@ func (s *Server) renderHost(w http.ResponseWriter, r *http.Request, notice strin
 		data["Settings"] = st
 	}
 	data["Notify"], _, _ = s.loadNotify(r.Context())
+	data["Cert"] = s.certInfo()
 	s.render(w, r, "host.html", "layout", data)
 }
 
@@ -255,5 +257,46 @@ func (s *Server) hostSettingsForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("%s: host settings saved", session(r).User)
+	w.Header().Set("HX-Refresh", "true")
+}
+
+type certInfo struct {
+	Custom  bool
+	Subject string
+	Expires time.Time
+}
+
+func (s *Server) certInfo() certInfo {
+	if s.certs == nil {
+		return certInfo{}
+	}
+	if c := s.certs.Custom(); c != nil {
+		names := append([]string{}, c.DNSNames...)
+		for _, ip := range c.IPAddresses {
+			names = append(names, ip.String())
+		}
+		return certInfo{Custom: true, Subject: strings.Join(names, ", "), Expires: c.NotAfter}
+	}
+	return certInfo{}
+}
+
+func (s *Server) setCertificate(w http.ResponseWriter, r *http.Request) {
+	if s.manager != nil && !superAdmin(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	var err error
+	if s.certs == nil {
+		err = errors.New("certificates are not managed by this server")
+	} else if r.FormValue("revert") != "" {
+		err = s.certs.Set(r.Context(), s.auth.Secrets(), nil, nil)
+	} else {
+		err = s.certs.Set(r.Context(), s.auth.Secrets(), []byte(strings.TrimSpace(r.FormValue("cert"))+"\n"), []byte(strings.TrimSpace(r.FormValue("key"))+"\n"))
+	}
+	if err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: web certificate updated", session(r).User)
 	w.Header().Set("HX-Refresh", "true")
 }

@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -209,7 +210,7 @@ func (n Node) client() *http.Client {
 	pool := x509.NewCertPool()
 	pool.AppendCertsFromPEM([]byte(n.CA))
 	c := &http.Client{Timeout: 10 * time.Minute, Transport: &http.Transport{
-		TLSClientConfig:     &tls.Config{RootCAs: pool},
+		TLSClientConfig:     trustPinnedOrPublic(pool, n.URL),
 		MaxIdleConnsPerHost: 4,
 		IdleConnTimeout:     90 * time.Second,
 		TLSHandshakeTimeout: 10 * time.Second,
@@ -471,11 +472,38 @@ func (n Node) Call(ctx context.Context, method, path string, in, out any) error 
 func (n Node) DialConsole(ctx context.Context, ns, vm, kind string) (*websocket.Conn, error) {
 	pool := x509.NewCertPool()
 	pool.AppendCertsFromPEM([]byte(n.CA))
-	d := websocket.Dialer{TLSClientConfig: &tls.Config{RootCAs: pool}, Subprotocols: []string{"binary"}}
+	d := websocket.Dialer{TLSClientConfig: trustPinnedOrPublic(pool, n.URL), Subprotocols: []string{"binary"}}
 	u := strings.Replace(n.URL, "https://", "wss://", 1) + fmt.Sprintf("/api/vms/%s/%s/ws/%s", ns, vm, kind)
 	conn, resp, err := d.DialContext(ctx, u, http.Header{"Authorization": {"Bearer " + n.Token}})
 	if err != nil && resp != nil {
 		return nil, fmt.Errorf("%s: console: %s", n.Name, resp.Status)
 	}
 	return conn, err
+}
+
+func trustPinnedOrPublic(pinned *x509.CertPool, rawURL string) *tls.Config {
+	host := rawURL
+	if u, err := url.Parse(rawURL); err == nil {
+		host = u.Hostname()
+	}
+	return &tls.Config{
+		ServerName:         tlscert.InternalName,
+		InsecureSkipVerify: true,
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			if len(cs.PeerCertificates) == 0 {
+				return errors.New("no server certificate")
+			}
+			inter := x509.NewCertPool()
+			for _, c := range cs.PeerCertificates[1:] {
+				inter.AddCert(c)
+			}
+			opts := x509.VerifyOptions{DNSName: host, Intermediates: inter, Roots: pinned}
+			if _, err := cs.PeerCertificates[0].Verify(opts); err == nil {
+				return nil
+			}
+			opts.Roots = nil
+			_, err := cs.PeerCertificates[0].Verify(opts)
+			return err
+		},
+	}
 }

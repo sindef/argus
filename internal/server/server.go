@@ -17,6 +17,7 @@ import (
 	"argus/internal/hostd"
 	"argus/internal/kube"
 	"argus/internal/manager"
+	"argus/internal/tlscert"
 	"argus/web"
 )
 
@@ -45,6 +46,7 @@ type Server struct {
 	mux         *http.ServeMux
 	ui          *http.ServeMux
 	backups     backupState
+	certs       *tlscert.Holder
 	esxi        esxiStreams
 	auditLog    auditLog
 	alarms      alarmState
@@ -57,6 +59,7 @@ type Options struct {
 	CAPEM       []byte
 	NodeName    string
 	Manager     *manager.Manager
+	Certs       *tlscert.Holder
 }
 
 type ctxKey struct{}
@@ -67,7 +70,7 @@ type reqAuth struct {
 }
 
 func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
-	s := &Server{kube: k, auth: a, banner: o.Banner, runDir: o.RunDir, releaseFile: o.ReleaseFile, caPEM: o.CAPEM, nodeName: o.NodeName, manager: o.Manager, pages: map[string]*template.Template{}, mux: http.NewServeMux(), ui: http.NewServeMux(), limiter: newLoginLimiter()}
+	s := &Server{kube: k, auth: a, banner: o.Banner, runDir: o.RunDir, releaseFile: o.ReleaseFile, caPEM: o.CAPEM, nodeName: o.NodeName, manager: o.Manager, certs: o.Certs, pages: map[string]*template.Template{}, mux: http.NewServeMux(), ui: http.NewServeMux(), limiter: newLoginLimiter()}
 	if k != nil {
 		k.Guard = s.maintenance
 	}
@@ -91,6 +94,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.Handle("GET /static/", http.FileServerFS(web.FS))
 	s.mux.HandleFunc("GET /audit", s.requireOrg(auth.Admin, s.auditPage))
 	s.mux.HandleFunc("POST /notify", s.requireOrg(auth.Admin, s.notifyForm))
+	s.mux.HandleFunc("POST /certificate", s.requireOrg(auth.Admin, s.setCertificate))
 	s.mux.HandleFunc("GET /login", s.loginPage)
 	s.mux.HandleFunc("POST /login", s.login)
 	s.mux.HandleFunc("POST /logout", s.logout)

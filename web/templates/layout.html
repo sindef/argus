@@ -160,3 +160,15 @@
   </form>
 </dialog>
 {{end}}
+
+{{define "cert-card"}}{{with .Cert}}
+<div class="card">
+  <div class="card-head">{{template "icon" "lock"}}<h2>Web certificate</h2><span class="help right" title="Presented to browsers that connect by host name. Connections by IP address, from Argus Manager and from imports keep using the built-in certificate.">?</span></div>
+  <dl class="kv"><dt>In use</dt><dd>{{if .Custom}}{{.Subject}} <span class="muted">until {{.Expires.Local.Format "2006-01-02"}}</span>{{else}}Built-in self-signed{{end}}</dd></dl>
+  <form hx-post="/certificate" hx-target="#flash" class="form spaced">
+    <label>Certificate chain (PEM) <textarea name="cert" rows="3" placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>
+    <label>Private key (PEM) <textarea name="key" rows="3" placeholder="-----BEGIN PRIVATE KEY-----"></textarea></label>
+    <div class="actions">{{if .Custom}}<button class="btn" type="submit" name="revert" value="1" formnovalidate hx-confirm="Go back to the built-in certificate?">Use built-in</button>{{end}}<button class="btn primary" type="submit">Install</button></div>
+  </form>
+</div>
+{{end}}{{end}}

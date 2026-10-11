@@ -12,8 +12,10 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"math/big"
 	"net"
+	"sync/atomic"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -159,4 +161,72 @@ func encode(tmpl, parent *x509.Certificate, key, signer *ecdsa.PrivateKey) ([]by
 func serial() *big.Int {
 	n, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	return n
+}
+
+type Holder struct {
+	builtin tls.Certificate
+	custom  atomic.Pointer[tls.Certificate]
+}
+
+func NewHolder(builtin tls.Certificate) *Holder { return &Holder{builtin: builtin} }
+
+func (h *Holder) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	if c := h.custom.Load(); c != nil && hello.ServerName != "" && hello.ServerName != InternalName {
+		return c, nil
+	}
+	return &h.builtin, nil
+}
+
+const InternalName = "argus"
+
+func (h *Holder) Custom() *x509.Certificate {
+	c := h.custom.Load()
+	if c == nil {
+		return nil
+	}
+	leaf, _ := x509.ParseCertificate(c.Certificate[0])
+	return leaf
+}
+
+const customSecret = "argus-tls-custom"
+
+func (h *Holder) Load(ctx context.Context, secrets Secrets) {
+	data, _, err := secrets.Get(ctx, customSecret)
+	if err != nil || len(data["cert"]) == 0 {
+		return
+	}
+	if c, err := tls.X509KeyPair(data["cert"], data["key"]); err == nil {
+		h.custom.Store(&c)
+	}
+}
+
+func (h *Holder) Set(ctx context.Context, secrets Secrets, certPEM, keyPEM []byte) error {
+	var c *tls.Certificate
+	if len(certPEM) > 0 {
+		pair, err := tls.X509KeyPair(certPEM, keyPEM)
+		if err != nil {
+			return fmt.Errorf("certificate and key do not match or are not PEM: %w", err)
+		}
+		leaf, err := x509.ParseCertificate(pair.Certificate[0])
+		if err != nil {
+			return err
+		}
+		if time.Now().After(leaf.NotAfter) {
+			return errors.New("certificate has expired")
+		}
+		c = &pair
+	}
+	data := map[string][]byte{"cert": certPEM, "key": keyPEM}
+	_, rv, err := secrets.Get(ctx, customSecret)
+	switch {
+	case apierrors.IsNotFound(err):
+		err = secrets.Create(ctx, customSecret, "Opaque", data)
+	case err == nil:
+		err = secrets.Update(ctx, customSecret, rv, data)
+	}
+	if err != nil {
+		return err
+	}
+	h.custom.Store(c)
+	return nil
 }

@@ -46,7 +46,10 @@ func main() {
 		return err
 	})
 
+	certs := tlscert.NewHolder(pki.Cert)
+	certs.Load(context.Background(), kc.Secrets(ns))
 	srv, err := server.New(kc, store, server.Options{
+		Certs:       certs,
 		Banner:      banner,
 		RunDir:      runDir,
 		ReleaseFile: os.Getenv("ARGUS_RELEASE_FILE"),
@@ -59,7 +62,7 @@ func main() {
 	hs := &http.Server{
 		Addr:              addr,
 		Handler:           srv,
-		TLSConfig:         &tls.Config{Certificates: []tls.Certificate{pki.Cert}, MinVersion: tls.VersionTLS12},
+		TLSConfig:         &tls.Config{GetCertificate: certs.GetCertificate, MinVersion: tls.VersionTLS12},
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 	}

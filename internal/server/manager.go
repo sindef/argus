@@ -563,6 +563,7 @@ func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, notice s
 		data["Orgs"], _ = s.manager.Orgs(r.Context())
 		data["Migration"], _ = s.manager.MigrationSettings(r.Context())
 		data["Notify"], _, _ = s.loadNotify(r.Context())
+		data["Cert"] = s.certInfo()
 	}
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
