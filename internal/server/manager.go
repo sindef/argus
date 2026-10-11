@@ -1,12 +1,16 @@
 package server
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -849,4 +853,34 @@ func (s *Server) managerSetTags(w http.ResponseWriter, r *http.Request) {
 	}
 	go s.manager.Refresh(n.Name)
 	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) managerBackup(w http.ResponseWriter, r *http.Request) {
+	if !superAdmin(r) || s.dataDir == "" {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	files, err := filepath.Glob(filepath.Join(s.dataDir, "*.json"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="argus-manager-%s.tar.gz"`, time.Now().Format("20060102-1504")))
+	gz := gzip.NewWriter(w)
+	tw := tar.NewWriter(gz)
+	for _, f := range files {
+		if filepath.Base(f) == "argus-sessions.json" {
+			continue
+		}
+		b, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		tw.WriteHeader(&tar.Header{Name: filepath.Base(f), Mode: 0o600, Size: int64(len(b)), ModTime: time.Now()})
+		tw.Write(b)
+	}
+	tw.Close()
+	gz.Close()
+	log.Printf("%s: downloaded configuration backup", session(r).User)
 }

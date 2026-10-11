@@ -44,7 +44,7 @@ func main() {
 	mgr.Start()
 	certs := tlscert.NewHolder(pki.Cert)
 	certs.Load(ctx, fs)
-	srv, err := server.New(nil, store, server.Options{Banner: func(string) {}, Manager: mgr, Certs: certs})
+	srv, err := server.New(nil, store, server.Options{Banner: func(string) {}, Manager: mgr, Certs: certs, DataDir: data})
 	if err != nil {
 		log.Fatal(err)
 	}

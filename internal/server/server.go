@@ -47,6 +47,7 @@ type Server struct {
 	ui          *http.ServeMux
 	backups     backupState
 	certs       *tlscert.Holder
+	dataDir     string
 	esxi        esxiStreams
 	auditLog    auditLog
 	alarms      alarmState
@@ -60,6 +61,7 @@ type Options struct {
 	NodeName    string
 	Manager     *manager.Manager
 	Certs       *tlscert.Holder
+	DataDir     string
 }
 
 type ctxKey struct{}
@@ -70,7 +72,7 @@ type reqAuth struct {
 }
 
 func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
-	s := &Server{kube: k, auth: a, banner: o.Banner, runDir: o.RunDir, releaseFile: o.ReleaseFile, caPEM: o.CAPEM, nodeName: o.NodeName, manager: o.Manager, certs: o.Certs, pages: map[string]*template.Template{}, mux: http.NewServeMux(), ui: http.NewServeMux(), limiter: newLoginLimiter()}
+	s := &Server{kube: k, auth: a, banner: o.Banner, runDir: o.RunDir, releaseFile: o.ReleaseFile, caPEM: o.CAPEM, nodeName: o.NodeName, manager: o.Manager, certs: o.Certs, dataDir: o.DataDir, pages: map[string]*template.Template{}, mux: http.NewServeMux(), ui: http.NewServeMux(), limiter: newLoginLimiter()}
 	if k != nil {
 		k.Guard = s.maintenance
 	}
@@ -167,6 +169,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("POST /settings/sso", s.requireOrg(auth.Admin, s.managerSSO))
 		s.mux.HandleFunc("POST /settings/orgs", s.requireOrg(auth.Admin, s.managerAddOrg))
 		s.mux.HandleFunc("POST /settings/orgs/{id}/delete", s.requireOrg(auth.Admin, s.managerDeleteOrg))
+		s.mux.HandleFunc("GET /settings/backup", s.requireOrg(auth.Admin, s.managerBackup))
 		s.mux.HandleFunc("POST /settings/migration", s.requireOrg(auth.Admin, s.managerMigrationSettings))
 		return s, nil
 	}
