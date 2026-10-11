@@ -36,6 +36,9 @@ func (s *Server) managerHostUI(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	if r.Method == http.MethodGet && strings.HasSuffix(r.PathValue("path"), "/download") {
+		s.record(s.auditUser(session(r).Org, session(r).User), "download "+n.Name+"/"+r.PathValue("path"), true, "")
+	}
 	path := "/api/ui/" + r.PathValue("path")
 	if r.URL.RawQuery != "" {
 		path += "?" + r.URL.RawQuery

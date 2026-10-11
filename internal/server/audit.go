@@ -60,6 +60,7 @@ func (s *Server) record(user, action string, ok bool, result string) {
 	s.auditLog.mu.Lock()
 	defer s.auditLog.mu.Unlock()
 	s.auditLog.entries = append(s.auditLog.entries, AuditEntry{Time: time.Now(), User: user, Action: action, OK: ok, Result: result})
+	log.Printf("audit: user=%q action=%q ok=%v result=%q", user, action, ok, result)
 	if n := len(s.auditLog.entries); n > auditKeep {
 		s.auditLog.entries = s.auditLog.entries[n-auditKeep:]
 	}

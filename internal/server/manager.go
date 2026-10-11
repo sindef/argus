@@ -410,6 +410,7 @@ func (s *Server) managerSnapshotOp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) managerConsoleWS(w http.ResponseWriter, r *http.Request) {
+	s.record(s.auditUser(session(r).Org, session(r).User), "open console of "+r.PathValue("node")+"/"+r.PathValue("ns")+"/"+r.PathValue("name"), true, "")
 	n, err := s.orgNode(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
@@ -906,7 +907,7 @@ func (s *Server) managerBackup(w http.ResponseWriter, r *http.Request) {
 	}
 	tw.Close()
 	gz.Close()
-	log.Printf("%s: downloaded configuration backup", session(r).User)
+	s.record(s.auditUser(session(r).Org, session(r).User), "download configuration backup", true, "")
 }
 
 type haRow struct {

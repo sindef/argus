@@ -626,5 +626,6 @@ func (s *Server) downloadDisk(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", v)
 	}
 	copied, _ = io.Copy(w, resp.Body)
+	s.record(s.auditUser(session(r).Org, session(r).User), "download disk "+disk+" of "+ns+"/"+name, true, "")
 	log.Printf("%s: downloaded %s/%s disk %s (%d bytes)", session(r).User, ns, name, disk, copied)
 }

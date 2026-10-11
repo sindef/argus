@@ -186,6 +186,7 @@ func (s *Server) console(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) consoleWS(w http.ResponseWriter, r *http.Request) {
+	s.record(s.auditUser(session(r).Org, session(r).User), "open console of "+r.PathValue("ns")+"/"+r.PathValue("name"), true, "")
 	ns, name, kind := r.PathValue("ns"), r.PathValue("name"), r.PathValue("kind")
 	backend, err := s.kube.DialConsole(r.Context(), ns, name, kind)
 	if err != nil {
