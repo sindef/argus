@@ -8,7 +8,7 @@
 {{with .Notice}}<p class="notice">{{.}}</p>{{end}}
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Name</th><th>Role</th><th></th></tr></thead>
+  <thead><tr><th>Name</th><th>Role</th>{{if $.Manager}}<th>Scope <span class="help" title="Datacenters or clusters the user can see and act on. Empty means the whole organization.">?</span></th>{{end}}<th></th></tr></thead>
   <tbody>
   {{range .Users}}
   <tr>
@@ -21,6 +21,7 @@
         </select>
       </form>{{end}}
     </td>
+    {{if $.Manager}}<td>{{range $i, $s := .Scopes}}{{if $i}}, {{end}}{{$s}}{{else}}<span class="muted">All</span>{{end}}{{if not .SSO}} <button class="link" data-dialog="user-scope" data-fill='{"name":"{{.Name}}","scopes":"{{join .Scopes ", "}}"}'>Edit</button>{{end}}</td>{{end}}
     <td class="row-actions">
       {{if ne .Name $.Session.User}}
       {{if not .SSO}}<form method="post" action="/users/{{.Name}}/reset"><button type="submit" class="link">Reset password</button></form>{{end}}
@@ -39,7 +40,20 @@
       <label>Username <input name="name" pattern="[a-z][a-z0-9._-]{0,31}" required></label>
       <label>Role <select name="role">{{range .Roles}}<option value="{{.}}"{{if eq . "read-only"}} selected{{end}}>{{.}}</option>{{end}}</select></label>
     </div>
+    {{if .Manager}}<label>Scope <span class="help" title="Comma separated datacenters or datacenter/cluster. Empty means the whole organization.">?</span><input name="scopes" list="scope-names" placeholder="All"></label>{{end}}
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Add user</button></div>
   </form>
 </dialog>
+{{if .Manager}}
+<datalist id="scope-names">{{range .Scopes}}<option>{{.}}</option>{{end}}</datalist>
+<dialog id="user-scope" class="card">
+  <form hx-post="/users/scopes" hx-target="#scope-error" class="form">
+    <h2>User scope</h2>
+    <p id="scope-error" class="error form-error"></p>
+    <input type="hidden" name="name">
+    <label>Scope <span class="help" title="Comma separated. Empty means the whole organization.">?</span><input name="scopes" list="scope-names" placeholder="All"></label>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Save</button></div>
+  </form>
+</dialog>
+{{end}}
 {{end}}

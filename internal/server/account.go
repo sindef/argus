@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	"argus/internal/auth"
@@ -121,7 +122,17 @@ func (s *Server) renderUsers(w http.ResponseWriter, r *http.Request, notice stri
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 	}
-	s.render(w, r, "users.html", "layout", map[string]any{"Nav": "users", "Users": us, "Roles": auth.Roles, "Notice": notice, "Error": errText(err)})
+	var scopes []string
+	if s.manager != nil {
+		gs, _ := s.manager.Groups(r.Context(), session(r).Org)
+		for _, g := range gs {
+			scopes = append(scopes, g.Datacenter)
+			for _, c := range g.Clusters {
+				scopes = append(scopes, g.Datacenter+"/"+c)
+			}
+		}
+	}
+	s.render(w, r, "users.html", "layout", map[string]any{"Nav": "users", "Users": us, "Roles": auth.Roles, "Scopes": scopes, "Notice": notice, "Error": errText(err)})
 }
 
 func (s *Server) addUser(w http.ResponseWriter, r *http.Request) {
@@ -134,6 +145,12 @@ func (s *Server) addUser(w http.ResponseWriter, r *http.Request) {
 	if err := s.users(r).Add(r.Context(), name, role, pw); err != nil {
 		s.renderUsers(w, r, "", err)
 		return
+	}
+	if sc := scopeList(r.FormValue("scopes")); len(sc) > 0 {
+		if err := s.users(r).SetScopes(r.Context(), name, sc); err != nil {
+			s.renderUsers(w, r, "", err)
+			return
+		}
 	}
 	log.Printf("%s: added user %s (%s)", session(r).User, name, role)
 	s.renderUsers(w, r, "Temporary password for "+name+": "+pw, nil)
@@ -193,4 +210,24 @@ func (s *Server) loginData(r *http.Request, msg string) map[string]any {
 		data["Orgs"], data["Org"], data["SSO"] = orgs, org, sso
 	}
 	return data
+}
+
+func scopeList(v string) []string {
+	var out []string
+	for _, sc := range strings.Split(v, ",") {
+		if sc = strings.TrimSpace(sc); sc != "" {
+			out = append(out, sc)
+		}
+	}
+	return out
+}
+
+func (s *Server) setScopes(w http.ResponseWriter, r *http.Request) {
+	name := r.FormValue("name")
+	if err := s.users(r).SetScopes(r.Context(), name, scopeList(r.FormValue("scopes"))); err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: set %s scopes to %q", session(r).User, name, r.FormValue("scopes"))
+	w.Header().Set("HX-Refresh", "true")
 }

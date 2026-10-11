@@ -36,11 +36,12 @@ func (r Role) Valid() bool {
 }
 
 type User struct {
-	Name       string `json:"name"`
-	Hash       string `json:"hash"`
-	Role       Role   `json:"role"`
-	MustChange bool   `json:"mustChange,omitempty"`
-	SSO        bool   `json:"sso,omitempty"`
+	Name       string   `json:"name"`
+	Hash       string   `json:"hash"`
+	Role       Role     `json:"role"`
+	MustChange bool     `json:"mustChange,omitempty"`
+	SSO        bool     `json:"sso,omitempty"`
+	Scopes     []string `json:"scopes,omitempty"`
 }
 
 const (
@@ -76,6 +77,7 @@ type Session struct {
 	Role       Role
 	MustChange bool
 	SSO        bool
+	Scopes     []string
 	Expires    time.Time
 }
 
@@ -249,6 +251,20 @@ func (s *Store) SetRole(ctx context.Context, name string, role Role) error {
 	return err
 }
 
+func (s *Store) SetScopes(ctx context.Context, name string, scopes []string) error {
+	err := s.update(ctx, name, func(u *User) error {
+		if u.SSO {
+			return ErrSSO
+		}
+		u.Scopes = scopes
+		return nil
+	})
+	if err == nil {
+		s.dropSessions(name)
+	}
+	return err
+}
+
 func (s *Store) ResetPassword(ctx context.Context, name, password string) error {
 	h, err := hash(password)
 	if err != nil {
@@ -316,7 +332,7 @@ var ErrSSO = errors.New("single sign-on users are managed by the identity provid
 
 func checkAdmins(us []User) error {
 	for _, u := range us {
-		if u.Role == Admin && !u.SSO {
+		if u.Role == Admin && !u.SSO && len(u.Scopes) == 0 {
 			return nil
 		}
 	}
@@ -335,7 +351,7 @@ func (s *Store) Login(ctx context.Context, name, password string, remember bool)
 	}
 	for _, u := range us {
 		if u.Name == name && bcrypt.CompareHashAndPassword([]byte(u.Hash), []byte(password)) == nil {
-			return s.NewSession(Session{User: u.Name, Role: u.Role, MustChange: u.MustChange}, remember), nil
+			return s.NewSession(Session{User: u.Name, Role: u.Role, MustChange: u.MustChange, Scopes: u.Scopes}, remember), nil
 		}
 	}
 	return "", nil

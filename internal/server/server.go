@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"argus/internal/auth"
@@ -87,18 +88,19 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		go s.alarmLoop()
 	}
 	s.mux.Handle("GET /static/", http.FileServerFS(web.FS))
-	s.mux.HandleFunc("GET /audit", s.require(auth.Admin, s.auditPage))
-	s.mux.HandleFunc("POST /notify", s.require(auth.Admin, s.notifyForm))
+	s.mux.HandleFunc("GET /audit", s.requireOrg(auth.Admin, s.auditPage))
+	s.mux.HandleFunc("POST /notify", s.requireOrg(auth.Admin, s.notifyForm))
 	s.mux.HandleFunc("GET /login", s.loginPage)
 	s.mux.HandleFunc("POST /login", s.login)
 	s.mux.HandleFunc("POST /logout", s.logout)
 	s.mux.HandleFunc("GET /password", s.require(auth.ReadOnly, s.passwordPage))
 	s.mux.HandleFunc("POST /password", s.require(auth.ReadOnly, s.changePassword))
-	s.mux.HandleFunc("GET /users", s.require(auth.Admin, s.usersPage))
-	s.mux.HandleFunc("POST /users", s.require(auth.Admin, s.addUser))
-	s.mux.HandleFunc("POST /users/{name}/role", s.require(auth.Admin, s.setRole))
-	s.mux.HandleFunc("POST /users/{name}/reset", s.require(auth.Admin, s.resetPassword))
-	s.mux.HandleFunc("POST /users/{name}/delete", s.require(auth.Admin, s.deleteUser))
+	s.mux.HandleFunc("GET /users", s.requireOrg(auth.Admin, s.usersPage))
+	s.mux.HandleFunc("POST /users", s.requireOrg(auth.Admin, s.addUser))
+	s.mux.HandleFunc("POST /users/{name}/role", s.requireOrg(auth.Admin, s.setRole))
+	s.mux.HandleFunc("POST /users/scopes", s.requireOrg(auth.Admin, s.setScopes))
+	s.mux.HandleFunc("POST /users/{name}/reset", s.requireOrg(auth.Admin, s.resetPassword))
+	s.mux.HandleFunc("POST /users/{name}/delete", s.requireOrg(auth.Admin, s.deleteUser))
 	if s.manager != nil {
 		s.mux.HandleFunc("POST /sso/start", s.ssoStart)
 		s.mux.HandleFunc("GET /sso/callback", s.ssoCallback)
@@ -122,35 +124,35 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("POST /jobs/{id}/resolve", s.require(auth.Admin, s.managerResolve))
 		s.mux.HandleFunc("GET /storage", s.require(auth.ReadOnly, s.managerStorage))
 		s.mux.HandleFunc("GET /networks", s.require(auth.ReadOnly, s.managerNetworks))
-		s.mux.HandleFunc("POST /networks", s.require(auth.Admin, s.managerAddNetwork))
-		s.mux.HandleFunc("POST /networks/{name}/{op}", s.require(auth.Admin, s.managerNetworkOp))
+		s.mux.HandleFunc("POST /networks", s.requireOrg(auth.Admin, s.managerAddNetwork))
+		s.mux.HandleFunc("POST /networks/{name}/{op}", s.requireOrg(auth.Admin, s.managerNetworkOp))
 		s.mux.HandleFunc("GET /volumes", s.require(auth.ReadOnly, s.managerVolumes))
 		s.mux.HandleFunc("POST /volumes", s.require(auth.Operator, s.managerVolumeOp))
 		s.mux.HandleFunc("POST /hosts/{node}/volumes/{op}", s.require(auth.Operator, s.managerVolumeOp))
 		s.mux.HandleFunc("GET /hosts", s.require(auth.ReadOnly, s.managerHosts))
-		s.mux.HandleFunc("POST /hosts", s.require(auth.Admin, s.managerAddNode))
-		s.mux.HandleFunc("GET /profile", s.require(auth.Admin, s.profilePage))
-		s.mux.HandleFunc("POST /profile", s.require(auth.Admin, s.profileSave))
-		s.mux.HandleFunc("POST /profile/apply", s.require(auth.Admin, s.profileApply))
-		s.mux.HandleFunc("GET /groups/modal/{op}", s.require(auth.Admin, s.groupModal))
-		s.mux.HandleFunc("POST /groups/{op}", s.require(auth.Admin, s.groupAction))
-		s.mux.HandleFunc("POST /hosts/{node}/delete", s.require(auth.Admin, s.managerRemoveNode))
+		s.mux.HandleFunc("POST /hosts", s.requireOrg(auth.Admin, s.managerAddNode))
+		s.mux.HandleFunc("GET /profile", s.requireOrg(auth.Admin, s.profilePage))
+		s.mux.HandleFunc("POST /profile", s.requireOrg(auth.Admin, s.profileSave))
+		s.mux.HandleFunc("POST /profile/apply", s.requireOrg(auth.Admin, s.profileApply))
+		s.mux.HandleFunc("GET /groups/modal/{op}", s.requireOrg(auth.Admin, s.groupModal))
+		s.mux.HandleFunc("POST /groups/{op}", s.requireOrg(auth.Admin, s.groupAction))
+		s.mux.HandleFunc("POST /hosts/{node}/delete", s.requireOrg(auth.Admin, s.managerRemoveNode))
 		s.mux.HandleFunc("GET /hosts/{node}/{path...}", s.require(auth.ReadOnly, s.managerHostUI))
 		s.mux.HandleFunc("POST /hosts/{node}/{path...}", s.require(auth.Admin, s.managerHostUI))
 		s.mux.HandleFunc("POST /hosts/{node}/vms", s.require(auth.Operator, func(w http.ResponseWriter, r *http.Request) {
 			r.SetPathValue("path", "vms")
 			s.managerHostUI(w, r)
 		}))
-		s.mux.HandleFunc("GET /network/hosts", s.require(auth.Admin, s.managerHostNets))
+		s.mux.HandleFunc("GET /network/hosts", s.requireOrg(auth.Admin, s.managerHostNets))
 		s.mux.HandleFunc("GET /vm-new", s.require(auth.Operator, s.managerNewVM))
 		s.mux.HandleFunc("GET /images", s.require(auth.ReadOnly, s.managerImages))
-		s.mux.HandleFunc("POST /images/{op}", s.require(auth.Operator, s.managerImageOp))
-		s.mux.HandleFunc("POST /network/hosts/bridge", s.require(auth.Admin, s.managerBridgeRollout))
-		s.mux.HandleFunc("GET /settings", s.require(auth.Admin, s.managerSettings))
-		s.mux.HandleFunc("POST /settings/sso", s.require(auth.Admin, s.managerSSO))
-		s.mux.HandleFunc("POST /settings/orgs", s.require(auth.Admin, s.managerAddOrg))
-		s.mux.HandleFunc("POST /settings/orgs/{id}/delete", s.require(auth.Admin, s.managerDeleteOrg))
-		s.mux.HandleFunc("POST /settings/migration", s.require(auth.Admin, s.managerMigrationSettings))
+		s.mux.HandleFunc("POST /images/{op}", s.requireOrg(auth.Operator, s.managerImageOp))
+		s.mux.HandleFunc("POST /network/hosts/bridge", s.requireOrg(auth.Admin, s.managerBridgeRollout))
+		s.mux.HandleFunc("GET /settings", s.requireOrg(auth.Admin, s.managerSettings))
+		s.mux.HandleFunc("POST /settings/sso", s.requireOrg(auth.Admin, s.managerSSO))
+		s.mux.HandleFunc("POST /settings/orgs", s.requireOrg(auth.Admin, s.managerAddOrg))
+		s.mux.HandleFunc("POST /settings/orgs/{id}/delete", s.requireOrg(auth.Admin, s.managerDeleteOrg))
+		s.mux.HandleFunc("POST /settings/migration", s.requireOrg(auth.Admin, s.managerMigrationSettings))
 		return s, nil
 	}
 	s.mux.HandleFunc("GET /events", s.require(auth.ReadOnly, s.eventsPage))
@@ -177,8 +179,8 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /images/upload", s.require(auth.Operator, s.uploadImage))
 	s.mux.HandleFunc("POST /images/{name}/delete", s.require(auth.Operator, s.deleteImage))
 	s.mux.HandleFunc("GET /networks", s.require(auth.ReadOnly, s.networks))
-	s.mux.HandleFunc("POST /networks", s.require(auth.Admin, s.createNetwork))
-	s.mux.HandleFunc("POST /networks/{name}/delete", s.require(auth.Admin, s.deleteNetwork))
+	s.mux.HandleFunc("POST /networks", s.requireOrg(auth.Admin, s.createNetwork))
+	s.mux.HandleFunc("POST /networks/{name}/delete", s.requireOrg(auth.Admin, s.deleteNetwork))
 	s.mux.HandleFunc("GET /host", s.require(auth.Admin, s.host))
 	s.mux.HandleFunc("POST /host/settings", s.require(auth.Admin, s.hostSettingsForm))
 	s.mux.HandleFunc("POST /host/{action}", s.require(auth.Admin, s.hostRequest))
@@ -331,6 +333,14 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page, tmpl strin
 	}
 	data["Session"] = session(r)
 	data["Alarms"] = s.activeAlarms()
+	data["OrgAdmin"] = session(r).Role.Can(auth.Admin) && len(session(r).Scopes) == 0
+	if s.manager != nil && len(session(r).Scopes) > 0 {
+		hosts := map[string]bool{}
+		for _, st := range s.inventory(r) {
+			hosts[st.Node.Name] = true
+		}
+		data["Alarms"] = slices.DeleteFunc(s.activeAlarms(), func(a Alarm) bool { return !hosts[a.Host] })
+	}
 	data["Manager"] = s.manager != nil
 	data["Query"] = r.FormValue("q")
 	data["Version"] = s.version
@@ -354,6 +364,16 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page, tmpl strin
 func session(r *http.Request) reqAuth {
 	a, _ := r.Context().Value(ctxKey{}).(reqAuth)
 	return a
+}
+
+func (s *Server) requireOrg(min auth.Role, h http.HandlerFunc) http.HandlerFunc {
+	return s.require(min, func(w http.ResponseWriter, r *http.Request) {
+		if len(session(r).Scopes) > 0 {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		h(w, r)
+	})
 }
 
 func (s *Server) require(min auth.Role, h http.HandlerFunc) http.HandlerFunc {

@@ -17,10 +17,10 @@
   <button class="nav-head">{{template "icon" "network"}}Networking<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-up"/></svg></button>
   <div class="nav-items">
     <a class="nav-link sub{{if eq .Nav "networks"}} active{{end}}" href="/networks">Networks</a>
-    {{if eq .Session.Role "admin"}}<a class="nav-link sub{{if eq .Nav "hostnets"}} active{{end}}" href="/network/hosts">Host networks</a>{{end}}
+    {{if .OrgAdmin}}<a class="nav-link sub{{if eq .Nav "hostnets"}} active{{end}}" href="/network/hosts">Host networks</a>{{end}}
   </div>
 </div>
-{{if eq .Session.Role "admin"}}
+{{if .OrgAdmin}}
 <div class="nav-sep"></div>
 <div class="nav-section" id="admin">
   <button class="nav-head">{{template "icon" "settings"}}Administration<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-up"/></svg></button>

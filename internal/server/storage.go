@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
-	"time"
 	"net/http"
 	"net/url"
+	"time"
 
 	"argus/internal/auth"
 	"argus/internal/hostd"

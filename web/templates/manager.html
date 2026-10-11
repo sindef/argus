@@ -98,18 +98,18 @@
 {{end}}
 
 {{define "tree"}}
-<ul class="tree"{{if .IsAdmin}} data-context{{end}}>
-  {{if .IsAdmin}}<div class="menu-list" hidden hx-target="#flash"><button hx-get="/groups/modal/add-datacenter" hx-target="#modal">{{template "icon" "plus"}}New datacenter</button><a href="/hosts#add-host">{{template "icon" "server"}}Add host</a></div>{{end}}
+<ul class="tree"{{if .OrgAdmin}} data-context{{end}}>
+  {{if .OrgAdmin}}<div class="menu-list" hidden hx-target="#flash"><button hx-get="/groups/modal/add-datacenter" hx-target="#modal">{{template "icon" "plus"}}New datacenter</button><a href="/hosts#add-host">{{template "icon" "server"}}Add host</a></div>{{end}}
   {{range .Tree}}{{$dc := .Name}}
-  <li data-id="dc:{{.Name}}"><span class="row"{{if $.IsAdmin}} data-context{{end}}>{{template "twisty"}}{{template "icon" "building-2"}}{{.Name}}
-    {{if $.IsAdmin}}<span class="menu-list" hidden hx-target="#flash">{{if ne .Name "Unassigned"}}
+  <li data-id="dc:{{.Name}}"><span class="row"{{if $.OrgAdmin}} data-context{{end}}>{{template "twisty"}}{{template "icon" "building-2"}}{{.Name}}
+    {{if $.OrgAdmin}}<span class="menu-list" hidden hx-target="#flash">{{if ne .Name "Unassigned"}}
       <button hx-get="/groups/modal/add-cluster?dc={{.Name}}" hx-target="#modal">{{template "icon" "plus"}}New cluster</button>
       <button hx-get="/groups/modal/rename-datacenter?dc={{.Name}}" hx-target="#modal">{{template "icon" "pencil"}}Rename</button>
       <hr><button class="danger" hx-post="/groups/delete-datacenter" hx-vals='{"dc":"{{.Name}}"}' hx-confirm="Delete datacenter {{.Name}}?">{{template "icon" "trash-2"}}Delete</button>
     {{else}}<button hx-get="/groups/modal/add-datacenter" hx-target="#modal">{{template "icon" "plus"}}New datacenter</button>{{end}}</span>{{end}}</span>
     <ul>{{range .Clusters}}{{$c := .}}
-    <li data-id="cl:{{.Name}}"><span class="row"{{if $.IsAdmin}} data-context{{end}}>{{template "twisty"}}{{template "icon" "layers"}}{{.Name}}
-      {{if $.IsAdmin}}<span class="menu-list" hidden hx-target="#flash">
+    <li data-id="cl:{{.Name}}"><span class="row"{{if $.OrgAdmin}} data-context{{end}}>{{template "twisty"}}{{template "icon" "layers"}}{{.Name}}
+      {{if $.OrgAdmin}}<span class="menu-list" hidden hx-target="#flash">
         <a href="/hosts?dc={{$dc}}&cluster={{.Name}}#add-host">{{template "icon" "server"}}Add host</a>
         <button hx-post="/groups/apply-networks" hx-vals='{"dc":"{{$dc}}","cluster":"{{.Name}}"}' hx-confirm="Create all Argus Manager networks on the hosts in {{.Name}}?">{{template "icon" "network"}}Apply networks</button>
         <a href="/network/hosts?dc={{$dc}}&cluster={{.Name}}#rollout">{{template "icon" "cable"}}Create bridge on hosts</a>
@@ -127,11 +127,11 @@
           <a href="/hosts/{{.Node.Name}}/disks">{{template "icon" "hard-drive"}}Disks</a>
           <a href="/hosts/{{.Node.Name}}/network/host">{{template "icon" "cable"}}Network</a>
           <button hx-get="/hosts/{{.Node.Name}}/vms/new" hx-target="#modal">{{template "icon" "plus"}}New VM…</button>
-          <hr>
+          {{if $.OrgAdmin}}<hr>
           {{if .Node.Maintenance}}<button hx-post="/groups/exit-maintenance" hx-vals='{"host":"{{.Node.Name}}"}'>{{template "icon" "play"}}Exit maintenance</button>
           {{else}}<button hx-get="/groups/modal/enter-maintenance?host={{.Node.Name}}" hx-target="#modal">{{template "icon" "pause"}}Enter maintenance…</button>{{end}}
           <button hx-get="/groups/modal/move-host?host={{.Node.Name}}&dc={{.Node.Datacenter}}&cluster={{.Node.Cluster}}" hx-target="#modal">{{template "icon" "arrow-right-left"}}Move to…</button>
-          <button class="danger" hx-post="/hosts/{{.Node.Name}}/delete" hx-confirm="Remove {{.Node.Name}} from Argus Manager? The host and its VMs keep running.">{{template "icon" "trash-2"}}Remove</button>
+          <button class="danger" hx-post="/hosts/{{.Node.Name}}/delete" hx-confirm="Remove {{.Node.Name}} from Argus Manager? The host and its VMs keep running.">{{template "icon" "trash-2"}}Remove</button>{{end}}
         </span>{{end}}</span>
         <ul>{{range index $c.VMsByHost .Node.Name}}
         <li data-context><a class="row{{if eq $.Nav (printf "vm:%s/%s" .Host .Name)}} active{{end}}" href="/nodes/{{.Host}}/vms/{{.Namespace}}/{{.Name}}">{{template "icon" "monitor"}}<span class="dot {{.Status}}"></span>{{.Label}}</a>{{template "vm-menu" (vmCtx . $)}}</li>

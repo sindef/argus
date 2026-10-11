@@ -26,7 +26,7 @@ type netRow struct {
 
 func (s *Server) managerNetworks(w http.ResponseWriter, r *http.Request) {
 	org := session(r).Org
-	states := s.manager.Inventory(org)
+	states := s.inventory(r)
 	defs, err := s.manager.Networks(r.Context(), org)
 	var mu sync.Mutex
 	onHost := map[string]map[string]kube.Network{}
@@ -104,7 +104,7 @@ func (s *Server) managerNetworks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) pushNetwork(r *http.Request, op string, n manager.Network) string {
-	return fanOut(r.Context(), s.manager.Inventory(session(r).Org), func(ctx context.Context, node manager.Node) error {
+	return fanOut(r.Context(), s.inventory(r), func(ctx context.Context, node manager.Node) error {
 		return node.Call(ctx, http.MethodPost, "/api/networks/"+op, networkReq{Name: n.Name, VLAN: n.VLAN, Bridge: n.Bridge}, nil)
 	})
 }

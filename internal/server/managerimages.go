@@ -20,7 +20,7 @@ type imageRow struct {
 }
 
 func (s *Server) managerImages(w http.ResponseWriter, r *http.Request) {
-	states := s.manager.Inventory(session(r).Org)
+	states := s.inventory(r)
 	var mu sync.Mutex
 	rows := map[string]*imageRow{}
 	var hosts []string
@@ -56,10 +56,10 @@ func (s *Server) managerImageOp(w http.ResponseWriter, r *http.Request) {
 	switch r.PathValue("op") {
 	case "copy":
 		var src manager.Node
-		src, err = s.manager.NodeIn(r.Context(), org, r.FormValue("from"))
+		src, err = s.nodeIn(r, r.FormValue("from"))
 		var targets []manager.Node
 		for _, h := range r.Form["hosts"] {
-			if t, terr := s.manager.NodeIn(r.Context(), org, h); terr == nil && h != src.Name {
+			if t, terr := s.nodeIn(r, h); terr == nil && h != src.Name {
 				targets = append(targets, t)
 			}
 		}
@@ -81,7 +81,7 @@ func (s *Server) managerImageOp(w http.ResponseWriter, r *http.Request) {
 			err = errors.New("pick at least one host")
 		}
 		var members []manager.NodeState
-		for _, st := range s.manager.Inventory(org) {
+		for _, st := range s.inventory(r) {
 			for _, h := range r.Form["hosts"] {
 				if st.Node.Name == h {
 					members = append(members, st)
@@ -97,7 +97,7 @@ func (s *Server) managerImageOp(w http.ResponseWriter, r *http.Request) {
 		}
 	case "delete":
 		name := r.FormValue("image")
-		if e := fanOut(r.Context(), s.manager.Inventory(org), func(ctx context.Context, n manager.Node) error {
+		if e := fanOut(r.Context(), s.inventory(r), func(ctx context.Context, n manager.Node) error {
 			var imgs []kube.Image
 			if err := n.Call(ctx, http.MethodGet, "/api/images", nil, &imgs); err != nil {
 				return err

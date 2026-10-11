@@ -26,7 +26,7 @@ func (s *Server) fleetStorage(r *http.Request) ([]hostPool, []hostVolume, string
 		pools []hostPool
 		vols  []hostVolume
 	)
-	errs := fanOut(r.Context(), s.manager.Inventory(session(r).Org), func(ctx context.Context, n manager.Node) error {
+	errs := fanOut(r.Context(), s.inventory(r), func(ctx context.Context, n manager.Node) error {
 		var st storageInfo
 		if err := n.Call(ctx, http.MethodGet, "/api/storage", nil, &st); err != nil {
 			return err
@@ -83,7 +83,7 @@ func (s *Server) managerVolumeOp(w http.ResponseWriter, r *http.Request) {
 	if node == "" {
 		node, op = r.FormValue("host"), "create"
 	}
-	n, err := s.manager.NodeIn(r.Context(), session(r).Org, node)
+	n, err := s.nodeIn(r, node)
 	if err == nil {
 		err = n.Call(r.Context(), http.MethodPost, "/api/volumes/"+op, formVolume(r), nil)
 	}

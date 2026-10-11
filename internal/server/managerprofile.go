@@ -23,7 +23,7 @@ type complianceRow struct {
 
 func (s *Server) clusterMembers(r *http.Request, dc, cl string) []manager.NodeState {
 	var out []manager.NodeState
-	for _, st := range s.manager.Inventory(session(r).Org) {
+	for _, st := range s.inventory(r) {
 		if inGroup(st.Node, dc, cl) {
 			out = append(out, st)
 		}

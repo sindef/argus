@@ -113,7 +113,7 @@ func (s *Server) applyClusterNetworks(r *http.Request, dc, cl string) error {
 		return err
 	}
 	var members []manager.NodeState
-	for _, st := range s.manager.Inventory(session(r).Org) {
+	for _, st := range s.inventory(r) {
 		if inGroup(st.Node, dc, cl) {
 			members = append(members, st)
 		}

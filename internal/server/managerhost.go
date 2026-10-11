@@ -128,7 +128,7 @@ func (s *Server) managerBridgeRollout(w http.ResponseWriter, r *http.Request) {
 	var out []string
 	defer func() { w.Write([]byte(template.HTMLEscapeString(strings.Join(out, "\n")))) }()
 	for i, name := range hosts {
-		n, err := s.manager.NodeIn(r.Context(), session(r).Org, name)
+		n, err := s.nodeIn(r, name)
 		if err == nil {
 			err = s.rolloutBridge(r.Context(), n, spec)
 		}

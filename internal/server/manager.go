@@ -85,7 +85,7 @@ func worse(a, b string) string {
 }
 
 func (s *Server) managerData(r *http.Request) map[string]any {
-	states := s.manager.Inventory(session(r).Org)
+	states := s.inventory(r)
 	ps, _ := s.manager.Protected(r.Context())
 	protected := map[string]manager.Protected{}
 	for _, p := range ps {
@@ -146,6 +146,9 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 	}
 	groups, _ := s.manager.Groups(r.Context(), session(r).Org)
 	for _, g := range groups {
+		if len(session(r).Scopes) > 0 {
+			continue
+		}
 		if dcs[g.Datacenter] == nil {
 			dcs[g.Datacenter] = map[string]*clusterView{}
 		}
@@ -192,7 +195,7 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 		"Clusters":     clusters,
 		"Rows":         rows,
 		"Protected":    protected,
-		"Jobs":         s.manager.Jobs(session(r).Org),
+		"Jobs":         s.jobs(r),
 		"VMs":          vms,
 		"VMCount":      vmCount,
 		"HostCount":    hostCount,
@@ -246,7 +249,45 @@ func (s *Server) managerConsole(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) orgNode(r *http.Request) (manager.Node, error) {
-	return s.manager.NodeIn(r.Context(), session(r).Org, r.PathValue("node"))
+	return s.nodeIn(r, r.PathValue("node"))
+}
+
+func inScope(scopes []string, n manager.Node) bool {
+	if len(scopes) == 0 {
+		return true
+	}
+	dc, cl := groupName(n.Datacenter), groupName(n.Cluster)
+	for _, sc := range scopes {
+		if sc == dc || sc == dc+"/"+cl {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) jobs(r *http.Request) []manager.Job {
+	js := s.manager.Jobs(session(r).Org)
+	if len(session(r).Scopes) == 0 {
+		return js
+	}
+	hosts := map[string]bool{}
+	for _, st := range s.inventory(r) {
+		hosts[st.Node.Name] = true
+	}
+	return slices.DeleteFunc(js, func(j manager.Job) bool { return !hosts[j.From] && !hosts[j.To] })
+}
+
+func (s *Server) inventory(r *http.Request) []manager.NodeState {
+	all := s.manager.Inventory(session(r).Org)
+	return slices.DeleteFunc(all, func(st manager.NodeState) bool { return !inScope(session(r).Scopes, st.Node) })
+}
+
+func (s *Server) nodeIn(r *http.Request, name string) (manager.Node, error) {
+	n, err := s.manager.NodeIn(r.Context(), session(r).Org, name)
+	if err == nil && !inScope(session(r).Scopes, n) {
+		return manager.Node{}, fmt.Errorf("node %s not found", name)
+	}
+	return n, err
 }
 
 var vmTabs = []string{"summary", "hardware", "snapshots", "backups", "logs"}
@@ -380,11 +421,10 @@ func (s *Server) managerConsoleWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) managerMigrate(w http.ResponseWriter, r *http.Request) {
-	org := session(r).Org
 	src, err := s.orgNode(r)
 	var dst manager.Node
 	if err == nil {
-		dst, err = s.manager.NodeIn(r.Context(), org, r.FormValue("to"))
+		dst, err = s.nodeIn(r, r.FormValue("to"))
 	}
 	if err == nil && src.Name == dst.Name {
 		err = errors.New("pick a different host")
@@ -415,7 +455,7 @@ func (s *Server) managerProtect(w http.ResponseWriter, r *http.Request) {
 		_, err = s.orgNode(r)
 	}
 	if err == nil {
-		_, err = s.manager.NodeIn(r.Context(), session(r).Org, r.FormValue("replica"))
+		_, err = s.nodeIn(r, r.FormValue("replica"))
 	}
 	if err == nil {
 		err = s.manager.Protect(r.Context(), r.PathValue("node"), r.PathValue("name"), r.FormValue("replica"), interval)
@@ -673,13 +713,13 @@ func (s *Server) managerFleetMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 	var nodes []string
 	if n := r.URL.Query().Get("node"); n != "" {
-		if _, err := s.manager.NodeIn(r.Context(), session(r).Org, n); err != nil {
+		if _, err := s.nodeIn(r, n); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
 		nodes = []string{n}
 	} else {
-		for _, st := range s.manager.Inventory(session(r).Org) {
+		for _, st := range s.inventory(r) {
 			nodes = append(nodes, st.Node.Name)
 		}
 	}
@@ -738,7 +778,7 @@ func (s *Server) managerEvents(w http.ResponseWriter, r *http.Request) {
 		mu  sync.Mutex
 		evs []hostEvent
 	)
-	errs := fanOut(r.Context(), s.manager.Inventory(session(r).Org), func(ctx context.Context, n manager.Node) error {
+	errs := fanOut(r.Context(), s.inventory(r), func(ctx context.Context, n manager.Node) error {
 		var list []kube.Event
 		if err := n.Call(ctx, http.MethodGet, "/api/events", nil, &list); err != nil {
 			return err
@@ -754,7 +794,7 @@ func (s *Server) managerEvents(w http.ResponseWriter, r *http.Request) {
 	if len(evs) > 200 {
 		evs = evs[:200]
 	}
-	s.render(w, r, "events.html", "layout", map[string]any{"Events": evs, "Error": errs, "Nav": "events", "Jobs": s.manager.Jobs(session(r).Org)})
+	s.render(w, r, "events.html", "layout", map[string]any{"Events": evs, "Error": errs, "Nav": "events", "Jobs": s.jobs(r)})
 }
 
 func (s *Server) managerResolve(w http.ResponseWriter, r *http.Request) {

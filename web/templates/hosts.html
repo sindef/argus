@@ -2,7 +2,7 @@
 <div class="page-head">
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-server"/></svg>
   <h1>Hosts</h1>
-  {{if .IsAdmin}}<div class="actions"><button class="btn primary" data-dialog="add-host">{{template "icon" "plus"}}Add host</button></div>{{end}}
+  {{if .OrgAdmin}}<div class="actions"><button class="btn primary" data-dialog="add-host">{{template "icon" "plus"}}Add host</button></div>{{end}}
 </div>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
 <div class="table-wrap">
@@ -17,7 +17,7 @@
     <td>{{.Running}} / {{.VMs}}</td>
     <td>{{with index $.Ranges .Node.Name}}{{.}}{{end}}{{if index $.Ranges .Node.Name}}{{with .Node.MigrationAddress}} <span class="dot Applied" title="Migration handler address">{{.}}</span>{{else}} <span class="dot Warning" title="Not confirmed on this host; apply the migration network again">not applied</span>{{end}}{{end}}</td>
     <td><span class="dot {{.Status}}" title="{{.Error}}">{{.Status}}</span></td>
-    <td class="row-actions">{{if $.IsAdmin}}
+    <td class="row-actions">{{if $.OrgAdmin}}
       <div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
         <div class="menu-list" hidden>
           <button hx-get="/groups/modal/move-host?host={{.Node.Name}}&dc={{.Node.Datacenter}}&cluster={{.Node.Cluster}}" hx-target="#modal">{{template "icon" "arrow-right-left"}}Move to…</button>
@@ -29,7 +29,7 @@
   </tr>{{else}}<tr><td colspan="9" class="muted">No hosts registered.</td></tr>{{end}}</tbody>
 </table>
 </div>
-{{if .IsAdmin}}
+{{if .OrgAdmin}}
 <dialog id="add-host" class="card">
   <form method="post" action="/hosts" class="form">
     <h2>Add host</h2>
