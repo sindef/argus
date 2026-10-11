@@ -61,7 +61,7 @@
   </div>
   <div class="card">
     <div class="card-head"><h2>High Availability</h2></div>
-    {{with .Protected}}
+    {{with .HAList}}
     {{range .}}<div class="cluster-row"><span class="dot {{if .LastError}}Failed{{else if .LastSync.IsZero}}Pending{{else}}Protected{{end}}" title="{{.LastError}}"></span><div><div>{{.VM}}</div><div class="muted">{{.Owner}} → {{.Replica}}{{if not .LastSync.IsZero}} | synced {{since .LastSync}} ago{{end}}</div></div></div>{{end}}
     {{else}}<p class="muted">No VMs protected.</p>{{end}}
   </div>

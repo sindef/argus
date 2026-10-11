@@ -91,9 +91,19 @@ func worse(a, b string) string {
 func (s *Server) managerData(r *http.Request) map[string]any {
 	states := s.inventory(r)
 	ps, _ := s.manager.Protected(r.Context())
+	visible := map[string]bool{}
+	for _, st := range states {
+		visible[st.Node.Name] = true
+	}
 	protected := map[string]manager.Protected{}
+	var haList []manager.Protected
 	for _, p := range ps {
-		protected[p.VM] = p
+		if !visible[p.Owner] && !visible[p.Replica] {
+			continue
+		}
+		protected[p.Owner+"/"+p.VM] = p
+		protected[p.Replica+"/"+p.VM] = p
+		haList = append(haList, p)
 	}
 	var rows []vmRow
 	var hosts []hostRow
@@ -111,7 +121,7 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 		}
 		for _, v := range st.VMs {
 			row := vmRow{VM: v, Host: st.Node.Name, Datacenter: groupName(st.Node.Datacenter), Cluster: groupName(st.Node.Cluster)}
-			if p, ok := protected[v.Name]; ok {
+			if p, ok := protected[st.Node.Name+"/"+v.Name]; ok {
 				row.Protected = &p
 				row.Replica = p.Replica == st.Node.Name
 			}
@@ -199,6 +209,7 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 		"Clusters":     clusters,
 		"Rows":         rows,
 		"Protected":    protected,
+		"HAList":       haList,
 		"Jobs":         s.jobs(r),
 		"VMs":          vms,
 		"VMCount":      vmCount,
@@ -316,7 +327,7 @@ func (s *Server) managerVM(w http.ResponseWriter, r *http.Request) {
 	data["Node"], data["VM"], data["Tab"], data["Tabs"] = n, vm, tab, vmTabs
 	data["Ctx"] = map[string]any{"V": vmRow{VM: vm, Host: n.Name}, "Page": fmt.Sprintf("/nodes/%s/vms/%s/%s", n.Name, ns, name), "CanOperate": data["CanOperate"], "IsAdmin": data["IsAdmin"]}
 	data["Nav"] = "vm:" + n.Name + "/" + name
-	if p, ok := data["Protected"].(map[string]manager.Protected)[name]; ok {
+	if p, ok := data["Protected"].(map[string]manager.Protected)[n.Name+"/"+name]; ok {
 		data["HA"] = p
 	}
 	switch tab {
@@ -475,7 +486,7 @@ func (s *Server) managerProtect(w http.ResponseWriter, r *http.Request) {
 func (s *Server) managerUnprotect(w http.ResponseWriter, r *http.Request) {
 	_, err := s.orgNode(r)
 	if err == nil {
-		err = s.manager.Unprotect(r.Context(), r.PathValue("name"))
+		err = s.manager.Unprotect(r.Context(), r.PathValue("node"), r.PathValue("name"))
 	}
 	if err != nil {
 		flash(w, r, err)

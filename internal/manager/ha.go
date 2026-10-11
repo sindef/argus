@@ -81,15 +81,19 @@ func (c *Manager) Protect(ctx context.Context, owner, vm, replica string, interv
 	if err != nil {
 		return err
 	}
-	if _, err := c.Node(ctx, replica); err != nil {
+	rn, err := c.Node(ctx, replica)
+	if err != nil {
 		return err
+	}
+	if rn.Org != o.Org {
+		return errors.New("replica must be in the same organization")
 	}
 	if interval < 5 {
 		return errors.New("interval must be at least 5 minutes")
 	}
 	err = c.updateHA(ctx, func(ps []Protected) ([]Protected, error) {
 		for _, p := range ps {
-			if p.VM == vm {
+			if p.VM == vm && (p.Owner == owner || p.Replica == owner || p.Owner == replica || p.Replica == replica) {
 				return nil, fmt.Errorf("%s is already protected", vm)
 			}
 		}
@@ -102,12 +106,12 @@ func (c *Manager) Protect(ctx context.Context, owner, vm, replica string, interv
 	return o.do(ctx, http.MethodPost, vmPath(vm, "ha"), map[string]bool{"enabled": true}, nil)
 }
 
-func (c *Manager) Unprotect(ctx context.Context, vm string) error {
+func (c *Manager) Unprotect(ctx context.Context, node, vm string) error {
 	var p Protected
 	err := c.updateHA(ctx, func(ps []Protected) ([]Protected, error) {
 		out := ps[:0]
 		for _, x := range ps {
-			if x.VM == vm {
+			if x.VM == vm && (x.Owner == node || x.Replica == node) {
 				p = x
 				continue
 			}
@@ -217,10 +221,10 @@ func (c *Manager) failover(ctx context.Context) {
 		if err := replica.do(ctx, http.MethodGet, "/api/probe?url="+url.QueryEscape(owner.URL), nil, &probe); err != nil || probe.Reachable {
 			continue
 		}
-		vm := p.VM
+		vm, prev := p.VM, p.Owner
 		err := c.updateHA(ctx, func(ps []Protected) ([]Protected, error) {
 			for i := range ps {
-				if ps[i].VM == vm {
+				if ps[i].VM == vm && ps[i].Owner == prev {
 					ps[i].Owner, ps[i].Replica = ps[i].Replica, ps[i].Owner
 					ps[i].LastSync = time.Time{}
 				}
@@ -302,7 +306,7 @@ func (c *Manager) sync(ctx context.Context, p Protected) error {
 
 	err = c.updateHA(ctx, func(ps []Protected) ([]Protected, error) {
 		for i := range ps {
-			if ps[i].VM == p.VM {
+			if ps[i].VM == p.VM && ps[i].Owner == p.Owner {
 				ps[i].LastSync = time.Time{}
 			}
 		}

@@ -258,7 +258,7 @@ func (c *Manager) plannedFailover(ctx context.Context, owner Node, p Protected) 
 	}
 	if err := c.updateHA(ctx, func(ps []Protected) ([]Protected, error) {
 		for i := range ps {
-			if ps[i].VM == p.VM {
+			if ps[i].VM == p.VM && ps[i].Owner == p.Owner {
 				ps[i].Owner, ps[i].Replica, ps[i].LastSync = p.Replica, p.Owner, time.Time{}
 			}
 		}
