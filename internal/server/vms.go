@@ -503,3 +503,52 @@ func (s *Server) apiSetTags(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, map[string]string{})
 }
+
+func (s *Server) hardwareModal(w http.ResponseWriter, r *http.Request) {
+	ns, name := r.PathValue("ns"), r.PathValue("name")
+	hw, err := s.kube.Hardware(r.Context(), ns, name)
+	if err != nil {
+		flash(w, r, err)
+		return
+	}
+	imgs, _ := s.kube.ListImages(r.Context())
+	nets, _ := s.kube.ListNetworks(r.Context())
+	s.render(w, r, "vms.html", "hardware-modal", map[string]any{"HW": hw, "NS": ns, "Name": name, "Images": imgs, "Networks": nets})
+}
+
+func (s *Server) hardwareAction(w http.ResponseWriter, r *http.Request) {
+	ns, name := r.PathValue("ns"), r.PathValue("name")
+	var err error
+	switch r.PathValue("op") {
+	case "save":
+		hw := kube.Hardware{Firmware: r.FormValue("firmware"), TPM: r.FormValue("tpm") != "", CDROM: r.FormValue("cdrom")}
+		var cores, mem int
+		if err = intField(r, "cores", 1, 64, &cores); err == nil {
+			err = intField(r, "memory", 128, 262144, &mem)
+		}
+		if err == nil && !slices.Contains([]string{"bios", "uefi", "uefi-secure"}, hw.Firmware) {
+			err = errors.New("invalid firmware")
+		}
+		if err == nil {
+			hw.Cores, hw.MemoryMiB = int64(cores), int64(mem)
+			err = s.kube.SetHardware(r.Context(), ns, name, hw)
+		}
+	case "nic-add":
+		err = s.kube.AddNIC(r.Context(), ns, name, r.FormValue("network"))
+	case "nic-remove":
+		err = s.kube.RemoveNIC(r.Context(), ns, name, r.FormValue("nic"))
+	case "resize":
+		var size int
+		if err = intField(r, "size", 1, 65536, &size); err == nil {
+			err = s.kube.ResizeDisk(r.Context(), ns, name, r.FormValue("disk"), int64(size))
+		}
+	default:
+		err = errors.New("unknown operation")
+	}
+	if err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: hardware %s %s/%s", session(r).User, r.PathValue("op"), ns, name)
+	w.Header().Set("HX-Refresh", "true")
+}

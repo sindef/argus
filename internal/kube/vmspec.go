@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"slices"
@@ -12,6 +13,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 )
 
@@ -375,5 +378,175 @@ func (c *Client) DeleteDataVolume(ctx context.Context, ns, name string) error {
 	if apierrors.IsNotFound(err) {
 		return nil
 	}
+	return err
+}
+
+var pvcGVR = schema.GroupVersionResource{Version: "v1", Resource: "persistentvolumeclaims"}
+
+type Hardware struct {
+	Cores     int64
+	MemoryMiB int64
+	Firmware  string
+	TPM       bool
+	CDROM     string
+	Disks     []HardwareDisk
+	NICs      []NIC
+}
+
+type HardwareDisk struct {
+	Name    string
+	PVC     string
+	SizeGiB int64
+}
+
+func (c *Client) Hardware(ctx context.Context, ns, name string) (Hardware, error) {
+	vm, err := c.dyn.Resource(vmGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return Hardware{}, err
+	}
+	o := vm.Object
+	hw := Hardware{Firmware: "bios"}
+	hw.Cores, _, _ = unstructured.NestedInt64(o, "spec", "template", "spec", "domain", "cpu", "cores")
+	if m, ok, _ := unstructured.NestedString(o, "spec", "template", "spec", "domain", "memory", "guest"); ok {
+		if q, err := resource.ParseQuantity(m); err == nil {
+			hw.MemoryMiB = q.Value() >> 20
+		}
+	}
+	if _, ok, _ := unstructured.NestedMap(o, "spec", "template", "spec", "domain", "firmware", "bootloader", "efi"); ok {
+		hw.Firmware = "uefi"
+		if sb, ok, _ := unstructured.NestedBool(o, "spec", "template", "spec", "domain", "firmware", "bootloader", "efi", "secureBoot"); !ok || sb {
+			hw.Firmware = "uefi-secure"
+		}
+	}
+	_, hw.TPM, _ = unstructured.NestedMap(o, "spec", "template", "spec", "domain", "devices", "tpm")
+	vols, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")
+	for _, v := range vols {
+		vo := v.(obj)
+		if vo["name"] == "cdrom" {
+			hw.CDROM, _, _ = unstructured.NestedString(vo, "persistentVolumeClaim", "claimName")
+			continue
+		}
+		pvc, _, _ := unstructured.NestedString(vo, "dataVolume", "name")
+		if pvc == "" {
+			pvc, _, _ = unstructured.NestedString(vo, "persistentVolumeClaim", "claimName")
+		}
+		if pvc == "" {
+			continue
+		}
+		d := HardwareDisk{Name: vo["name"].(string), PVC: pvc}
+		if p, err := c.dyn.Resource(pvcGVR).Namespace(ns).Get(ctx, pvc, metav1.GetOptions{}); err == nil {
+			if v, ok, _ := unstructured.NestedString(p.Object, "spec", "resources", "requests", "storage"); ok {
+				if q, err := resource.ParseQuantity(v); err == nil {
+					d.SizeGiB = q.Value() >> 30
+				}
+			}
+		}
+		hw.Disks = append(hw.Disks, d)
+	}
+	hw.NICs = toVM(vm, nil).NICs
+	return hw, nil
+}
+
+func (c *Client) SetHardware(ctx context.Context, ns, name string, hw Hardware) error {
+	return c.editStoppedVM(ctx, ns, name, func(o obj) error {
+		dom := []string{"spec", "template", "spec", "domain"}
+		unstructured.SetNestedField(o, hw.Cores, append(dom, "cpu", "cores")...)
+		unstructured.SetNestedField(o, fmt.Sprintf("%dMi", hw.MemoryMiB), append(dom, "memory", "guest")...)
+		unstructured.RemoveNestedField(o, append(dom, "firmware", "bootloader")...)
+		unstructured.RemoveNestedField(o, append(dom, "features", "smm")...)
+		switch hw.Firmware {
+		case "uefi":
+			unstructured.SetNestedField(o, obj{"secureBoot": false}, append(dom, "firmware", "bootloader", "efi")...)
+		case "uefi-secure":
+			unstructured.SetNestedField(o, obj{"secureBoot": true}, append(dom, "firmware", "bootloader", "efi")...)
+			unstructured.SetNestedField(o, obj{"enabled": true}, append(dom, "features", "smm")...)
+		}
+		if hw.TPM {
+			unstructured.SetNestedField(o, obj{}, append(dom, "devices", "tpm")...)
+		} else {
+			unstructured.RemoveNestedField(o, append(dom, "devices", "tpm")...)
+		}
+		disks, _, _ := unstructured.NestedSlice(o, append(dom, "devices", "disks")...)
+		vols, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")
+		disks = without(disks, func(m obj) bool { return m["name"] == "cdrom" })
+		vols = without(vols, func(m obj) bool { return m["name"] == "cdrom" })
+		if hw.CDROM != "" {
+			disks = append(disks, obj{"name": "cdrom", "cdrom": obj{"bus": "sata"}})
+			vols = append(vols, obj{"name": "cdrom", "persistentVolumeClaim": obj{"claimName": hw.CDROM, "readOnly": true}})
+		}
+		if err := unstructured.SetNestedSlice(o, disks, append(dom, "devices", "disks")...); err != nil {
+			return err
+		}
+		return unstructured.SetNestedSlice(o, vols, "spec", "template", "spec", "volumes")
+	})
+}
+
+func (c *Client) AddNIC(ctx context.Context, ns, name, network string) error {
+	return c.editStoppedVM(ctx, ns, name, func(o obj) error {
+		ifaces, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "domain", "devices", "interfaces")
+		nets, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "networks")
+		used := map[string]bool{}
+		for _, i := range ifaces {
+			used[i.(obj)["name"].(string)] = true
+		}
+		n := 0
+		for used[fmt.Sprintf("nic%d", n)] {
+			n++
+		}
+		nic := fmt.Sprintf("nic%d", n)
+		ifaces = append(ifaces, obj{"name": nic, "model": "virtio", "bridge": obj{}, "macAddress": randomMAC()})
+		nets = append(nets, obj{"name": nic, "multus": obj{"networkName": network}})
+		if err := unstructured.SetNestedSlice(o, ifaces, "spec", "template", "spec", "domain", "devices", "interfaces"); err != nil {
+			return err
+		}
+		return unstructured.SetNestedSlice(o, nets, "spec", "template", "spec", "networks")
+	})
+}
+
+func (c *Client) RemoveNIC(ctx context.Context, ns, name, nic string) error {
+	return c.editStoppedVM(ctx, ns, name, func(o obj) error {
+		ifaces, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "domain", "devices", "interfaces")
+		if len(ifaces) <= 1 {
+			return errors.New("a VM needs at least one network adapter")
+		}
+		nets, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "networks")
+		ifaces = without(ifaces, func(m obj) bool { return m["name"] == nic })
+		nets = without(nets, func(m obj) bool { return m["name"] == nic })
+		if err := unstructured.SetNestedSlice(o, ifaces, "spec", "template", "spec", "domain", "devices", "interfaces"); err != nil {
+			return err
+		}
+		return unstructured.SetNestedSlice(o, nets, "spec", "template", "spec", "networks")
+	})
+}
+
+func (c *Client) ResizeDisk(ctx context.Context, ns, name, disk string, sizeGiB int64) error {
+	hw, err := c.Hardware(ctx, ns, name)
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(hw.Disks, func(d HardwareDisk) bool { return d.Name == disk })
+	if i < 0 {
+		return fmt.Errorf("disk %s not found", disk)
+	}
+	if sizeGiB <= hw.Disks[i].SizeGiB {
+		return fmt.Errorf("disks can only grow; %s is %d GiB", disk, hw.Disks[i].SizeGiB)
+	}
+	size := fmt.Sprintf("%dGi", sizeGiB)
+	patch, _ := json.Marshal(obj{"spec": obj{"resources": obj{"requests": obj{"storage": size}}}})
+	if _, err := c.dyn.Resource(pvcGVR).Namespace(ns).Patch(ctx, hw.Disks[i].PVC, types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
+		return err
+	}
+	vm, err := c.dyn.Resource(vmGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	templates, _, _ := unstructured.NestedSlice(vm.Object, "spec", "dataVolumeTemplates")
+	for _, t := range templates {
+		if n, _, _ := unstructured.NestedString(t.(obj), "metadata", "name"); n == hw.Disks[i].PVC {
+			unstructured.SetNestedField(t.(obj), size, "spec", "storage", "resources", "requests", "storage")
+		}
+	}
+	unstructured.SetNestedSlice(vm.Object, templates, "spec", "dataVolumeTemplates")
+	_, err = c.dyn.Resource(vmGVR).Namespace(ns).Update(ctx, vm, metav1.UpdateOptions{})
 	return err
 }

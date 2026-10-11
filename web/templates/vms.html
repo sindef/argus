@@ -107,6 +107,7 @@
 </table></div>
 {{if and $.CanOperate (not .Running)}}
 <button class="btn sm spaced" hx-get="/vms/{{.Namespace}}/{{.Name}}/disks/new" hx-target="#modal">{{template "icon" "plus"}}Add disk</button>
+<button class="btn sm spaced" hx-get="/vms/{{.Namespace}}/{{.Name}}/hardware" hx-target="#modal">{{template "icon" "settings"}}Edit hardware</button>
 {{end}}
 <h2 class="spaced">Network</h2>
 <div class="table-wrap"><table>
@@ -185,3 +186,34 @@
   <button class="danger" hx-post="{{$p}}/delete" hx-confirm="Delete {{.Label}} and its disks?">{{template "icon" "trash-2"}}Delete</button>
 </template>
 {{end}}
+
+{{define "hardware-modal"}}{{$p := printf "%s/vms/%s/%s/hardware" .Base .NS .Name}}{{with .HW}}
+<div class="modal-head"><h2>Hardware: {{$.Name}}</h2><button class="icon-btn" type="button" data-close-dialog aria-label="Close">{{template "icon" "x"}}</button></div>
+<p id="hw-error" class="error form-error"></p>
+<form hx-post="{{$p}}/save" hx-target="#hw-error" class="form">
+  <div class="row">
+    <label>vCPUs <input name="cores" type="number" min="1" max="64" value="{{.Cores}}" required></label>
+    <label>Memory (MiB) <input name="memory" type="number" min="128" max="262144" step="128" value="{{.MemoryMiB}}" required></label>
+    <label>Firmware <select name="firmware">
+      <option value="bios"{{if eq .Firmware "bios"}} selected{{end}}>BIOS</option>
+      <option value="uefi"{{if eq .Firmware "uefi"}} selected{{end}}>UEFI</option>
+      <option value="uefi-secure"{{if eq .Firmware "uefi-secure"}} selected{{end}}>UEFI with Secure Boot</option>
+    </select></label>
+  </div>
+  <div class="row">
+    <label>CD-ROM <select name="cdrom"><option value="">None</option>{{$cd := .CDROM}}{{range $.Images}}<option value="{{.Name}}"{{if eq .Name $cd}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+    <label class="check"><input type="checkbox" name="tpm"{{if .TPM}} checked{{end}}> Virtual TPM <span class="help" title="TPM 2.0 device. State is not kept across power cycles.">?</span></label>
+  </div>
+  <div class="actions"><button class="btn primary" type="submit">Save</button></div>
+</form>
+<div class="field spaced">Network adapters</div>
+<div class="table-wrap"><table><tbody>{{range .NICs}}<tr><td>{{.Name}}</td><td>{{.Network}}</td><td class="mono">{{.MAC}}</td>
+  <td class="row-actions"><button class="link danger" hx-post="{{$p}}/nic-remove" hx-vals='{"nic":"{{.Name}}"}' hx-target="#hw-error" hx-confirm="Remove {{.Name}}?">Remove</button></td></tr>{{end}}</tbody></table></div>
+<form hx-post="{{$p}}/nic-add" hx-target="#hw-error" class="inline spaced">
+  <select name="network">{{range $.Networks}}<option value="{{.Name}}">{{.Name}}{{if .VLAN}} (VLAN {{.VLAN}}){{end}}</option>{{end}}</select>
+  <button class="btn" type="submit">{{template "icon" "plus"}}Add adapter</button>
+</form>
+<div class="field spaced">Disks</div>
+<div class="table-wrap"><table><tbody>{{range .Disks}}<tr><td>{{.Name}}</td><td>{{.SizeGiB}} GiB</td>
+  <td class="row-actions"><form hx-post="{{$p}}/resize" hx-target="#hw-error" class="inline"><input type="hidden" name="disk" value="{{.Name}}"><input name="size" type="number" min="{{add64 .SizeGiB 1}}" value="{{add64 .SizeGiB 10}}" class="num" aria-label="New size in GiB"><button class="btn sm" type="submit">Grow</button></form></td></tr>{{end}}</tbody></table></div>
+{{end}}{{end}}

@@ -140,6 +140,10 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("POST /hosts/{node}/delete", s.requireOrg(auth.Admin, s.managerRemoveNode))
 		s.mux.HandleFunc("GET /hosts/{node}/{path...}", s.require(auth.ReadOnly, s.managerHostUI))
 		s.mux.HandleFunc("POST /hosts/{node}/{path...}", s.require(auth.Admin, s.managerHostUI))
+		s.mux.HandleFunc("POST /hosts/{node}/vms/{ns}/{name}/hardware/{op}", s.require(auth.Operator, func(w http.ResponseWriter, r *http.Request) {
+			r.SetPathValue("path", "vms/"+r.PathValue("ns")+"/"+r.PathValue("name")+"/hardware/"+r.PathValue("op"))
+			s.managerHostUI(w, r)
+		}))
 		s.mux.HandleFunc("POST /hosts/{node}/vms", s.require(auth.Operator, func(w http.ResponseWriter, r *http.Request) {
 			r.SetPathValue("path", "vms")
 			s.managerHostUI(w, r)
@@ -255,6 +259,8 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/disks", s.require(auth.Operator, s.addDisk))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/disks/move", s.require(auth.Operator, s.moveDiskForm))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/tags", s.require(auth.Operator, s.setTags))
+	s.hostRoute("GET /vms/{ns}/{name}/hardware", auth.Operator, s.hardwareModal)
+	s.hostRoute("POST /vms/{ns}/{name}/hardware/{op}", auth.Operator, s.hardwareAction)
 	s.mux.HandleFunc("GET /vms/{ns}/{name}/disks/new", s.require(auth.Operator, s.newDisk))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/disks/{disk}/delete", s.require(auth.Operator, s.removeDisk))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/snapshots", s.require(auth.Operator, s.snapshot))
