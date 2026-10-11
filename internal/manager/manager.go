@@ -28,13 +28,13 @@ import (
 const nodesKey = "argus-nodes"
 
 type Node struct {
-	Name             string `json:"name"`
-	URL              string `json:"url"`
-	Token            string `json:"token"`
-	CA               string `json:"ca"`
-	Slot             int    `json:"slot,omitempty"`
-	MigrationAddress string `json:"migrationAddress,omitempty"`
-	Org              string `json:"org"`
+	Name             string   `json:"name"`
+	URL              string   `json:"url"`
+	Token            string   `json:"token"`
+	CA               string   `json:"ca"`
+	Slot             int      `json:"slot,omitempty"`
+	MigrationAddress string   `json:"migrationAddress,omitempty"`
+	Org              string   `json:"org"`
 	Datacenter       string   `json:"datacenter"`
 	Cluster          string   `json:"cluster"`
 	Maintenance      bool     `json:"maintenance,omitempty"`
