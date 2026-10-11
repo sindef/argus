@@ -35,10 +35,10 @@ func (s *Server) clusterMembers(r *http.Request, dc, cl string) []manager.NodeSt
 func profileDiffs(p manager.Profile, st HostSettings, nets []kube.Network, defs []manager.Network) []string {
 	var d []string
 	if len(p.DNS) > 0 && !slices.Equal(p.DNS, st.DNS) {
-		d = append(d, fmt.Sprintf("DNS is %q", strings.Join(st.DNS, " ")))
+		d = append(d, fmt.Sprintf("DNS is %q", strings.Join(st.DNS, ", ")))
 	}
 	if len(p.NTP) > 0 && !slices.Equal(p.NTP, st.NTP) {
-		d = append(d, fmt.Sprintf("NTP is %q", strings.Join(st.NTP, " ")))
+		d = append(d, fmt.Sprintf("NTP is %q", strings.Join(st.NTP, ", ")))
 	}
 	if p.Syslog != "" && p.Syslog != st.Syslog {
 		d = append(d, fmt.Sprintf("syslog is %q", st.Syslog))

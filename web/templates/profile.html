@@ -11,8 +11,8 @@
     {{with .Profile}}
     <form hx-post="/profile" hx-target="#flash" class="form">
       <input type="hidden" name="dc" value="{{$.DC}}"><input type="hidden" name="cluster" value="{{$.Cluster}}">
-      <label>DNS servers <input name="dns" value="{{join .DNS " "}}" placeholder="1.1.1.1 9.9.9.9"></label>
-      <label>NTP servers <input name="ntp" value="{{join .NTP " "}}" placeholder="pool.ntp.org"></label>
+      <label>DNS servers <input name="dns" value="{{join .DNS ", "}}" placeholder="1.1.1.1, 9.9.9.9"></label>
+      <label>NTP servers <input name="ntp" value="{{join .NTP ", "}}" placeholder="0.pool.ntp.org, 1.pool.ntp.org"></label>
       <label>Remote syslog <input name="syslog" value="{{.Syslog}}" placeholder="udp://syslog.example:514"></label>
       <label>Backup target <input name="backup" value="{{.Backup}}" placeholder="nas.example:/backups/argus"></label>
       <label>Migration bridge <input name="migration_bridge" value="{{.MigrationBridge}}" placeholder="br0"></label>

@@ -205,7 +205,7 @@ func (s *Server) hostNetworkAction(w http.ResponseWriter, r *http.Request) {
 			Iface: r.FormValue("iface"), IPv4: r.FormValue("ipv4"), IPv6: r.FormValue("ipv6"),
 			Address: strings.TrimSpace(r.FormValue("address")), Gateway: strings.TrimSpace(r.FormValue("gateway")),
 			Address6: strings.TrimSpace(r.FormValue("address6")), Gateway6: strings.TrimSpace(r.FormValue("gateway6")),
-			DNS: strings.Fields(strings.ReplaceAll(r.FormValue("dns"), ",", " ")),
+			DNS: fields(r.FormValue("dns")),
 		}
 		err = s.hostd.SetAddress(ctx, a)
 	case "roles":

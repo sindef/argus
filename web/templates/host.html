@@ -27,8 +27,8 @@
     <summary>{{template "icon" "globe"}}Services<span class="summary">{{with .NTP}}NTP {{join . " "}}{{else}}NTP default{{end}} · {{if .Syslog}}syslog on{{else}}syslog off{{end}} · {{if .Backup}}backups to {{.Backup}}{{else}}no backup target{{end}}</span>{{template "icon" "chevron-down"}}</summary>
     <form hx-post="/host/settings" hx-target="#flash" class="form body">
       <div class="row">
-        <label>DNS servers <span class="help" title="Used in addition to servers learned from DHCP.">?</span><input name="dns" value="{{join .DNS " "}}" placeholder="1.1.1.1 9.9.9.9"></label>
-        <label>NTP servers <input name="ntp" value="{{join .NTP " "}}" placeholder="pool.ntp.org"></label>
+        <label>DNS servers <span class="help" title="Used in addition to servers learned from DHCP.">?</span><input name="dns" value="{{join .DNS ", "}}" placeholder="1.1.1.1, 9.9.9.9"></label>
+        <label>NTP servers <input name="ntp" value="{{join .NTP ", "}}" placeholder="0.pool.ntp.org, 1.pool.ntp.org"></label>
       </div>
       <div class="row">
         <label>Remote syslog <input name="syslog" value="{{.Syslog}}" placeholder="udp://syslog.example:514"></label>

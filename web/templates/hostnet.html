@@ -77,7 +77,7 @@
     <label>Address (CIDR) <input name="address6" placeholder="2001:db8::10/64" value="{{.Static6}}"></label>
     <label>Gateway <input name="gateway6" placeholder="fe80::1" value="{{.Gateway6}}"></label>
   </div>
-  <label>DNS servers <input name="dns" placeholder="1.1.1.1 2606:4700:4700::1111" value="{{range $i, $d := $.DNS}}{{if $i}} {{end}}{{$d}}{{end}}"></label>
+  <label>DNS servers <input name="dns" placeholder="1.1.1.1, 2606:4700:4700::1111" value="{{join $.DNS ", "}}"></label>
   <div class="actions">
     {{if and (eq .Kind "bridge") .Managed (not .Mgmt)}}<button class="btn danger" type="button" hx-post="{{$.Base}}/network/host/delete" hx-vals='{"bridge":"{{.Name}}"}' hx-target="#iface-error" hx-confirm="Delete bridge {{.Name}}? Its ports are left unconfigured.">{{template "icon" "trash-2"}}Delete bridge</button>{{end}}
     <button class="btn primary" type="submit">Apply</button>
