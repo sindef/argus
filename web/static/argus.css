@@ -304,6 +304,7 @@ tr.bad td { color: var(--bad); }
 .form.inline { flex-direction: row; align-items: center; }
 .form.inline > input { flex: 1; }
 dd.wrap { word-break: break-all; }
+.tree .row > a { display: flex; align-items: center; gap: 8px; min-width: 0; color: inherit; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 900px) {
   .settings { grid-template-columns: 1fr; }
   .settings-nav { position: static; flex-direction: row; overflow-x: auto; }
