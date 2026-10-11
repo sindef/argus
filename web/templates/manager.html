@@ -1,9 +1,45 @@
 {{define "scripts"}}<link rel="stylesheet" href="/static/vendor/uplot/uPlot.min.css"><script src="/static/vendor/uplot/uPlot.iife.min.js"></script><script src="/static/charts.js"></script>{{end}}
 {{define "content"}}
 <div class="page-head">
-  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-layers"/></svg>
-  <h1>Infrastructure Overview</h1>
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-{{if .Cluster}}layers{{else if .DC}}building-2{{else}}layers{{end}}"/></svg>
+  <div><h1>{{if .Cluster}}{{.Cluster}}{{else if .DC}}{{.DC}}{{else}}Infrastructure{{end}}</h1><div class="crumbs">{{if .Cluster}}{{.DC}} / {{.Cluster}}{{else if .DC}}Datacenter{{else}}All datacenters{{end}}</div></div>
+  {{if and (eq .Tab "vms") .CanOperate}}<div class="actions"><button class="btn" hx-get="/vm-new?what=import" hx-target="#modal">{{template "icon" "download"}}Import</button><button class="btn primary" hx-get="/vm-new" hx-target="#modal">{{template "icon" "plus"}}New VM</button></div>{{end}}
 </div>
+<div class="panes static wide">
+<nav class="panes-nav">
+  <a href="{{.Page}}"{{if eq .Tab "summary"}} class="active"{{end}}>{{template "icon" "gauge"}}Summary</a>
+  <a href="{{.Page}}?tab=hosts"{{if eq .Tab "hosts"}} class="active"{{end}}>{{template "icon" "server"}}Hosts</a>
+  <a href="{{.Page}}?tab=vms"{{if eq .Tab "vms"}} class="active"{{end}}>{{template "icon" "monitor"}}Virtual machines</a>
+</nav>
+<div class="panes-body">
+{{if eq .Tab "hosts"}}
+<div class="card">
+  <div class="card-head"><h2>Hosts</h2>{{if .IsAdmin}}<a class="right" href="/hosts">View all hosts</a>{{end}}</div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Name</th><th>Cluster</th><th>Status</th><th>CPU</th><th>Memory</th><th>vCPU allocated</th><th>VMs</th><th>Uptime</th></tr></thead>
+    <tbody>{{range .Hosts}}<tr>
+      <td>{{template "icon" "server"}}{{.Node.Name}}</td>
+      <td>{{if .Node.Cluster}}{{.Node.Cluster}}{{else}}<span class="muted">—</span>{{end}}</td>
+      <td><span class="dot {{.Status}}" title="{{.Error}}">{{.Status}}</span></td>
+      {{if eq .Status "Unreachable"}}<td colspan="5" class="muted">{{.Error}}</td>{{else}}
+      {{with .Util}}{{$c := pct (index .V 0) 100}}{{$m := pct (index .V 1) (index .V 2)}}
+      <td class="meter">{{$c}}%<div class="bar {{if ge $c 90}}bad{{else if ge $c 70}}warn{{else}}ok{{end}}"><span style="width:{{min100 $c}}%"></span></div></td>
+      <td class="meter">{{$m}}%<div class="bar {{if ge $m 90}}bad{{else if ge $m 75}}warn{{end}}"><span style="width:{{min100 $m}}%"></span></div></td>
+      {{else}}<td class="muted">—</td><td class="muted">—</td>{{end}}
+      <td>{{.CoresUsed}} / {{.Info.CPUCores}}</td>
+      <td>{{.Running}} / {{.VMs}}</td>
+      <td>{{since .Info.BootTime}}</td>{{end}}
+    </tr>{{end}}</tbody>
+  </table></div>
+</div>
+{{else if eq .Tab "vms"}}
+<div class="toolbar">
+  <form class="grow input-icon" hx-get="/vms" hx-target="#vms" hx-trigger="input changed delay:300ms from:find input, submit">
+    {{template "icon" "search"}}<input name="q" placeholder="Search VMs, hosts, IPs…" value="{{.Query}}"><input type="hidden" name="dc" value="{{.DC}}"><input type="hidden" name="cluster" value="{{.Cluster}}">
+  </form>
+</div>
+<div id="vms" hx-get="/vms?dc={{.DC}}&cluster={{.Cluster}}" hx-trigger="every 30s">{{template "vm-table" .}}</div>
+{{else}}
 <div class="stats">
   <div class="stat">{{template "icon" "monitor"}}<div>
     <div class="label">Virtual Machines</div><div class="value">{{.VMs}}</div>
@@ -17,12 +53,12 @@
     <div class="detail"><span class="dot Warning">{{index .HostCount "Warning"}} Warning</span></div>
     <div class="detail"><span class="dot Unreachable">{{index .HostCount "Unreachable"}} Unreachable</span></div>
   </div></div>
-  <div class="stat">{{template "icon" "building-2"}}<div>
+  {{if not .Cluster}}<div class="stat">{{template "icon" "building-2"}}<div>
     <div class="label">Clusters</div><div class="value">{{len .Clusters}}</div>
     <div class="detail"><span class="dot Healthy">{{index .ClusterCount "Healthy"}} Healthy</span></div>
     <div class="detail"><span class="dot Warning">{{index .ClusterCount "Warning"}} Warning</span></div>
     <div class="detail"><span class="dot Unreachable">{{index .ClusterCount "Unreachable"}} Critical</span></div>
-  </div></div>
+  </div></div>{{end}}
   <div class="stat">{{template "icon" "cpu"}}<div>
     <div class="label">vCPU allocated</div><div class="value">{{pct .CoresUsed .Cores}}%</div>
     <div class="detail">{{.CoresUsed}} of {{.Cores}} cores</div>
@@ -38,15 +74,15 @@
   <div class="card-head"><h2>Resource Utilization</h2>
     <nav class="seg right"><a href="?range=24h"{{if ne .Range "7d"}} class="active"{{end}}>24h</a><a href="?range=7d"{{if eq .Range "7d"}} class="active"{{end}}>7d</a></nav>
   </div>
-  <div class="chart" data-src="/metrics?range={{.Range}}" data-window="{{if eq .Range "7d"}}604800{{else}}86400{{end}}" data-cols="cpu,mem" data-labels="CPU,Memory" data-unit="%" data-height="220"></div>
+  <div class="chart" data-src="/metrics?range={{.Range}}&dc={{.DC}}&cluster={{.Cluster}}" data-window="{{if eq .Range "7d"}}604800{{else}}86400{{end}}" data-cols="cpu,mem" data-labels="CPU,Memory" data-unit="%" data-height="220"></div>
 </div>
 <div class="grid overview spaced">
-  <div class="card">
+  {{if not .Cluster}}<div class="card">
     <div class="card-head"><h2>Cluster Status</h2></div>
     {{range .Clusters}}
     <div class="cluster-row"><span class="dot {{.Status}}"></span><div><div>{{.Name}}</div><div class="muted">{{len .Hosts}} host{{if ne (len .Hosts) 1}}s{{end}} | {{.VMs}} VMs</div></div></div>
     {{else}}<p class="muted">No hosts registered.</p>{{end}}
-  </div>
+  </div>{{end}}
   <div class="card">
     <div class="card-head"><h2>VM Status</h2></div>
     <div class="donut-wrap">
@@ -66,25 +102,6 @@
     {{else}}<p class="muted">No VMs protected.</p>{{end}}
   </div>
 </div>
-<div class="card spaced">
-  <div class="card-head"><h2>Hosts</h2>{{if .IsAdmin}}<a class="right" href="/hosts">View all hosts</a>{{end}}</div>
-  <div class="table-wrap"><table>
-    <thead><tr><th>Name</th><th>Cluster</th><th>Status</th><th>CPU</th><th>Memory</th><th>vCPU allocated</th><th>VMs</th><th>Uptime</th></tr></thead>
-    <tbody>{{range .Hosts}}<tr>
-      <td>{{template "icon" "server"}}{{.Node.Name}}</td>
-      <td>{{if .Node.Cluster}}{{.Node.Cluster}}{{else}}<span class="muted">—</span>{{end}}</td>
-      <td><span class="dot {{.Status}}" title="{{.Error}}">{{.Status}}</span></td>
-      {{if eq .Status "Unreachable"}}<td colspan="5" class="muted">{{.Error}}</td>{{else}}
-      {{with .Util}}{{$c := pct (index .V 0) 100}}{{$m := pct (index .V 1) (index .V 2)}}
-      <td class="meter">{{$c}}%<div class="bar {{if ge $c 90}}bad{{else if ge $c 70}}warn{{else}}ok{{end}}"><span style="width:{{min100 $c}}%"></span></div></td>
-      <td class="meter">{{$m}}%<div class="bar {{if ge $m 90}}bad{{else if ge $m 75}}warn{{end}}"><span style="width:{{min100 $m}}%"></span></div></td>
-      {{else}}<td class="muted">—</td><td class="muted">—</td>{{end}}
-      <td>{{.CoresUsed}} / {{.Info.CPUCores}}</td>
-      <td>{{.Running}} / {{.VMs}}</td>
-      <td>{{since .Info.BootTime}}</td>{{end}}
-    </tr>{{end}}</tbody>
-  </table></div>
-</div>
 {{with .Jobs}}
 <div class="card spaced">
   <div class="card-head"><h2>Tasks</h2></div>
@@ -96,19 +113,22 @@
 </div>
 {{end}}
 {{end}}
+</div>
+</div>
+{{end}}
 
 {{define "tree"}}
 <ul class="tree"{{if .OrgAdmin}} data-context{{end}}>
   {{if .OrgAdmin}}<div class="menu-list" hidden hx-target="#flash"><button hx-get="/groups/modal/add-datacenter" hx-target="#modal">{{template "icon" "plus"}}New datacenter</button><a href="/hosts#add-host">{{template "icon" "server"}}Add host</a></div>{{end}}
   {{range .Tree}}{{$dc := .Name}}
-  <li data-id="dc:{{.Name}}"><span class="row"{{if $.OrgAdmin}} data-context{{end}}>{{template "twisty"}}{{template "icon" "building-2"}}{{.Name}}
+  <li data-id="dc:{{.Name}}"><span class="row{{if eq $.Nav (printf "dc:%s" .Name)}} active{{end}}"{{if $.OrgAdmin}} data-context{{end}}>{{template "twisty"}}<a href="/datacenters/{{.Name}}">{{template "icon" "building-2"}}{{.Name}}</a>
     {{if $.OrgAdmin}}<span class="menu-list" hidden hx-target="#flash">{{if ne .Name "Unassigned"}}
       <button hx-get="/groups/modal/add-cluster?dc={{.Name}}" hx-target="#modal">{{template "icon" "plus"}}New cluster</button>
       <button hx-get="/groups/modal/rename-datacenter?dc={{.Name}}" hx-target="#modal">{{template "icon" "pencil"}}Rename</button>
       <hr><button class="danger" hx-post="/groups/delete-datacenter" hx-vals='{"dc":"{{.Name}}"}' hx-confirm="Delete datacenter {{.Name}}?">{{template "icon" "trash-2"}}Delete</button>
     {{else}}<button hx-get="/groups/modal/add-datacenter" hx-target="#modal">{{template "icon" "plus"}}New datacenter</button>{{end}}</span>{{end}}</span>
     <ul>{{range .Clusters}}{{$c := .}}
-    <li data-id="cl:{{.Name}}"><span class="row"{{if $.OrgAdmin}} data-context{{end}}>{{template "twisty"}}{{template "icon" "layers"}}{{.Name}}
+    <li data-id="cl:{{.Name}}"><span class="row{{if eq $.Nav (printf "cl:%s/%s" $dc .Name)}} active{{end}}"{{if $.OrgAdmin}} data-context{{end}}>{{template "twisty"}}<a href="/datacenters/{{$dc}}/clusters/{{.Name}}">{{template "icon" "layers"}}{{.Name}}</a>
       {{if $.OrgAdmin}}<span class="menu-list" hidden hx-target="#flash">
         <a href="/hosts?dc={{$dc}}&cluster={{.Name}}#add-host">{{template "icon" "server"}}Add host</a>
         <button hx-post="/groups/apply-networks" hx-vals='{"dc":"{{$dc}}","cluster":"{{.Name}}"}' hx-confirm="Create all Argus Manager networks on the hosts in {{.Name}}?">{{template "icon" "network"}}Apply networks</button>

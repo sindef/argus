@@ -104,7 +104,7 @@ func ungroup(name string) string {
 }
 
 func inGroup(n manager.Node, dc, cl string) bool {
-	return groupName(n.Datacenter) == dc && groupName(n.Cluster) == cl
+	return (dc == "" || groupName(n.Datacenter) == dc) && (cl == "" || groupName(n.Cluster) == cl)
 }
 
 func (s *Server) applyClusterNetworks(r *http.Request, dc, cl string) error {

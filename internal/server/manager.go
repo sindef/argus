@@ -90,8 +90,17 @@ func worse(a, b string) string {
 	return a
 }
 
+func groupScope(r *http.Request) (string, string) {
+	dc, cl := r.PathValue("dc"), r.PathValue("cluster")
+	if dc == "" {
+		dc, cl = r.FormValue("dc"), r.FormValue("cluster")
+	}
+	return dc, cl
+}
+
 func (s *Server) managerData(r *http.Request) map[string]any {
-	states := s.inventory(r)
+	dc, cl := groupScope(r)
+	states := slices.DeleteFunc(s.inventory(r), func(st manager.NodeState) bool { return !inGroup(st.Node, dc, cl) })
 	ps, _ := s.manager.Protected(r.Context())
 	visible := map[string]bool{}
 	for _, st := range states {
@@ -162,15 +171,15 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 	}
 	groups, _ := s.manager.Groups(r.Context(), session(r).Org)
 	for _, g := range groups {
-		if len(session(r).Scopes) > 0 {
+		if len(session(r).Scopes) > 0 || dc != "" && dc != g.Datacenter {
 			continue
 		}
 		if dcs[g.Datacenter] == nil {
 			dcs[g.Datacenter] = map[string]*clusterView{}
 		}
-		for _, cl := range g.Clusters {
-			if dcs[g.Datacenter][cl] == nil {
-				dcs[g.Datacenter][cl] = &clusterView{Name: cl, Status: "Healthy", VMsByHost: map[string][]vmRow{}}
+		for _, c := range g.Clusters {
+			if (cl == "" || cl == c) && dcs[g.Datacenter][c] == nil {
+				dcs[g.Datacenter][c] = &clusterView{Name: c, Status: "Healthy", VMsByHost: map[string][]vmRow{}}
 			}
 		}
 	}
@@ -227,21 +236,36 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 	}
 }
 
+var groupTabs = []string{"summary", "hosts", "vms"}
+
 func (s *Server) managerHome(w http.ResponseWriter, r *http.Request) {
 	data := s.managerData(r)
-	data["Nav"] = "home"
-	data["Range"] = r.URL.Query().Get("range")
+	dc, cl := groupScope(r)
+	data["DC"], data["Cluster"], data["Nav"], data["Page"] = dc, cl, "home", "/"
+	switch {
+	case cl != "":
+		data["Nav"], data["Page"] = "cl:"+dc+"/"+cl, "/datacenters/"+url.PathEscape(dc)+"/clusters/"+url.PathEscape(cl)
+	case dc != "":
+		data["Nav"], data["Page"] = "dc:"+dc, "/datacenters/"+url.PathEscape(dc)
+	}
+	if dc != "" && len(data["Clusters"].([]*clusterView)) == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	tab := r.URL.Query().Get("tab")
+	if !slices.Contains(groupTabs, tab) {
+		tab = "summary"
+	}
+	data["Tab"], data["Range"] = tab, r.URL.Query().Get("range")
 	s.render(w, r, "manager.html", "layout", data)
 }
 
 func (s *Server) managerVMs(w http.ResponseWriter, r *http.Request) {
-	data := s.managerData(r)
-	data["Nav"] = "vms"
-	tmpl := "layout"
-	if r.Header.Get("HX-Request") != "" {
-		tmpl = "vm-table"
+	if r.Header.Get("HX-Request") == "" {
+		http.Redirect(w, r, "/?tab=vms", http.StatusSeeOther)
+		return
 	}
-	s.render(w, r, "manager-vms.html", tmpl, data)
+	s.render(w, r, "manager.html", "vm-table", s.managerData(r))
 }
 
 func (s *Server) managerTree(w http.ResponseWriter, r *http.Request) {
@@ -740,8 +764,11 @@ func (s *Server) managerFleetMetrics(w http.ResponseWriter, r *http.Request) {
 		}
 		nodes = []string{n}
 	} else {
+		dc, cl := groupScope(r)
 		for _, st := range s.inventory(r) {
-			nodes = append(nodes, st.Node.Name)
+			if inGroup(st.Node, dc, cl) {
+				nodes = append(nodes, st.Node.Name)
+			}
 		}
 	}
 	ps := s.manager.HostSeries(nodes, since)

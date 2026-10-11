@@ -113,6 +113,8 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("POST /sso/start", s.ssoStart)
 		s.mux.HandleFunc("GET /sso/callback", s.ssoCallback)
 		s.mux.HandleFunc("GET /{$}", s.require(auth.ReadOnly, s.managerHome))
+		s.mux.HandleFunc("GET /datacenters/{dc}", s.require(auth.ReadOnly, s.managerHome))
+		s.mux.HandleFunc("GET /datacenters/{dc}/clusters/{cluster}", s.require(auth.ReadOnly, s.managerHome))
 		s.mux.HandleFunc("GET /vms", s.require(auth.ReadOnly, s.managerVMs))
 		s.mux.HandleFunc("GET /nav/tree", s.require(auth.ReadOnly, s.managerTree))
 		s.mux.HandleFunc("GET /nodes/{node}/vms/{ns}/{name}", s.require(auth.ReadOnly, s.managerVM))
