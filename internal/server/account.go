@@ -35,7 +35,15 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		store, remember = s.auth.ForOrg(org), r.FormValue("remember") != ""
 		http.SetCookie(w, &http.Cookie{Name: "argus_org", Value: org, Path: "/", MaxAge: 365 * 24 * 3600, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
 	}
-	s.limiter.slots <- struct{}{}
+	select {
+	case s.limiter.slots <- struct{}{}:
+	case <-r.Context().Done():
+		return
+	case <-time.After(10 * time.Second):
+		w.WriteHeader(http.StatusServiceUnavailable)
+		s.render(w, r, "login.html", "auth", s.loginData(r, "Too many sign-ins at once, try again"))
+		return
+	}
 	tok, err := store.Login(r.Context(), r.FormValue("username"), r.FormValue("password"), remember)
 	<-s.limiter.slots
 	if err != nil {

@@ -154,6 +154,8 @@ func (s *Server) backupLoop() {
 	}
 }
 
+var transfers = make(chan struct{}, 2)
+
 func (s *Server) startBackup(ns, name string, p BackupPolicy) bool {
 	key := ns + "/" + name
 	if !s.backups.start(key) {
@@ -162,6 +164,8 @@ func (s *Server) startBackup(ns, name string, p BackupPolicy) bool {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
 		defer cancel()
+		transfers <- struct{}{}
+		defer func() { <-transfers }()
 		err := s.backupVM(ctx, ns, name, p)
 		if err != nil {
 			log.Printf("backup %s: %v", key, err)

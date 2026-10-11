@@ -274,6 +274,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "cross-origin request refused", http.StatusForbidden)
 		return
 	}
+	if ct := r.Header.Get("Content-Type"); r.Body != nil && !strings.HasPrefix(ct, "multipart/") {
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	}
 	s.mux.ServeHTTP(w, r)
 }
 

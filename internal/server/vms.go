@@ -196,6 +196,9 @@ func (s *Server) consoleWS(w http.ResponseWriter, r *http.Request) {
 	defer backend.Close()
 	up := websocket.Upgrader{Subprotocols: websocket.Subprotocols(r)}
 	client, err := up.Upgrade(w, r, nil)
+	if err == nil {
+		client.SetReadLimit(1 << 20)
+	}
 	if err != nil {
 		return
 	}

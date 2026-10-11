@@ -304,6 +304,8 @@ func (c *Manager) failover(ctx context.Context) {
 	}
 }
 
+var replications = make(chan struct{}, 2)
+
 func (c *Manager) replicate() {
 	ctx := context.Background()
 	ps, err := c.Protected(ctx)
@@ -331,7 +333,9 @@ func (c *Manager) replicate() {
 			}()
 			sctx, cancel := context.WithTimeout(ctx, 6*time.Hour)
 			defer cancel()
+			replications <- struct{}{}
 			err := c.sync(sctx, p)
+			<-replications
 			msg := ""
 			if err != nil {
 				msg = err.Error()

@@ -7,8 +7,10 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"argus/internal/auth"
@@ -67,7 +69,17 @@ func main() {
 		IdleTimeout:       2 * time.Minute,
 	}
 	log.Printf("listening on %s", addr)
-	log.Fatal(hs.ListenAndServeTLS("", ""))
+	go func() {
+		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
+		defer stop()
+		<-ctx.Done()
+		sctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		hs.Shutdown(sctx)
+	}()
+	if err := hs.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
+		log.Fatal(err)
+	}
 }
 
 func consoleBanner(dir string) func(string) {
