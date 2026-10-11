@@ -182,7 +182,7 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 	q := strings.ToLower(strings.TrimSpace(r.FormValue("q")))
 	if q != "" {
 		rows = slices.DeleteFunc(rows, func(v vmRow) bool {
-			return !strings.Contains(strings.ToLower(v.Name+" "+v.DisplayName+" "+v.Host+" "+v.Cluster+" "+strings.Join(v.IPs(), " ")), q)
+			return !strings.Contains(strings.ToLower(v.Name+" "+v.DisplayName+" "+v.Host+" "+v.Cluster+" "+strings.Join(v.IPs(), " ")+" "+strings.Join(v.Tags, " ")), q)
 		})
 	}
 	vms := 0
@@ -834,5 +834,18 @@ func (s *Server) managerMoveDisk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("%s: move disk %s of %s to %s", session(r).User, r.FormValue("disk"), r.PathValue("name"), r.FormValue("pool"))
+	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) managerSetTags(w http.ResponseWriter, r *http.Request) {
+	n, err := s.orgNode(r)
+	if err == nil {
+		err = n.Call(r.Context(), http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/tags", r.PathValue("ns"), r.PathValue("name")), map[string]string{"tags": r.FormValue("tags")}, nil)
+	}
+	if err != nil {
+		flash(w, r, err)
+		return
+	}
+	go s.manager.Refresh(n.Name)
 	w.Header().Set("HX-Refresh", "true")
 }

@@ -60,6 +60,18 @@ func (c *Client) CreateAutoSnapshot(ctx context.Context, ns, vm string) (string,
 	return c.createSnapshot(ctx, ns, vm, fmt.Sprintf("%s-auto-%s", vm, time.Now().UTC().Format("20060102-150405")), obj{autoLabel: "true"})
 }
 
+const TagsAnnotation = "argus.io/tags"
+
+func (c *Client) SetTags(ctx context.Context, ns, vm string, tags []string) error {
+	var v any = strings.Join(tags, ",")
+	if len(tags) == 0 {
+		v = nil
+	}
+	patch, _ := json.Marshal(obj{"metadata": obj{"annotations": obj{TagsAnnotation: v}}})
+	_, err := c.dyn.Resource(vmGVR).Namespace(ns).Patch(ctx, vm, types.MergePatchType, patch, metav1.PatchOptions{})
+	return err
+}
+
 func (c *Client) SetBackupPolicy(ctx context.Context, ns, vm, policy string) error {
 	var v any = policy
 	if policy == "" {

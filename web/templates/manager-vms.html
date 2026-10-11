@@ -19,7 +19,7 @@
   <tbody>
   {{range .Rows}}{{$c := vmCtx . $}}
   <tr data-context>
-    <td><a href="{{$c.Page}}">{{template "icon" "monitor"}}{{.Label}}</a></td>
+    <td><a href="{{$c.Page}}">{{template "icon" "monitor"}}{{.Label}}</a>{{if .Template}} <span class="badge">template</span>{{end}}{{range .Tags}} <span class="badge muted-badge">{{.}}</span>{{end}}</td>
     <td><span class="dot {{.Status}}">{{.Status}}</span></td>
     <td>{{range .IPs}}{{.}} {{else}}<span class="muted">—</span>{{end}}</td>
     <td>{{.Host}}</td>

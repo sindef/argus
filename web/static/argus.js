@@ -64,7 +64,10 @@
     const dlg = e.target.closest("[data-dialog]");
     if (dlg) {
       const d = document.getElementById(dlg.dataset.dialog);
-      if (dlg.dataset.fill) for (const [k, v] of Object.entries(JSON.parse(dlg.dataset.fill))) d.querySelector(`[name="${k}"]`).value = v;
+      if (dlg.dataset.fill) for (const [k, v] of Object.entries(JSON.parse(dlg.dataset.fill))) {
+        if (k === "action") { const f = d.querySelector("form"); f.setAttribute("hx-post", v); htmx.process(f); }
+        else d.querySelector(`[name="${k}"]`).value = v;
+      }
       d.showModal();
       return;
     }

@@ -44,7 +44,7 @@
   {{range .VMs}}
   <tr class="clickable{{if $.Selected.Has .Namespace .Name}} selected{{end}}" data-href="/vms/{{.Namespace}}/{{.Name}}/drawer" data-page="/vms/{{.Namespace}}/{{.Name}}"{{if $.CanOperate}} data-context{{end}}>
     {{if $.CanOperate}}<td><input type="checkbox" name="sel" value="{{.Namespace}}/{{.Name}}"{{if $.Selected.Has .Namespace .Name}} checked{{end}} aria-label="Select {{.Label}}"></td>{{end}}
-    <td>{{template "icon" "monitor"}}{{.Label}}{{if .Template}} <span class="badge">template</span>{{end}}{{if $.CanOperate}}{{template "vm-ctx" .}}{{end}}</td>
+    <td>{{template "icon" "monitor"}}{{.Label}}{{if .Template}} <span class="badge">template</span>{{end}}{{range .Tags}} <span class="badge muted-badge">{{.}}</span>{{end}}{{if $.CanOperate}}{{template "vm-ctx" .}}{{end}}</td>
     <td><span class="dot {{.Status}}">{{.Status}}</span></td>
     <td>{{range .IPs}}{{.}} {{else}}<span class="muted">—</span>{{end}}</td>
     <td>{{if .Node}}{{.Node}}{{else}}<span class="muted">{{$.NodeName}}</span>{{end}}</td>
@@ -180,6 +180,7 @@
   <button hx-post="{{$p}}/snapshots">{{template "icon" "camera"}}Snapshot</button>
   <button hx-post="/vms/bulk/clone" hx-vals='{{$sel}}' hx-prompt="Name for the clone">{{template "icon" "copy"}}Clone</button>
   <button hx-post="/vms/bulk/rename" hx-vals='{{$sel}}' hx-prompt="Display name (empty to clear)">{{template "icon" "pencil"}}Rename</button>
+  <button data-dialog="vm-tags" data-fill='{"action":"{{$p}}/tags","tags":"{{join .Tags ", "}}"}'>{{template "icon" "tag"}}Tags…</button>
   <hr>
   <button class="danger" hx-post="{{$p}}/delete" hx-confirm="Delete {{.Label}} and its disks?">{{template "icon" "trash-2"}}Delete</button>
 </template>

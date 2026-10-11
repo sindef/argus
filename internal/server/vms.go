@@ -2,6 +2,7 @@ package server
 
 import (
 	"cmp"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -40,7 +41,7 @@ func filterVMs(vms []kube.VM, q string) []kube.VM {
 	}
 	out := vms[:0]
 	for _, v := range vms {
-		hay := strings.ToLower(v.Name + " " + v.DisplayName + " " + strings.Join(v.IPs(), " "))
+		hay := strings.ToLower(v.Name + " " + v.DisplayName + " " + strings.Join(v.IPs(), " ") + " " + strings.Join(v.Tags, " "))
 		if strings.Contains(hay, q) {
 			out = append(out, v)
 		}
@@ -459,4 +460,46 @@ func validGuest(g kube.Guest) error {
 		}
 	}
 	return nil
+}
+
+var validTag = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,39}$`)
+
+func parseTags(v string) ([]string, error) {
+	var tags []string
+	for _, t := range strings.Split(v, ",") {
+		if t = strings.TrimSpace(t); t == "" || slices.Contains(tags, t) {
+			continue
+		}
+		if !validTag.MatchString(t) {
+			return nil, fmt.Errorf("invalid tag %q", t)
+		}
+		tags = append(tags, t)
+	}
+	return tags, nil
+}
+
+func (s *Server) setTags(w http.ResponseWriter, r *http.Request) {
+	tags, err := parseTags(r.FormValue("tags"))
+	if err == nil {
+		err = s.kube.SetTags(r.Context(), r.PathValue("ns"), r.PathValue("name"), tags)
+	}
+	if err != nil {
+		flash(w, r, err)
+		return
+	}
+	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) apiSetTags(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Tags string }
+	json.NewDecoder(r.Body).Decode(&req)
+	tags, err := parseTags(req.Tags)
+	if err == nil {
+		err = s.kube.SetTags(r.Context(), r.PathValue("ns"), r.PathValue("name"), tags)
+	}
+	if err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, map[string]string{})
 }

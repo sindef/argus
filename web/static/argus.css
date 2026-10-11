@@ -141,6 +141,7 @@ td .i { color: var(--muted); margin-right: 8px; }
 .dot.Starting::before, .dot.Stopping::before, .dot.Provisioning::before, .dot.Migrating::before, .dot.Paused::before, .dot.Pending::before, .dot.Warning::before, .dot.ImportInProgress::before, .dot.UploadReady::before, .dot.CloneInProgress::before, .dot.WaitingForVolumeBinding::before, .dot.Replicating::before, .dot.Degraded::before, .dot.Maintenance::before { background: var(--warn); }
 .dot.Failed::before, .dot.ErrorUnschedulable::before, .dot.CrashLoopBackOff::before, .dot.DataVolumeError::before, .dot.Unreachable::before, .dot.Error::before { background: var(--bad); }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; background: var(--accent-bg); color: var(--accent-2); }
+.badge.muted-badge { background: var(--panel-2); color: var(--muted); font-weight: 500; }
 
 .tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
 .tabs a, .tabs button { padding: 10px 2px; color: var(--muted); background: none; border: 0; border-bottom: 2px solid transparent; font: inherit; cursor: pointer; }

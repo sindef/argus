@@ -46,6 +46,14 @@
   <p id="flash" class="error toast" role="alert" hx-on::after-swap="clearTimeout(this.t); this.t = setTimeout(() => this.innerHTML = '', 8000)"></p>
   <aside id="drawer" class="drawer"></aside>
   <dialog id="modal" class="card wide"></dialog>
+  <dialog id="vm-tags" class="card">
+    <form hx-target="#tags-error" class="form">
+      <h2>Tags</h2>
+      <p id="tags-error" class="error form-error"></p>
+      <label>Tags <span class="help" title="Comma separated, e.g. prod, web, team:infra. Searchable in VM lists.">?</span><input name="tags"></label>
+      <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Save</button></div>
+    </form>
+  </dialog>
   <div id="ctxmenu" class="menu-list" hidden hx-target="#flash"></div>
 </div>
 </body>
