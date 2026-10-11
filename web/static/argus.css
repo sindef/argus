@@ -71,6 +71,7 @@ h2 { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
 .tree li > .row.active { background: var(--accent-bg); }
 .tree .twisty { width: 14px; height: 14px; color: var(--muted); transition: transform .15s; }
 .tree li.closed > ul { display: none; }
+.tree li > a.row { padding-left: 30px; }
 .tree li.closed > .row .twisty { transform: rotate(-90deg); }
 
 .page-head { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
