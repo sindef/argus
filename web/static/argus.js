@@ -127,10 +127,18 @@
     document.querySelectorAll("[data-needs-selection]").forEach((b) => { b.disabled = n === 0; });
   }
 
+  document.addEventListener("toggle", (e) => {
+    if (e.target.matches("details.section[id]")) store.set("sec:" + e.target.id, e.target.open ? "open" : "closed");
+  }, true);
+
   const restore = () => {
     document.querySelectorAll(".nav-section[id]").forEach((s) => {
       const v = store.get("nav:" + s.id);
       if (v) s.classList.toggle("closed", v === "closed");
+    });
+    document.querySelectorAll("details.section[id]").forEach((d) => {
+      const v = store.get("sec:" + d.id);
+      if (v) d.open = v === "open";
     });
     document.querySelectorAll(".tree li[data-id]").forEach((li) => {
       const v = store.get("tree:" + li.dataset.id);

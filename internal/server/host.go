@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -291,7 +292,13 @@ func (s *Server) setCertificate(w http.ResponseWriter, r *http.Request) {
 	} else if r.FormValue("revert") != "" {
 		err = s.certs.Set(r.Context(), s.auth.Secrets(), nil, nil)
 	} else {
-		err = s.certs.Set(r.Context(), s.auth.Secrets(), []byte(strings.TrimSpace(r.FormValue("cert"))+"\n"), []byte(strings.TrimSpace(r.FormValue("key"))+"\n"))
+		var cert, key []byte
+		if cert, err = formFile(r, "cert"); err == nil {
+			key, err = formFile(r, "key")
+		}
+		if err == nil {
+			err = s.certs.Set(r.Context(), s.auth.Secrets(), cert, key)
+		}
 	}
 	if err != nil {
 		flash(w, r, err)
@@ -299,4 +306,13 @@ func (s *Server) setCertificate(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("%s: web certificate updated", session(r).User)
 	w.Header().Set("HX-Refresh", "true")
+}
+
+func formFile(r *http.Request, name string) ([]byte, error) {
+	f, _, err := r.FormFile(name)
+	if err != nil {
+		return nil, fmt.Errorf("choose a %s file", name)
+	}
+	defer f.Close()
+	return io.ReadAll(io.LimitReader(f, 1<<20))
 }

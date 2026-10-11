@@ -129,10 +129,10 @@
 {{end}}
 {{end}}
 
-{{define "notify-card"}}{{with .Notify}}
-<div class="card">
-  <div class="card-head">{{template "icon" "bell"}}<h2>Notifications</h2><span class="help right" title="Sent when an alarm is raised or resolved.">?</span></div>
-  <form hx-post="/notify" hx-target="#flash" class="form">
+{{define "notify-section"}}{{with .Notify}}
+<details class="section" id="sec-notify">
+  <summary>{{template "icon" "bell"}}Notifications<span class="summary">{{if or .Webhook .SMTPHost}}{{if .Webhook}}Webhook{{end}}{{if and .Webhook .SMTPHost}} · {{end}}{{if .SMTPHost}}Email to {{.To}}{{end}}{{else}}Off{{end}}</span>{{template "icon" "chevron-down"}}</summary>
+  <form hx-post="/notify" hx-target="#flash" class="form body">
     <label>Webhook URL <span class="help" title="JSON POST with text and content fields; works with Slack and Discord incoming webhooks.">?</span><input name="webhook" type="url" value="{{.Webhook}}" placeholder="https://hooks.slack.com/…"></label>
     <div class="row">
       <label>SMTP server <input name="smtp_host" value="{{.SMTPHost}}" placeholder="smtp.example.com:587"></label>
@@ -145,7 +145,7 @@
     </div>
     <div class="actions"><button class="btn" type="submit" name="test" value="1">Save and send test</button><button class="btn primary" type="submit">Save</button></div>
   </form>
-</div>
+</details>
 {{end}}{{end}}
 
 {{define "move-disk"}}
@@ -161,14 +161,16 @@
 </dialog>
 {{end}}
 
-{{define "cert-card"}}{{with .Cert}}
-<div class="card">
-  <div class="card-head">{{template "icon" "lock"}}<h2>Web certificate</h2><span class="help right" title="Presented to browsers that connect by host name. Connections by IP address, from Argus Manager and from imports keep using the built-in certificate.">?</span></div>
-  <dl class="kv"><dt>In use</dt><dd>{{if .Custom}}{{.Subject}} <span class="muted">until {{.Expires.Local.Format "2006-01-02"}}</span>{{else}}Built-in self-signed{{end}}</dd></dl>
-  <form hx-post="/certificate" hx-target="#flash" class="form spaced">
-    <label>Certificate chain (PEM) <textarea name="cert" rows="3" placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>
-    <label>Private key (PEM) <textarea name="key" rows="3" placeholder="-----BEGIN PRIVATE KEY-----"></textarea></label>
-    <div class="actions">{{if .Custom}}<button class="btn" type="submit" name="revert" value="1" formnovalidate hx-confirm="Go back to the built-in certificate?">Use built-in</button>{{end}}<button class="btn primary" type="submit">Install</button></div>
+{{define "cert-section"}}{{with .Cert}}
+<details class="section" id="sec-cert">
+  <summary>{{template "icon" "lock"}}Web certificate<span class="summary">{{if .Custom}}{{.Subject}} · until {{.Expires.Local.Format "2006-01-02"}}{{else}}Built-in self-signed{{end}}</span>{{template "icon" "chevron-down"}}</summary>
+  <form hx-post="/certificate" hx-target="#flash" hx-encoding="multipart/form-data" class="form body">
+    <p class="muted">Presented to browsers that connect by host name. Connections by IP address, from Argus Manager and from imports keep the built-in certificate.</p>
+    <div class="row">
+      <label>Certificate <span class="help" title="PEM file with the certificate followed by any intermediates.">?</span><input name="cert" type="file" accept=".pem,.crt,.cer" required></label>
+      <label>Private key <input name="key" type="file" accept=".pem,.key" required></label>
+    </div>
+    <div class="actions">{{if .Custom}}<button class="btn" type="button" hx-post="/certificate" hx-vals='{"revert":"1"}' hx-target="#flash" hx-confirm="Go back to the built-in certificate?">Use built-in</button>{{end}}<button class="btn primary" type="submit">Upload</button></div>
   </form>
-</div>
+</details>
 {{end}}{{end}}

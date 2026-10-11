@@ -3,51 +3,57 @@
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-server"/></svg>
   <div><h1>{{.NodeName}}</h1><div class="crumbs">Settings / Host</div></div>
 </div>
-<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(420px,1fr))">
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+{{with .Notice}}<p class="notice">{{.}}</p>{{end}}
+<div class="sections">
   {{if .Available}}
-  <div class="card">
-    <div class="card-head">{{template "icon" "server"}}<h2>System</h2></div>
-    <div hx-get="/host" hx-trigger="every 5s">{{template "state" .}}</div>
-  </div>
-  <div class="card">
-    <div class="card-head">{{template "icon" "download"}}<h2>Update</h2></div>
-    <form hx-post="/host/upgrade" hx-target="#flash" hx-confirm="Update the OS and reboot?" class="form">
-      <input name="image" placeholder="registry/argus-os:tag" required>
-      <div class="inline">
-        <button class="btn primary" type="submit">Update and reboot</button>
-        <button class="btn" type="button" hx-post="/host/reboot" hx-target="#flash" hx-confirm="Reboot the host?">{{template "icon" "rotate-cw"}}Reboot</button>
-        <button class="btn danger" type="button" hx-post="/host/poweroff" hx-target="#flash" hx-confirm="Shut down the host?">{{template "icon" "power"}}Shut down</button>
-      </div>
-    </form>
-  </div>
+  <details class="section" id="sec-system" open>
+    <summary>{{template "icon" "server"}}System<span class="summary">{{index .Release "KAIROS_VERSION"}} · k3s {{index .Release "KAIROS_SOFTWARE_VERSION"}}</span>{{template "icon" "chevron-down"}}</summary>
+    <div class="body">
+      <div hx-get="/host" hx-trigger="every 5s">{{template "state" .}}</div>
+      <form hx-post="/host/upgrade" hx-target="#flash" hx-confirm="Update the OS and reboot?" class="form spaced">
+        <label>Update to image <input name="image" placeholder="registry/argus-os:tag" required></label>
+        <div class="actions">
+          <button class="btn danger" type="button" hx-post="/host/poweroff" hx-target="#flash" hx-confirm="Shut down the host?">{{template "icon" "power"}}Shut down</button>
+          <button class="btn" type="button" hx-post="/host/reboot" hx-target="#flash" hx-confirm="Reboot the host?">{{template "icon" "rotate-cw"}}Reboot</button>
+          <button class="btn primary" type="submit">Update and reboot</button>
+        </div>
+      </form>
+    </div>
+  </details>
   {{end}}
-  {{template "notify-card" .}}
-  {{template "cert-card" .}}
   {{with .Settings}}
-  <div class="card">
-    <div class="card-head">{{template "icon" "globe"}}<h2>Services</h2></div>
-    <form hx-post="/host/settings" hx-target="#flash" class="form">
-      <label>DNS servers <span class="help" title="Used in addition to servers learned from DHCP.">?</span><input name="dns" value="{{join .DNS " "}}" placeholder="1.1.1.1 9.9.9.9"></label>
-      <label>NTP servers <input name="ntp" value="{{join .NTP " "}}" placeholder="pool.ntp.org"></label>
-      <label>Remote syslog <input name="syslog" value="{{.Syslog}}" placeholder="udp://syslog.example:514"></label>
-      <label>Backup target <span class="help" title="NFS export for VM backups. Tested for write access before saving.">?</span><input name="backup" value="{{.Backup}}" placeholder="nas.example:/backups/argus"></label>
+  <details class="section" id="sec-services">
+    <summary>{{template "icon" "globe"}}Services<span class="summary">{{with .NTP}}NTP {{join . " "}}{{else}}NTP default{{end}} · {{if .Syslog}}syslog on{{else}}syslog off{{end}} · {{if .Backup}}backups to {{.Backup}}{{else}}no backup target{{end}}</span>{{template "icon" "chevron-down"}}</summary>
+    <form hx-post="/host/settings" hx-target="#flash" class="form body">
+      <div class="row">
+        <label>DNS servers <span class="help" title="Used in addition to servers learned from DHCP.">?</span><input name="dns" value="{{join .DNS " "}}" placeholder="1.1.1.1 9.9.9.9"></label>
+        <label>NTP servers <input name="ntp" value="{{join .NTP " "}}" placeholder="pool.ntp.org"></label>
+      </div>
+      <div class="row">
+        <label>Remote syslog <input name="syslog" value="{{.Syslog}}" placeholder="udp://syslog.example:514"></label>
+        <label>Backup target <span class="help" title="NFS export for VM backups. Tested for write access before saving.">?</span><input name="backup" value="{{.Backup}}" placeholder="nas.example:/backups/argus"></label>
+      </div>
       <div class="actions"><button class="btn primary" type="submit">Save</button></div>
     </form>
-  </div>
+  </details>
   {{end}}
-  <div class="card">
-    <div class="card-head">{{template "icon" "key-round"}}<h2>Manager access</h2><button class="btn sm right" data-dialog="add-token">{{template "icon" "plus"}}Create token</button></div>
-    {{with .Error}}<p class="error">{{.}}</p>{{end}}
-    {{with .Notice}}<p class="notice">{{.}}</p>{{end}}
-    <dl class="kv"><dt>CA fingerprint</dt><dd class="mono">{{.CAFingerprint}}</dd></dl>
-    {{if .Tokens}}
-    <div class="table-wrap spaced"><table>
-      <thead><tr><th>Token</th><th>Created</th><th></th></tr></thead>
-      <tbody>{{range .Tokens}}<tr><td>{{.Name}}</td><td>{{.Created.Local.Format "2006-01-02 15:04"}}</td>
-        <td class="row-actions"><form method="post" action="/tokens/{{.Name}}/delete" onsubmit="return confirm('Revoke {{.Name}}?')"><button type="submit" class="link danger">Revoke</button></form></td></tr>{{end}}</tbody>
-    </table></div>
-    {{end}}
-  </div>
+  {{template "notify-section" .}}
+  {{template "cert-section" .}}
+  <details class="section" id="sec-access">
+    <summary>{{template "icon" "key-round"}}Manager access<span class="summary">{{len .Tokens}} token{{if ne (len .Tokens) 1}}s{{end}}</span>{{template "icon" "chevron-down"}}</summary>
+    <div class="body">
+      <dl class="kv"><dt>CA fingerprint</dt><dd class="mono">{{.CAFingerprint}}</dd></dl>
+      {{if .Tokens}}
+      <div class="table-wrap spaced"><table>
+        <thead><tr><th>Token</th><th>Created</th><th></th></tr></thead>
+        <tbody>{{range .Tokens}}<tr><td>{{.Name}}</td><td>{{.Created.Local.Format "2006-01-02 15:04"}}</td>
+          <td class="row-actions"><form method="post" action="/tokens/{{.Name}}/delete" onsubmit="return confirm('Revoke {{.Name}}?')"><button type="submit" class="link danger">Revoke</button></form></td></tr>{{end}}</tbody>
+      </table></div>
+      {{end}}
+      <div class="actions spaced"><button class="btn" data-dialog="add-token">{{template "icon" "plus"}}Create token</button></div>
+    </div>
+  </details>
 </div>
 <dialog id="add-token" class="card">
   <form method="post" action="/tokens" class="form">
