@@ -40,7 +40,7 @@
 {{define "pick-host"}}
 <form hx-get="/vm-new" hx-target="#modal" class="form">
   <h2>Create VM</h2>
-  <label>Host <select name="host">{{range .Hosts}}{{if eq .Status "Healthy"}}<option>{{.Node.Name}}</option>{{end}}{{end}}</select></label>
+  <label>Host <select name="host"><option value="auto">Automatic (most free memory)</option>{{range .Hosts}}{{if eq .Status "Healthy"}}<option>{{.Node.Name}}</option>{{end}}{{end}}</select></label>
   <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Next</button></div>
 </form>
 {{end}}

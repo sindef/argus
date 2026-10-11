@@ -383,3 +383,26 @@ func (c *Manager) cycleHost(ctx context.Context, n Node, image string, shutdown 
 	step("exiting maintenance")
 	return c.leave(ctx, sub, n)
 }
+
+func (c *Manager) LeastLoaded(org string) (Node, error) {
+	var best Node
+	var bestFree int64 = -1
+	for _, st := range c.Inventory(org) {
+		if !st.Reachable() || st.Node.Maintenance {
+			continue
+		}
+		free := st.Info.MemoryBytes
+		for _, v := range st.VMs {
+			if v.Running {
+				free -= memBytes(v.Memory)
+			}
+		}
+		if free > bestFree {
+			best, bestFree = st.Node, free
+		}
+	}
+	if bestFree < 0 {
+		return Node{}, errors.New("no healthy host available")
+	}
+	return best, nil
+}

@@ -164,6 +164,14 @@ func (s *Server) managerNewVM(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, "manager-vms.html", "pick-host", s.managerData(r))
 		return
 	}
+	if host == "auto" {
+		n, err := s.manager.LeastLoaded(session(r).Org)
+		if err != nil {
+			flash(w, r, err)
+			return
+		}
+		host = n.Name
+	}
 	r.SetPathValue("node", host)
 	r.SetPathValue("path", "vms/new")
 	r.URL.RawQuery = ""

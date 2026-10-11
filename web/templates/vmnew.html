@@ -2,7 +2,7 @@
 
 {{define "modal"}}
 <form hx-post="{{.Base}}/vms" hx-target="#vm-form-error" class="form vm-form">
-  <h2>Create VM</h2>
+  <h2>Create VM{{if .Base}} on {{.NodeName}}{{end}}</h2>
   <p id="vm-form-error" class="error form-error">{{.Error}}</p>
   <div class="row">
     <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required autofocus></label>

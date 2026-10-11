@@ -1,6 +1,7 @@
 package server
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"log"
@@ -253,7 +254,9 @@ func (s *Server) newVM(w http.ResponseWriter, r *http.Request) {
 		tmpl = "modal"
 	}
 	tpls, _ := s.kube.Templates(r.Context())
-	s.render(w, r, "vmnew.html", tmpl, map[string]any{"Images": imgs, "Templates": tpls, "Networks": nets, "Pools": s.poolChoices(r.Context()), "Error": errText(err)})
+	pools := s.poolChoices(r.Context())
+	slices.SortStableFunc(pools, func(a, b kube.Pool) int { return cmp.Compare(b.Free, a.Free) })
+	s.render(w, r, "vmnew.html", tmpl, map[string]any{"Images": imgs, "Templates": tpls, "Networks": nets, "Pools": pools, "Error": errText(err)})
 }
 
 func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {
