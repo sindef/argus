@@ -1,0 +1,7 @@
+retained_file	upstream_license
+licenses/infrastructure/k3s/LICENSE	https://raw.githubusercontent.com/k3s-io/k3s/v1.35.8+k3s1/LICENSE
+licenses/infrastructure/kairos/LICENSE	https://raw.githubusercontent.com/kairos-io/kairos/v4.3.0/LICENSE
+licenses/infrastructure/kubevirt/LICENSE	https://raw.githubusercontent.com/kubevirt/kubevirt/v1.9.0/LICENSE
+licenses/infrastructure/cdi/LICENSE	https://raw.githubusercontent.com/kubevirt/containerized-data-importer/v1.66.1/LICENSE
+licenses/infrastructure/nad/LICENSE	https://raw.githubusercontent.com/k8snetworkplumbingwg/network-attachment-definition-client/v1.7.7/LICENSE
+licenses/infrastructure/openebs/LICENSE	https://raw.githubusercontent.com/openebs/zfs-localpv/v2.11.2/LICENSE

@@ -72,4 +72,4 @@ Open HTTPS, change the initial admin password, then register hosts using their U
 
 ## License
 
-[GNU AGPLv3 only](LICENSE) (`AGPL-3.0-only`). Third-party components retain their own licenses and notices.
+[GNU AGPLv3 only](LICENSE) (`AGPL-3.0-only`). [Third-party notices](THIRD_PARTY_NOTICES) cover bundled components. Release downloads include matching source archives.

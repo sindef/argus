@@ -1,0 +1,19 @@
+component	version	license	upstream	delivery
+Go	1.27.2	BSD-3-Clause	https://go.dev/	application-runtime
+htmx	2.0.11	0BSD	https://github.com/bigskysoftware/htmx	vendored-web
+uPlot	1.6.32	MIT	https://github.com/leeoniya/uPlot	vendored-web
+xterm.js	snapshot:web-assets.sha256	MIT	https://github.com/xtermjs/xterm.js	vendored-web
+noVNC	snapshot:web-assets.sha256	MPL-2.0; BSD-2-Clause; BSD-3-Clause; retained DES terms	https://github.com/novnc/noVNC	vendored-web
+pako	ES6 fork based on 1.0.3	MIT	https://github.com/nodeca/pako	vendored-web
+Inter	snapshot:web-assets.sha256	OFL-1.1	https://github.com/rsms/inter	vendored-web
+Lucide	snapshot:web-assets.sha256	ISC; MIT (Feather)	https://github.com/lucide-icons/lucide	vendored-web
+Kairos	v4.3.0	Apache-2.0	https://github.com/kairos-io/kairos	os-binary
+K3s	v1.35.8+k3s1	Apache-2.0; embedded dependencies retain own terms	https://github.com/k3s-io/k3s	os-binary
+k3s-root	v0.15.2	see generated Buildroot manifest.csv	https://github.com/k3s-io/k3s-root	embedded-os-binaries
+Ubuntu	26.04	see generated os-packages.tsv and package copyrights	https://ubuntu.com/	os-packages
+Distroless	static-debian12:nonroot; Dockerfile digest	see retained Debian package copyrights	https://github.com/GoogleContainerTools/distroless	application-base-image
+KubeVirt	v1.9.0	Apache-2.0	https://github.com/kubevirt/kubevirt	bundled-manifest; runtime-downloaded-images
+CDI	v1.66.1	Apache-2.0	https://github.com/kubevirt/containerized-data-importer	bundled-manifest; runtime-downloaded-images
+NetworkAttachmentDefinition	v1.7.7	Apache-2.0	https://github.com/k8snetworkplumbingwg/network-attachment-definition-client	bundled-manifest
+OpenEBS ZFS LocalPV	2.11.2	Apache-2.0	https://github.com/openebs/zfs-localpv	runtime-downloaded-chart-and-images
+RKE2 Multus chart	v4.3.103	see upstream chart and container notices	https://github.com/rancher/rke2-charts	runtime-downloaded-chart-and-images

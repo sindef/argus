@@ -1,0 +1,57 @@
+Argus third-party software
+=========================
+
+Argus-authored code is AGPL-3.0-only; see LICENSE. Third-party software
+retains its original licenses, copyright notices and source obligations.
+Inclusion here does not imply endorsement by an upstream project.
+
+Application binaries
+--------------------
+third_party/go-licenses.csv lists license families and retained license paths
+for packages linked by argus, argus-manager and argus-hostd.
+third_party/go-modules.txt records their module versions. Original license
+and NOTICE files are in third_party/licenses/go. Go runtime/standard-library
+notices are in third_party/licenses/go-runtime.
+
+Web assets
+----------
+third_party/components.tsv records bundled assets and infrastructure projects.
+third_party/license-sources.tsv records the retained project license URLs.
+third_party/web-assets.sha256 identifies the exact vendored files, including
+snapshots whose upstream release version is not recorded. Original notices
+remain in web/static/vendor and are copied into third_party/licenses/web.
+noVNC's preferred JavaScript source is distributed in web/static/vendor/novnc.
+Its pako fork is based on 1.0.3; retained DES notices cover additional
+upstream contributions.
+
+Images and operating system
+---------------------------
+Application images and the host helper export carry this notice and
+third_party under /usr/share/doc/argus. Argus OS and derived ISOs carry the
+same files, installed-package versions in third_party/os-packages.tsv and
+package copyright files in third_party/licenses/os. Distribution license
+texts remain in /usr/share/common-licenses and /usr/share/doc.
+Infrastructure source references and Go dependency notices are retained in
+third_party/infrastructure. This inventory covers upstream command packages,
+including commands beyond those shipped by Argus. Embedded K3s utilities
+have their own third_party/k3s-root-manifest.csv and licenses/k3s-root notices.
+Their matching Buildroot source archive includes upstream configurations,
+patches, license manifests and package sources.
+
+Runtime-downloaded images/charts are identified in components.tsv; their
+upstream distributions have their own notices and source obligations.
+Bundled KubeVirt/CDI operator manifests have resource and Go memory settings
+adjusted in os/Dockerfile; upstream license terms continue to apply.
+Build-only tools are not included in the Argus runtime.
+
+Source distribution
+-------------------
+Argus source and build scripts: https://github.com/sindef/argus
+Use the source revision associated with the released image, not a moving branch.
+Go module names and exact versions identify their upstream sources.
+OS package source names and exact versions are recorded in os-packages.tsv.
+Release source archives accompany images at https://github.com/sindef/argus/releases.
+Archives over the hosting limit are split into .part-* files; concatenate
+parts in filename order before extracting. SHA256SUMS records collected files.
+Distributors must provide matching source or another license-permitted source
+arrangement for covered copyleft components.
