@@ -2,12 +2,12 @@ package server
 
 import (
 	"context"
-	"mime"
 	"errors"
 	"fmt"
 	"html/template"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	"slices"
 	"sort"
