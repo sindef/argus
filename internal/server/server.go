@@ -207,6 +207,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("GET /api/host/status", s.require(auth.Admin, s.apiHostStatus))
 	s.mux.HandleFunc("GET /api/images", s.require(auth.Admin, s.apiImages))
 	s.mux.HandleFunc("GET /api/alarms", s.require(auth.Admin, s.apiAlarms))
+	s.mux.HandleFunc("GET /api/prometheus", s.require(auth.Admin, s.apiPrometheus))
 	s.mux.HandleFunc("POST /api/images/import", s.require(auth.Admin, s.apiImportImage))
 	s.mux.HandleFunc("POST /api/images/{name}/{op}", s.require(auth.Admin, s.apiImageOp))
 	s.mux.HandleFunc("GET /api/host/settings", s.require(auth.Admin, s.apiHostSettings))
