@@ -53,10 +53,30 @@ func (s *Store) write(name string, rec record) error {
 		return err
 	}
 	tmp := s.path(name) + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.path(name))
+	if _, err := f.Write(b); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, s.path(name)); err != nil {
+		return err
+	}
+	d, err := os.Open(filepath.Dir(s.path(name)))
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	return d.Sync()
 }
 
 func (s *Store) Get(ctx context.Context, name string) (map[string][]byte, string, error) {

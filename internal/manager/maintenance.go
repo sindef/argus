@@ -48,7 +48,13 @@ func (c *Manager) startTask(j *Job, lock string, timeout time.Duration, run func
 		c.jobs = c.jobs[len(c.jobs)-keepJobs:]
 	}
 	c.mu.Unlock()
-	c.saveJobs()
+	if err := c.saveJobs(); err != nil {
+		c.mu.Lock()
+		c.jobs = slices.DeleteFunc(c.jobs, func(x *Job) bool { return x == j })
+		delete(c.busy, key)
+		c.mu.Unlock()
+		return fmt.Errorf("cannot record the task: %w", err)
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()

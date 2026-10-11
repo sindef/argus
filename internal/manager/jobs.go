@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"time"
 
 	"argus/internal/kube"
@@ -70,7 +71,15 @@ func (c *Manager) startJob(j *Job, timeout time.Duration, run func(context.Conte
 		c.jobs = c.jobs[len(c.jobs)-keepJobs:]
 	}
 	c.mu.Unlock()
-	c.saveJobs()
+	if err := c.saveJobs(); err != nil {
+		c.mu.Lock()
+		c.jobs = slices.DeleteFunc(c.jobs, func(x *Job) bool { return x == j })
+		for _, k := range keys {
+			delete(c.busy, k)
+		}
+		c.mu.Unlock()
+		return fmt.Errorf("cannot record the operation: %w", err)
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
@@ -83,8 +92,10 @@ func (c *Manager) startJob(j *Job, timeout time.Duration, run func(context.Conte
 			c.update(j, "Completed", true, false)
 		}
 		c.mu.Lock()
-		for _, k := range keys {
-			delete(c.busy, k)
+		if !j.Attention {
+			for _, k := range keys {
+				delete(c.busy, k)
+			}
 		}
 		c.mu.Unlock()
 	}()
@@ -98,17 +109,17 @@ func (c *Manager) update(j *Job, status string, done, failed bool) {
 	c.saveJobs()
 }
 
-func (c *Manager) saveJobs() {
+func (c *Manager) saveJobs() error {
+	c.jobsMu.Lock()
+	defer c.jobsMu.Unlock()
 	c.mu.Lock()
 	b, err := json.Marshal(c.jobs)
 	c.mu.Unlock()
 	if err != nil {
-		return
+		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	c.jobsMu.Lock()
-	defer c.jobsMu.Unlock()
 	data := map[string][]byte{"jobs": b}
 	_, rv, err := c.store.Get(ctx, jobsKey)
 	switch {
@@ -120,6 +131,7 @@ func (c *Manager) saveJobs() {
 	if err != nil {
 		log.Printf("jobs: save: %v", err)
 	}
+	return err
 }
 
 func (c *Manager) loadJobs(ctx context.Context) {
@@ -133,6 +145,14 @@ func (c *Manager) loadJobs(ctx context.Context) {
 		return
 	}
 	for _, j := range jobs {
+		if !j.Done && j.Kind != "" {
+			j.Done, j.Failed = true, true
+			j.Status = fmt.Sprintf("Interrupted by Manager restart during %q; check %s", j.Status, j.From)
+			continue
+		}
+		if j.Attention || !j.Done {
+			c.busy[busyKey(j.From, j.VM)], c.busy[busyKey(j.To, j.VM)] = true, true
+		}
 		if !j.Done {
 			j.Done, j.Failed, j.Attention = true, true, true
 			j.Status = fmt.Sprintf("Interrupted by Manager restart during %q; check %s and %s (operation %s)", j.Status, j.From, j.To, j.ID)
@@ -165,7 +185,12 @@ func (c *Manager) Resolve(ctx context.Context, org, id string) error {
 	if err != nil {
 		return err
 	}
-	if c.Busy(j.From, j.VM) || c.Busy(j.To, j.VM) {
+	c.mu.Lock()
+	other := slices.ContainsFunc(c.jobs, func(x *Job) bool {
+		return x != j && !x.Done && x.VM == j.VM && (x.From == j.From || x.To == j.To || x.From == j.To || x.To == j.From)
+	})
+	c.mu.Unlock()
+	if other {
 		return fmt.Errorf("%s has an operation in progress", j.VM)
 	}
 	ns := j.Namespace
@@ -194,6 +219,8 @@ func (c *Manager) Resolve(ctx context.Context, org, id string) error {
 	}
 	c.mu.Lock()
 	j.Attention = false
+	delete(c.busy, busyKey(j.From, j.VM))
+	delete(c.busy, busyKey(j.To, j.VM))
 	c.mu.Unlock()
 	c.update(j, "Rolled back: "+j.VM+" kept on "+j.From, true, true)
 	return nil
