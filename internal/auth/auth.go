@@ -45,6 +45,7 @@ type User struct {
 	MustChange bool     `json:"mustChange,omitempty"`
 	SSO        bool     `json:"sso,omitempty"`
 	Scopes     []string `json:"scopes,omitempty"`
+	Subject    string   `json:"subject,omitempty"`
 }
 
 const (
@@ -308,23 +309,48 @@ func (s *Store) Add(ctx context.Context, name string, role Role, password string
 	})
 }
 
-func (s *Store) UpsertSSO(ctx context.Context, name string, role Role) error {
-	changed := false
+func (s *Store) UpsertSSO(ctx context.Context, name, subject string, role Role) error {
+	var drop []string
 	err := s.modify(ctx, func(us []User) ([]User, error) {
+		drop = nil
 		for i := range us {
-			if us[i].Name == name {
-				if !us[i].SSO {
-					return nil, fmt.Errorf("local user %s already exists", name)
+			if us[i].SSO && us[i].Subject == subject {
+				if us[i].Name != name {
+					for _, o := range us {
+						if o.Name == name {
+							return nil, fmt.Errorf("user name %s is already taken", name)
+						}
+					}
+					drop = append(drop, us[i].Name)
 				}
-				changed = us[i].Role != role
-				us[i].Role = role
+				if us[i].Role != role {
+					drop = append(drop, us[i].Name)
+				}
+				us[i].Name, us[i].Role = name, role
 				return us, nil
 			}
 		}
-		return append(us, User{Name: name, Role: role, SSO: true}), nil
+		for i := range us {
+			if us[i].Name != name {
+				continue
+			}
+			if !us[i].SSO {
+				return nil, fmt.Errorf("local user %s already exists", name)
+			}
+			if us[i].Subject != "" {
+				return nil, fmt.Errorf("user name %s belongs to another identity", name)
+			}
+			us[i].Subject = subject
+			if us[i].Role != role {
+				drop = append(drop, name)
+			}
+			us[i].Role = role
+			return us, nil
+		}
+		return append(us, User{Name: name, Role: role, SSO: true, Subject: subject}), nil
 	})
-	if err == nil && changed {
-		s.dropSessions(name)
+	for _, n := range drop {
+		s.dropSessions(n)
 	}
 	return err
 }

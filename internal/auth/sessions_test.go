@@ -73,3 +73,21 @@ func TestSessionRevocationSurvivesRestart(t *testing.T) {
 		t.Error("session of demoted user came back after restart")
 	}
 }
+
+func TestSSOIdentityIsBySubject(t *testing.T) {
+	ctx := context.Background()
+	s := NewStore(&memSecrets{m: map[string]map[string][]byte{}})
+	if err := s.UpsertSSO(ctx, "alice", "idp|1", Admin); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpsertSSO(ctx, "alice", "idp|2", Admin); err == nil {
+		t.Fatal("a second identity took over an existing SSO user name")
+	}
+	if err := s.UpsertSSO(ctx, "alice.smith", "idp|1", Operator); err != nil {
+		t.Fatal(err)
+	}
+	us, _ := s.Users(ctx)
+	if len(us) != 1 || us[0].Name != "alice.smith" || us[0].Role != Operator {
+		t.Fatalf("rename by subject failed: %+v", us)
+	}
+}

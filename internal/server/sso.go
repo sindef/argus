@@ -2,6 +2,7 @@ package server
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"log"
@@ -15,7 +16,10 @@ import (
 	"golang.org/x/oauth2"
 )
 
+const ssoCookie = "argus_sso_flow"
+
 type ssoFlow struct {
+	binding  string
 	org      string
 	verifier string
 	nonce    string
@@ -70,7 +74,7 @@ func (s *Server) ssoStart(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, "login.html", "auth", s.loginData(r, err.Error()))
 		return
 	}
-	state, flow := randomHex(16), ssoFlow{org: org, verifier: oauth2.GenerateVerifier(), nonce: randomHex(16), remember: r.FormValue("remember") != "", expires: time.Now().Add(10 * time.Minute)}
+	state, flow := randomHex(16), ssoFlow{binding: randomHex(16), org: org, verifier: oauth2.GenerateVerifier(), nonce: randomHex(16), remember: r.FormValue("remember") != "", expires: time.Now().Add(10 * time.Minute)}
 	s.sso.mu.Lock()
 	for k, v := range s.sso.m {
 		if time.Now().After(v.expires) {
@@ -79,6 +83,7 @@ func (s *Server) ssoStart(w http.ResponseWriter, r *http.Request) {
 	}
 	s.sso.m[state] = flow
 	s.sso.mu.Unlock()
+	http.SetCookie(w, &http.Cookie{Name: ssoCookie, Value: flow.binding, Path: "/sso/callback", MaxAge: 600, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
 	http.Redirect(w, r, conf.AuthCodeURL(state, oidc.Nonce(flow.nonce), oauth2.S256ChallengeOption(flow.verifier)), http.StatusFound)
 }
 
@@ -93,8 +98,13 @@ func (s *Server) ssoCallback(w http.ResponseWriter, r *http.Request) {
 	flow, ok := s.sso.m[state]
 	delete(s.sso.m, state)
 	s.sso.mu.Unlock()
+	http.SetCookie(w, &http.Cookie{Name: ssoCookie, Value: "", Path: "/sso/callback", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
 	if !ok || time.Now().After(flow.expires) {
 		fail("Sign-in expired, try again", errors.New("unknown or expired state"))
+		return
+	}
+	if c, err := r.Cookie(ssoCookie); err != nil || subtle.ConstantTimeCompare([]byte(c.Value), []byte(flow.binding)) != 1 {
+		fail("Sign-in must finish in the browser that started it", errors.New("flow cookie missing or mismatched"))
 		return
 	}
 	conf, provider, settings, err := s.oauthConfig(r, flow.org)
@@ -128,7 +138,7 @@ func (s *Server) ssoCallback(w http.ResponseWriter, r *http.Request) {
 		fail("Your account has no access to this organization", errors.New(user+": no mapped group"))
 		return
 	}
-	if err := s.auth.ForOrg(flow.org).UpsertSSO(r.Context(), user, role); err != nil {
+	if err := s.auth.ForOrg(flow.org).UpsertSSO(r.Context(), user, idt.Issuer+"|"+idt.Subject, role); err != nil {
 		fail("Single sign-on failed", err)
 		return
 	}
