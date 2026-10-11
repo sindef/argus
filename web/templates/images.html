@@ -2,33 +2,35 @@
 <div class="page-head">
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-image"/></svg>
   <div><h1>Images</h1><div class="crumbs">Storage / Images</div></div>
+  {{if .CanOperate}}<div class="actions"><button class="btn" data-dialog="import-image">{{template "icon" "download"}}Import from URL</button><button class="btn primary" data-dialog="upload-image">{{template "icon" "upload"}}Upload</button></div>{{end}}
 </div>
 <div hx-get="/images" hx-trigger="every 5s">{{template "table" .}}</div>
 {{if .CanOperate}}
-<div class="grid spaced" style="grid-template-columns:repeat(auto-fit,minmax(420px,1fr))">
-  <div class="card">
-    <div class="card-head">{{template "icon" "download"}}<h2>Import from URL</h2></div>
-    <form hx-post="/images" hx-target="#flash" class="form">
+<dialog id="import-image" class="card">
+  <form hx-post="/images" hx-target="#import-error" class="form">
+    <h2>Import from URL</h2>
+    <p id="import-error" class="error form-error"></p>
       <div class="row">
         <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
         <label>Size (GiB) <span class="help" title="Virtual disk size. Must be at least the image's virtual size.">?</span><input name="size" type="number" min="1" max="4096" value="10" required></label>
       </div>
       <label>Image URL <input name="url" type="url" placeholder="https://…/image.qcow2" required></label>
-      <div><button class="btn primary" type="submit">{{template "icon" "download"}}Import</button></div>
+      <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Import</button></div>
     </form>
-  </div>
-  <div class="card">
-    <div class="card-head">{{template "icon" "upload"}}<h2>Upload</h2></div>
-    <form id="upload-form" hx-post="/images/upload" hx-target="#flash" hx-encoding="multipart/form-data" class="form">
+</dialog>
+<dialog id="upload-image" class="card">
+  <form id="upload-form" hx-post="/images/upload" hx-target="#upload-error" hx-encoding="multipart/form-data" class="form">
+    <h2>Upload image</h2>
+    <p id="upload-error" class="error form-error"></p>
       <div class="row">
         <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
         <label>Size (GiB) <span class="help" title="Virtual disk size. Must be at least the image's virtual size.">?</span><input name="size" type="number" min="1" max="4096" value="10" required></label>
       </div>
       <label>File <span class="help" title="qcow2, raw (with partition table), ISO, VMDK, VHDX or VDI; gzip or xz compressed is fine.">?</span><input name="file" type="file" accept=".qcow2,.img,.raw,.iso,.vmdk,.vhdx,.vdi,.gz,.xz" required></label>
-      <div class="inline"><button class="btn primary" type="submit">{{template "icon" "upload"}}Upload</button><progress id="upload-progress" value="0" max="100" hidden></progress></div>
+      <progress id="upload-progress" value="0" max="100" hidden></progress>
+      <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Upload</button></div>
     </form>
-  </div>
-</div>
+</dialog>
 <script>
 document.getElementById("upload-form").addEventListener("htmx:xhr:progress", (e) => {
   const p = document.getElementById("upload-progress");

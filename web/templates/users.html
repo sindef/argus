@@ -2,6 +2,7 @@
 <div class="page-head">
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-users"/></svg>
   <div><h1>Users</h1></div>
+  <div class="actions"><button class="btn primary" data-dialog="add-user">{{template "icon" "plus"}}Add user</button></div>
 </div>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
 {{with .Notice}}<p class="notice">{{.}}</p>{{end}}
@@ -31,9 +32,14 @@
   </tbody>
 </table>
 </div>
-<form method="post" action="/users" class="inline spaced">
-  <input name="name" placeholder="username" pattern="[a-z][a-z0-9._-]{0,31}" required>
-  <select name="role">{{range .Roles}}<option value="{{.}}"{{if eq . "read-only"}} selected{{end}}>{{.}}</option>{{end}}</select>
-  <button class="btn primary" type="submit">{{template "icon" "plus"}}Add user</button>
-</form>
+<dialog id="add-user" class="card">
+  <form method="post" action="/users" class="form">
+    <h2>Add user</h2>
+    <div class="row">
+      <label>Username <input name="name" pattern="[a-z][a-z0-9._-]{0,31}" required></label>
+      <label>Role <select name="role">{{range .Roles}}<option value="{{.}}"{{if eq . "read-only"}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+    </div>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Add user</button></div>
+  </form>
+</dialog>
 {{end}}

@@ -33,18 +33,23 @@
     </form>
   </div>
   <div class="card">
-    <div class="card-head">{{template "icon" "building-2"}}<h2>Organizations</h2></div>
+    <div class="card-head">{{template "icon" "building-2"}}<h2>Organizations</h2><button class="btn sm right" data-dialog="add-org">{{template "icon" "plus"}}Add</button></div>
     <div class="table-wrap"><table>
       <thead><tr><th>Name</th><th>ID</th><th>SSO</th><th></th></tr></thead>
       <tbody>{{range .Orgs}}<tr><td>{{.Name}}</td><td class="mono">{{.ID}}</td><td>{{if .SSO}}On{{else}}<span class="muted">Off</span>{{end}}</td>
         <td class="row-actions">{{if ne .ID "default"}}<form method="post" action="/settings/orgs/{{.ID}}/delete" onsubmit="return confirm('Delete {{.Name}}?')"><button type="submit" class="link danger">Delete</button></form>{{end}}</td></tr>{{end}}</tbody>
     </table></div>
-    <form method="post" action="/settings/orgs" class="inline spaced">
-      <input name="name" placeholder="Name" required>
-      <input name="id" placeholder="id" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required>
-      <button class="btn" type="submit">{{template "icon" "plus"}}Add</button>
-    </form>
   </div>
+  <dialog id="add-org" class="card">
+    <form method="post" action="/settings/orgs" class="form">
+      <h2>Add organization</h2>
+      <div class="row">
+        <label>Name <input name="name" required></label>
+        <label>ID <input name="id" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
+      </div>
+      <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Add</button></div>
+    </form>
+  </dialog>
   {{end}}
 </div>
 {{end}}

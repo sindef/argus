@@ -22,7 +22,7 @@
   </div>
   {{end}}
   <div class="card">
-    <div class="card-head">{{template "icon" "key-round"}}<h2>Manager access</h2></div>
+    <div class="card-head">{{template "icon" "key-round"}}<h2>Manager access</h2><button class="btn sm right" data-dialog="add-token">{{template "icon" "plus"}}Create token</button></div>
     {{with .Error}}<p class="error">{{.}}</p>{{end}}
     {{with .Notice}}<p class="notice">{{.}}</p>{{end}}
     <dl class="kv"><dt>CA fingerprint</dt><dd class="mono">{{.CAFingerprint}}</dd></dl>
@@ -33,12 +33,15 @@
         <td class="row-actions"><form method="post" action="/tokens/{{.Name}}/delete" onsubmit="return confirm('Revoke {{.Name}}?')"><button type="submit" class="link danger">Revoke</button></form></td></tr>{{end}}</tbody>
     </table></div>
     {{end}}
-    <form method="post" action="/tokens" class="inline spaced">
-      <input name="name" placeholder="token name" pattern="[a-z][a-z0-9._-]{0,31}" required>
-      <button class="btn" type="submit">{{template "icon" "plus"}}Create token</button>
-    </form>
   </div>
 </div>
+<dialog id="add-token" class="card">
+  <form method="post" action="/tokens" class="form">
+    <h2>Create token</h2>
+    <label>Name <input name="name" pattern="[a-z][a-z0-9._-]{0,31}" placeholder="manager" required></label>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Create token</button></div>
+  </form>
+</dialog>
 {{end}}
 
 {{define "state"}}

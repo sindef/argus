@@ -46,8 +46,9 @@
 </div>
 {{if .CanOperate}}
 <dialog id="new-volume" class="card">
-  <form class="form" hx-post="{{if .Manager}}/volumes{{else}}/volumes/create{{end}}" hx-target="#flash">
+  <form class="form" hx-post="{{if .Manager}}/volumes{{else}}/volumes/create{{end}}" hx-target="#volume-error">
     <h2>New volume</h2>
+    <p id="volume-error" class="error form-error"></p>
     {{if .Manager}}<label>Host <select name="host" required>{{range .Hosts}}<option>{{.Node.Name}}</option>{{end}}</select></label>{{end}}
     <div class="row">
       <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
@@ -57,7 +58,7 @@
       <select name="pool">{{range .}}<option value="{{.Name}}">{{.Name}} ({{bytes .Free}} free)</option>{{end}}</select>
     </label>{{end}}
     <label>Import from URL <span class="help" title="Optional. Leave empty for a blank volume. qcow2, raw and compressed images are converted.">?</span><input name="url" type="url" placeholder="https://…"></label>
-    <div class="inline"><button class="btn primary" type="submit">Create</button><button class="btn" type="button" data-close-dialog>Cancel</button></div>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Create</button></div>
   </form>
 </dialog>
 {{end}}
