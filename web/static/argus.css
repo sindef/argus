@@ -267,6 +267,7 @@ h1 .dot { font-size: 14px; font-weight: 400; }
 .addr-form:not(:has(input[name=ipv6][value=static]:checked)) .v6-static { display: none; }
 .addr-head { display: flex; align-items: center; gap: 12px; }
 .vm-form:not(:has(input[name=ipmode][value=static]:checked)) .guest-static { display: none; }
+.import-modal:has(input[name=isrc][value=ova]:checked) .import-esxi, .import-modal:has(input[name=isrc][value=esxi]:checked) .import-ova { display: none; }
 .addr-head .field { width: 48px; }
 .bell { position: relative; }
 .bell .count { position: absolute; top: 2px; right: 0; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--bad); color: #fff; font-size: 10.5px; font-weight: 600; line-height: 16px; text-align: center; }

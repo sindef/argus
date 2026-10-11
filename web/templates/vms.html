@@ -5,6 +5,7 @@
 </div>
 <div class="toolbar">
   {{if .CanOperate}}
+  <button class="btn" hx-get="/vms/import" hx-target="#modal">{{template "icon" "download"}}Import</button>
   <button class="btn primary" hx-get="/vms/new" hx-target="#modal">{{template "icon" "plus"}}Create VM</button>
   <div class="menu">
     <button class="btn" data-menu data-needs-selection>{{template "icon" "power"}}Power{{template "icon" "chevron-down"}}</button>

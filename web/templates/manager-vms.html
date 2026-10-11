@@ -2,7 +2,7 @@
 <div class="page-head">
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-monitor"/></svg>
   <h1>Virtual Machines</h1>
-  {{if .CanOperate}}<div class="actions"><button class="btn primary" hx-get="/vm-new" hx-target="#modal">{{template "icon" "plus"}}Create VM</button></div>{{end}}
+  {{if .CanOperate}}<div class="actions"><button class="btn" hx-get="/vm-new?what=import" hx-target="#modal">{{template "icon" "download"}}Import</button><button class="btn primary" hx-get="/vm-new" hx-target="#modal">{{template "icon" "plus"}}Create VM</button></div>{{end}}
 </div>
 <div class="toolbar">
   <form class="grow input-icon" hx-get="/vms" hx-target="#vms" hx-trigger="input changed delay:300ms from:find input, submit">
@@ -39,7 +39,8 @@
 
 {{define "pick-host"}}
 <form hx-get="/vm-new" hx-target="#modal" class="form">
-  <h2>Create VM</h2>
+  <h2>{{if eq .What "import"}}Import VM{{else}}Create VM{{end}}</h2>
+  <input type="hidden" name="what" value="{{.What}}">
   <label>Host <select name="host"><option value="auto">Automatic (most free memory)</option>{{range .Hosts}}{{if eq .Status "Healthy"}}<option>{{.Node.Name}}</option>{{end}}{{end}}</select></label>
   <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Next</button></div>
 </form>

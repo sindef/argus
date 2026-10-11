@@ -173,10 +173,13 @@ func (c *Client) Upload(ctx context.Context, name string, body io.Reader) error 
 func (c *Client) waitUploadReady(ctx context.Context, name string) error {
 	for {
 		dv, err := c.dyn.Resource(dvGVR).Namespace(Namespace).Get(ctx, name, metav1.GetOptions{})
-		if err != nil {
+		if err != nil && !apierrors.IsNotFound(err) {
 			return err
 		}
-		phase, _, _ := unstructured.NestedString(dv.Object, "status", "phase")
+		phase := ""
+		if err == nil {
+			phase, _, _ = unstructured.NestedString(dv.Object, "status", "phase")
+		}
 		switch phase {
 		case "UploadReady":
 			return nil
@@ -296,4 +299,22 @@ func (c *Client) FinishImageImport(ctx context.Context, name string) error {
 		}
 	}
 	return nil
+}
+
+func (c *Client) CreateTokenSource(ctx context.Context, name, ca, token string) error {
+	if err := c.Secrets(Namespace).Create(ctx, name, "Opaque", map[string][]byte{"token": []byte("x-kubevirt-export-token: " + token)}); err != nil {
+		return err
+	}
+	cm := &unstructured.Unstructured{Object: obj{"apiVersion": "v1", "kind": "ConfigMap", "metadata": obj{"name": name}, "data": obj{"ca.pem": ca}}}
+	if _, err := c.dyn.Resource(cmGVR).Namespace(Namespace).Create(ctx, cm, metav1.CreateOptions{}); err != nil {
+		c.DeleteTokenSource(context.Background(), name)
+		return err
+	}
+	return nil
+}
+
+func (c *Client) DeleteTokenSource(ctx context.Context, name string) {
+	for _, gvr := range []schema.GroupVersionResource{secGVR, cmGVR} {
+		c.dyn.Resource(gvr).Namespace(Namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	}
 }

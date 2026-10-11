@@ -45,6 +45,7 @@ type Server struct {
 	mux         *http.ServeMux
 	ui          *http.ServeMux
 	backups     backupState
+	esxi        esxiStreams
 	auditLog    auditLog
 	alarms      alarmState
 }
@@ -144,6 +145,10 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 			r.SetPathValue("path", "vms/"+r.PathValue("ns")+"/"+r.PathValue("name")+"/hardware/"+r.PathValue("op"))
 			s.managerHostUI(w, r)
 		}))
+		s.mux.HandleFunc("POST /hosts/{node}/vms/import/{source}", s.require(auth.Operator, func(w http.ResponseWriter, r *http.Request) {
+			r.SetPathValue("path", "vms/import/"+r.PathValue("source"))
+			s.managerHostUI(w, r)
+		}))
 		s.mux.HandleFunc("POST /hosts/{node}/vms", s.require(auth.Operator, func(w http.ResponseWriter, r *http.Request) {
 			r.SetPathValue("path", "vms")
 			s.managerHostUI(w, r)
@@ -194,6 +199,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("GET /ca.pem", s.caCert)
 	s.mux.HandleFunc("GET /export/{ns}/{export}/{volume}", s.exportPassthrough)
 	s.mux.HandleFunc("GET /backups/{vm}/{stamp}/{file}", s.serveBackup)
+	s.mux.HandleFunc("GET /esxi-import/{disk}", s.serveESXi)
 	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/backups", s.require(auth.Admin, s.apiVMBackups))
 	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/backups/{op}", s.require(auth.Admin, s.apiVMBackupOp))
 	s.mux.HandleFunc("/api/ui/", s.require(auth.Admin, s.serveUI))
@@ -251,6 +257,8 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("GET /vms", s.require(auth.ReadOnly, s.vmTable))
 	s.hostRoute("GET /vms/new", auth.Operator, s.newVM)
 	s.hostRoute("POST /vms", auth.Operator, s.createVM)
+	s.hostRoute("GET /vms/import", auth.Operator, s.importModal)
+	s.hostRoute("POST /vms/import/{source}", auth.Operator, s.importVM)
 	s.mux.HandleFunc("GET /vms/{ns}/{name}", s.require(auth.ReadOnly, s.vms))
 	s.mux.HandleFunc("GET /vms/{ns}/{name}/drawer", s.require(auth.ReadOnly, s.vmDrawer))
 	s.mux.HandleFunc("GET /nav/vms", s.require(auth.ReadOnly, s.navVMs))

@@ -159,9 +159,14 @@ func (s *Server) rolloutBridge(ctx context.Context, n manager.Node, spec hostd.B
 }
 
 func (s *Server) managerNewVM(w http.ResponseWriter, r *http.Request) {
-	host := r.FormValue("host")
+	host, path := r.FormValue("host"), "vms/new"
+	if r.FormValue("what") == "import" {
+		path = "vms/import"
+	}
 	if host == "" {
-		s.render(w, r, "manager-vms.html", "pick-host", s.managerData(r))
+		data := s.managerData(r)
+		data["What"] = r.FormValue("what")
+		s.render(w, r, "manager-vms.html", "pick-host", data)
 		return
 	}
 	if host == "auto" {
@@ -173,7 +178,7 @@ func (s *Server) managerNewVM(w http.ResponseWriter, r *http.Request) {
 		host = n.Name
 	}
 	r.SetPathValue("node", host)
-	r.SetPathValue("path", "vms/new")
+	r.SetPathValue("path", path)
 	r.URL.RawQuery = ""
 	s.managerHostUI(w, r)
 }

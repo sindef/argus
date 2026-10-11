@@ -55,3 +55,36 @@
   <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">{{template "icon" "plus"}}Create VM</button></div>
 </form>
 {{end}}
+
+{{define "import-modal"}}
+<div class="import-modal">
+  <div class="modal-head"><h2>Import VM{{if .Base}} to {{.NodeName}}{{end}}</h2><div class="seg"><label><input type="radio" name="isrc" value="ova" checked> OVA file</label><label><input type="radio" name="isrc" value="esxi"> ESXi host</label></div><button class="icon-btn" type="button" data-close-dialog aria-label="Close">{{template "icon" "x"}}</button></div>
+  <p id="import-vm-error" class="error form-error"></p>
+  <form class="form import-ova" hx-post="{{.Base}}/vms/import/ova" hx-encoding="multipart/form-data" hx-target="#import-vm-error" hx-disabled-elt="find button[type=submit]">
+    {{template "import-common" .}}
+    <label>OVA file <input name="ova" type="file" accept=".ova" required></label>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Import</button></div>
+  </form>
+  <form class="form import-esxi" hx-post="{{.Base}}/vms/import/esxi" hx-target="#import-vm-error" hx-disabled-elt="find button[type=submit]">
+    {{template "import-common" .}}
+    <div class="row">
+      <label>ESXi or vCenter host <input name="host" placeholder="esxi01.example" required></label>
+      <label>User <input name="user" placeholder="root" required autocomplete="off"></label>
+      <label>Password <input name="password" type="password" required autocomplete="new-password"></label>
+    </div>
+    <div class="row">
+      <label>VM file <span class="help" title="Datastore path of the powered-off VM's .vmx; disks must not have snapshots.">?</span><input name="vmx" placeholder="[datastore1] web01/web01.vmx" required></label>
+      <label>Datacenter <span class="help" title="ha-datacenter for a standalone ESXi host; the datacenter name on vCenter.">?</span><input name="dc" placeholder="ha-datacenter"></label>
+    </div>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Import</button></div>
+  </form>
+</div>
+{{end}}
+
+{{define "import-common"}}
+<div class="row">
+  <label>Name <span class="help" title="Defaults to the source VM's name.">?</span><input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?"></label>
+  <label>Network <select name="network" required>{{range .Networks}}<option value="{{.Name}}">{{.Name}}{{if .VLAN}} (VLAN {{.VLAN}}){{end}}</option>{{end}}</select></label>
+  <label>Storage pool <select name="pool">{{range .Pools}}<option value="{{.Name}}">{{.Name}} ({{bytes .Free}} free)</option>{{end}}</select></label>
+</div>
+{{end}}

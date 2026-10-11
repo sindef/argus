@@ -550,3 +550,76 @@ func (c *Client) ResizeDisk(ctx context.Context, ns, name, disk string, sizeGiB 
 	_, err = c.dyn.Resource(vmGVR).Namespace(ns).Update(ctx, vm, metav1.UpdateOptions{})
 	return err
 }
+
+type ImportedVM struct {
+	Name      string
+	Cores     int64
+	MemoryMiB int64
+	Firmware  string
+	Network   string
+	Class     string
+	Disks     []ImportedDisk
+}
+
+type ImportedDisk struct {
+	SizeBytes int64
+	Source    map[string]any
+}
+
+func (c *Client) CreateImportedVM(ctx context.Context, v ImportedVM) ([]string, error) {
+	if err := c.guard(); err != nil {
+		return nil, err
+	}
+	if len(v.Disks) == 0 {
+		return nil, errors.New("no disks to import")
+	}
+	var templates, disks, volumes []any
+	var dvs []string
+	for i, d := range v.Disks {
+		disk := "root"
+		if i > 0 {
+			disk = fmt.Sprintf("disk%d", i)
+		}
+		dv := v.Name + "-" + disk
+		gib := int((d.SizeBytes + 1<<30 - 1) >> 30)
+		templates = append(templates, obj{"metadata": obj{"name": dv}, "spec": obj{"source": d.Source, "storage": storageSpec(gib, v.Class)}})
+		dk := obj{"name": disk, "disk": obj{"bus": "virtio"}}
+		if i == 0 {
+			dk["bootOrder"] = int64(1)
+		}
+		disks = append(disks, dk)
+		volumes = append(volumes, obj{"name": disk, "dataVolume": obj{"name": dv}})
+		dvs = append(dvs, dv)
+	}
+	domain := obj{
+		"cpu":    obj{"cores": v.Cores},
+		"memory": obj{"guest": fmt.Sprintf("%dMi", v.MemoryMiB)},
+		"devices": obj{
+			"autoattachPodInterface": false,
+			"disks":                  disks,
+			"interfaces":             []any{obj{"name": "nic0", "model": "virtio", "bridge": obj{}, "macAddress": randomMAC()}},
+		},
+	}
+	if v.Firmware == "efi" {
+		domain["firmware"] = obj{"bootloader": obj{"efi": obj{"secureBoot": false}}}
+	}
+	vm := &unstructured.Unstructured{Object: obj{
+		"apiVersion": "kubevirt.io/v1",
+		"kind":       "VirtualMachine",
+		"metadata":   obj{"name": v.Name},
+		"spec": obj{
+			"runStrategy":         "Halted",
+			"dataVolumeTemplates": templates,
+			"template": obj{
+				"metadata": obj{"labels": obj{"kubevirt.io/vm": v.Name}},
+				"spec": obj{
+					"domain":   domain,
+					"networks": []any{obj{"name": "nic0", "multus": obj{"networkName": v.Network}}},
+					"volumes":  volumes,
+				},
+			},
+		},
+	}}
+	_, err := c.dyn.Resource(vmGVR).Namespace(Namespace).Create(ctx, vm, metav1.CreateOptions{})
+	return dvs, err
+}
