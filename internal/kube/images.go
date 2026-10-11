@@ -2,8 +2,10 @@ package kube
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +13,7 @@ import (
 	"sort"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -199,4 +202,98 @@ func (c *Client) uploadClient(ctx context.Context) (*http.Client, error) {
 		return nil, errors.New("no CDI upload proxy CA")
 	}
 	return &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}}, nil
+}
+
+func imageExportName(name string) string { return "argus-img-" + name }
+
+func (c *Client) ExportImage(ctx context.Context, name, baseURL, caPEM string) (Export, error) {
+	dv, err := c.dyn.Resource(dvGVR).Namespace(Namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return Export{}, err
+	}
+	if dv.GetLabels()[imageLabel] != "true" {
+		return Export{}, fmt.Errorf("%s is not an image", name)
+	}
+	if err := c.DeleteImageExport(ctx, name); err != nil {
+		return Export{}, err
+	}
+	exp := imageExportName(name)
+	if err := c.waitGone(ctx, Namespace, exp); err != nil {
+		return Export{}, err
+	}
+	b := make([]byte, 24)
+	rand.Read(b)
+	token := hex.EncodeToString(b)
+	if err := c.Secrets(Namespace).Create(ctx, exp, "Opaque", map[string][]byte{"token": []byte(token)}); err != nil {
+		return Export{}, err
+	}
+	ve := &unstructured.Unstructured{Object: obj{
+		"apiVersion": "export.kubevirt.io/v1",
+		"kind":       "VirtualMachineExport",
+		"metadata":   obj{"name": exp, "labels": obj{exportLabel: "true"}},
+		"spec": obj{
+			"source":         obj{"apiGroup": "", "kind": "PersistentVolumeClaim", "name": name},
+			"tokenSecretRef": exp,
+			"ttlDuration":    "13h",
+		},
+	}}
+	if _, err := c.dyn.Resource(vmExportGVR).Namespace(Namespace).Create(ctx, ve, metav1.CreateOptions{}); err != nil {
+		return Export{}, err
+	}
+	if err := c.waitExportReady(ctx, Namespace, exp); err != nil {
+		return Export{}, err
+	}
+	size, _, _ := unstructured.NestedString(dv.Object, "spec", "storage", "resources", "requests", "storage")
+	return Export{Spec: obj{"size": size}, Token: token, CA: caPEM, Disks: []ExportDisk{{DataVolume: name, URL: fmt.Sprintf("%s/export/%s/%s/%s", baseURL, Namespace, exp, name)}}}, nil
+}
+
+func (c *Client) DeleteImageExport(ctx context.Context, name string) error {
+	for _, gvr := range []schema.GroupVersionResource{vmExportGVR, secGVR} {
+		if err := c.dyn.Resource(gvr).Namespace(Namespace).Delete(ctx, imageExportName(name), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+func imageImportName(name string) string { return "argus-imgimport-" + name }
+
+func (c *Client) ImportImage(ctx context.Context, name, size string, ex Export) error {
+	if len(ex.Disks) != 1 {
+		return errors.New("an image export has exactly one disk")
+	}
+	if err := c.FinishImageImport(ctx, name); err != nil {
+		return err
+	}
+	src := imageImportName(name)
+	cm := &unstructured.Unstructured{Object: obj{"apiVersion": "v1", "kind": "ConfigMap", "metadata": obj{"name": src}, "data": obj{"ca.pem": ex.CA}}}
+	if _, err := c.dyn.Resource(cmGVR).Namespace(Namespace).Create(ctx, cm, metav1.CreateOptions{}); err != nil {
+		return err
+	}
+	if err := c.Secrets(Namespace).Create(ctx, src, "Opaque", map[string][]byte{"token": []byte("x-kubevirt-export-token: " + ex.Token)}); err != nil {
+		return err
+	}
+	dv := &unstructured.Unstructured{Object: obj{
+		"apiVersion": "cdi.kubevirt.io/v1beta1",
+		"kind":       "DataVolume",
+		"metadata":   obj{"name": name, "labels": obj{imageLabel: "true"}},
+		"spec": obj{
+			"source":  obj{"http": obj{"url": ex.Disks[0].URL, "certConfigMap": src, "secretExtraHeaders": []any{src}}},
+			"storage": obj{"resources": obj{"requests": obj{"storage": size}}},
+		},
+	}}
+	if _, err := c.dyn.Resource(dvGVR).Namespace(Namespace).Create(ctx, dv, metav1.CreateOptions{}); err != nil {
+		c.FinishImageImport(context.Background(), name)
+		return err
+	}
+	return nil
+}
+
+func (c *Client) FinishImageImport(ctx context.Context, name string) error {
+	for _, gvr := range []schema.GroupVersionResource{cmGVR, secGVR} {
+		if err := c.dyn.Resource(gvr).Namespace(Namespace).Delete(ctx, imageImportName(name), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			return err
+		}
+	}
+	return nil
 }

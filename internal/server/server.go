@@ -72,7 +72,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	}
 	s.version = readEnv(o.ReleaseFile)["KAIROS_VERSION"]
 	s.sso.m = map[string]ssoFlow{}
-	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html", "hostnet.html", "dashboard.html", "remote.html", "hostnets.html", "profile.html"} {
+	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html", "hostnet.html", "dashboard.html", "remote.html", "hostnets.html", "profile.html", "manager-images.html"} {
 		t, err := template.New(p).Funcs(funcs).ParseFS(web.FS, "templates/layout.html", "templates/manager-nav.html", "templates/"+p)
 		if err != nil {
 			return nil, err
@@ -134,6 +134,8 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		}))
 		s.mux.HandleFunc("GET /network/hosts", s.require(auth.Admin, s.managerHostNets))
 		s.mux.HandleFunc("GET /vm-new", s.require(auth.Operator, s.managerNewVM))
+		s.mux.HandleFunc("GET /images", s.require(auth.ReadOnly, s.managerImages))
+		s.mux.HandleFunc("POST /images/{op}", s.require(auth.Operator, s.managerImageOp))
 		s.mux.HandleFunc("POST /network/hosts/bridge", s.require(auth.Admin, s.managerBridgeRollout))
 		s.mux.HandleFunc("GET /settings", s.require(auth.Admin, s.managerSettings))
 		s.mux.HandleFunc("POST /settings/sso", s.require(auth.Admin, s.managerSSO))
@@ -181,6 +183,9 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("/api/ui/", s.require(auth.Admin, s.serveUI))
 	s.mux.HandleFunc("GET /api/host/network", s.require(auth.Admin, s.apiHostNetwork))
 	s.mux.HandleFunc("GET /api/host/status", s.require(auth.Admin, s.apiHostStatus))
+	s.mux.HandleFunc("GET /api/images", s.require(auth.Admin, s.apiImages))
+	s.mux.HandleFunc("POST /api/images/import", s.require(auth.Admin, s.apiImportImage))
+	s.mux.HandleFunc("POST /api/images/{name}/{op}", s.require(auth.Admin, s.apiImageOp))
 	s.mux.HandleFunc("GET /api/host/settings", s.require(auth.Admin, s.apiHostSettings))
 	s.mux.HandleFunc("POST /api/host/settings", s.require(auth.Admin, s.apiApplyHostSettings))
 	s.mux.HandleFunc("POST /api/host/power/{action}", s.require(auth.Admin, s.apiHostRequest))

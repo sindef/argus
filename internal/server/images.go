@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,8 +12,10 @@ import (
 	"net/url"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"argus/internal/auth"
+	"argus/internal/kube"
 )
 
 var validObject = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
@@ -131,4 +134,66 @@ func diskImage(b []byte) bool {
 		return true
 	}
 	return false
+}
+
+func (s *Server) apiImages(w http.ResponseWriter, r *http.Request) {
+	imgs, err := s.kube.ListImages(r.Context())
+	if err != nil {
+		apiError(w, r, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, imgs)
+}
+
+type imageImportReq struct {
+	Name   string       `json:"name"`
+	Size   string       `json:"size"`
+	URL    string       `json:"url"`
+	Export *kube.Export `json:"export"`
+}
+
+func (s *Server) apiImportImage(w http.ResponseWriter, r *http.Request) {
+	var req imageImportReq
+	err := json.NewDecoder(r.Body).Decode(&req)
+	switch {
+	case err != nil || !validObject.MatchString(req.Name) || req.Size == "":
+		err = errors.New("name and size required")
+	case req.Export != nil:
+		err = s.kube.ImportImage(r.Context(), req.Name, req.Size, *req.Export)
+	case strings.HasPrefix(req.URL, "https://") || strings.HasPrefix(req.URL, "http://"):
+		err = s.kube.CreateImage(r.Context(), req.Name, req.Size, req.URL)
+	default:
+		err = errors.New("url or export required")
+	}
+	if err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	log.Printf("%s: import image %s", session(r).User, req.Name)
+	writeJSON(w, map[string]string{})
+}
+
+func (s *Server) apiImageOp(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	var err error
+	var out any = map[string]string{}
+	switch r.PathValue("op") {
+	case "export":
+		var req struct{ BaseURL string }
+		json.NewDecoder(r.Body).Decode(&req)
+		out, err = s.kube.ExportImage(r.Context(), name, req.BaseURL, string(s.caPEM))
+	case "unexport":
+		err = s.kube.DeleteImageExport(r.Context(), name)
+	case "imported":
+		err = s.kube.FinishImageImport(r.Context(), name)
+	case "delete":
+		err = s.kube.DeleteImage(r.Context(), name)
+	default:
+		err = errors.New("unknown operation")
+	}
+	if err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, out)
 }
