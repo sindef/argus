@@ -147,19 +147,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("POST /groups/{op}", s.requireOrg(auth.Admin, s.groupAction))
 		s.mux.HandleFunc("POST /hosts/{node}/delete", s.requireOrg(auth.Admin, s.managerRemoveNode))
 		s.mux.HandleFunc("GET /hosts/{node}/{path...}", s.require(auth.ReadOnly, s.managerHostUI))
-		s.mux.HandleFunc("POST /hosts/{node}/{path...}", s.require(auth.Admin, s.managerHostUI))
-		s.mux.HandleFunc("POST /hosts/{node}/vms/{ns}/{name}/hardware/{op}", s.require(auth.Operator, func(w http.ResponseWriter, r *http.Request) {
-			r.SetPathValue("path", "vms/"+r.PathValue("ns")+"/"+r.PathValue("name")+"/hardware/"+r.PathValue("op"))
-			s.managerHostUI(w, r)
-		}))
-		s.mux.HandleFunc("POST /hosts/{node}/vms/import/{source}", s.require(auth.Operator, func(w http.ResponseWriter, r *http.Request) {
-			r.SetPathValue("path", "vms/import/"+r.PathValue("source"))
-			s.managerHostUI(w, r)
-		}))
-		s.mux.HandleFunc("POST /hosts/{node}/vms", s.require(auth.Operator, func(w http.ResponseWriter, r *http.Request) {
-			r.SetPathValue("path", "vms")
-			s.managerHostUI(w, r)
-		}))
+		s.mux.HandleFunc("POST /hosts/{node}/{path...}", s.require(auth.ReadOnly, s.managerHostUI))
 		s.mux.HandleFunc("GET /network/hosts", s.requireOrg(auth.Admin, s.managerHostNets))
 		s.mux.HandleFunc("GET /vm-new", s.require(auth.Operator, s.managerNewVM))
 		s.mux.HandleFunc("GET /images", s.require(auth.ReadOnly, s.managerImages))
@@ -173,25 +161,13 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("POST /settings/migration", s.requireOrg(auth.Admin, s.managerMigrationSettings))
 		return s, nil
 	}
+	for _, hr := range hostRoutes {
+		h := hr.h
+		s.hostRoute(hr.pattern, hr.role, func(w http.ResponseWriter, r *http.Request) { h(s, w, r) })
+	}
 	s.mux.HandleFunc("GET /events", s.require(auth.ReadOnly, s.eventsPage))
 	s.mux.HandleFunc("GET /volumes", s.require(auth.ReadOnly, s.volumesPage))
 	s.mux.HandleFunc("POST /volumes/{op}", s.require(auth.Operator, s.volumeAction))
-	s.hostRoute("GET /dashboard", auth.ReadOnly, s.dashboard)
-	s.hostRoute("GET /dashboard/stats", auth.ReadOnly, s.dashboardStats)
-	s.hostRoute("GET /disks", auth.Admin, s.disksPage)
-	s.hostRoute("GET /disks/{name}", auth.Admin, s.diskModal)
-	s.hostRoute("POST /disks/{name}/{action}", auth.Admin, s.diskAction)
-	s.hostRoute("GET /network/host", auth.Admin, s.hostNetworkPage)
-	s.hostRoute("GET /network/host/iface/{name}", auth.Admin, s.ifaceModal)
-	s.hostRoute("POST /network/host/{op}", auth.Admin, s.hostNetworkAction)
-	s.hostRoute("GET /pools", auth.Admin, s.poolsPage)
-	s.hostRoute("GET /pools/new", auth.Admin, s.poolModal)
-	s.hostRoute("GET /pools/{name}/add", auth.Admin, s.poolModal)
-	s.hostRoute("POST /pools", auth.Admin, func(w http.ResponseWriter, r *http.Request) {
-		r.SetPathValue("op", "create")
-		s.poolAction(w, r)
-	})
-	s.hostRoute("POST /pools/{name}/{op}", auth.Admin, s.poolAction)
 	s.mux.HandleFunc("GET /images", s.require(auth.ReadOnly, s.images))
 	s.mux.HandleFunc("POST /images", s.require(auth.Operator, s.importImage))
 	s.mux.HandleFunc("POST /images/upload", s.require(auth.Operator, s.uploadImage))
@@ -264,10 +240,6 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/abort", s.require(auth.Admin, s.apiAbort))
 	s.mux.HandleFunc("GET /{$}", s.require(auth.ReadOnly, s.vms))
 	s.mux.HandleFunc("GET /vms", s.require(auth.ReadOnly, s.vmTable))
-	s.hostRoute("GET /vms/new", auth.Operator, s.newVM)
-	s.hostRoute("POST /vms", auth.Operator, s.createVM)
-	s.hostRoute("GET /vms/import", auth.Operator, s.importModal)
-	s.hostRoute("POST /vms/import/{source}", auth.Operator, s.importVM)
 	s.mux.HandleFunc("GET /vms/{ns}/{name}", s.require(auth.ReadOnly, s.vms))
 	s.mux.HandleFunc("GET /vms/{ns}/{name}/drawer", s.require(auth.ReadOnly, s.vmDrawer))
 	s.mux.HandleFunc("GET /nav/vms", s.require(auth.ReadOnly, s.navVMs))
@@ -276,9 +248,6 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/disks", s.require(auth.Operator, s.addDisk))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/disks/move", s.require(auth.Operator, s.moveDiskForm))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/tags", s.require(auth.Operator, s.setTags))
-	s.hostRoute("GET /vms/{ns}/{name}/hardware", auth.Operator, s.hardwareModal)
-	s.hostRoute("GET /vms/{ns}/{name}/disks/{disk}/download", auth.Operator, s.downloadDisk)
-	s.hostRoute("POST /vms/{ns}/{name}/hardware/{op}", auth.Operator, s.hardwareAction)
 	s.mux.HandleFunc("GET /vms/{ns}/{name}/disks/new", s.require(auth.Operator, s.newDisk))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/disks/{disk}/delete", s.require(auth.Operator, s.removeDisk))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/snapshots", s.require(auth.Operator, s.snapshot))
@@ -322,6 +291,50 @@ func sameOrigin(r *http.Request) bool {
 		origin = ref.Scheme + "://" + ref.Host
 	}
 	return origin == "https://"+r.Host
+}
+
+type hostRouteDef struct {
+	pattern string
+	role    auth.Role
+	h       func(*Server, http.ResponseWriter, *http.Request)
+}
+
+var hostRoutes = []hostRouteDef{
+	{"GET /dashboard", auth.ReadOnly, (*Server).dashboard},
+	{"GET /dashboard/stats", auth.ReadOnly, (*Server).dashboardStats},
+	{"GET /disks", auth.Admin, (*Server).disksPage},
+	{"GET /disks/{name}", auth.Admin, (*Server).diskModal},
+	{"POST /disks/{name}/{action}", auth.Admin, (*Server).diskAction},
+	{"GET /network/host", auth.Admin, (*Server).hostNetworkPage},
+	{"GET /network/host/iface/{name}", auth.Admin, (*Server).ifaceModal},
+	{"POST /network/host/{op}", auth.Admin, (*Server).hostNetworkAction},
+	{"GET /pools", auth.Admin, (*Server).poolsPage},
+	{"GET /pools/new", auth.Admin, (*Server).poolModal},
+	{"GET /pools/{name}/add", auth.Admin, (*Server).poolModal},
+	{"POST /pools", auth.Admin, (*Server).createPool},
+	{"POST /pools/{name}/{op}", auth.Admin, (*Server).poolAction},
+	{"GET /vms/new", auth.Operator, (*Server).newVM},
+	{"POST /vms", auth.Operator, (*Server).createVM},
+	{"GET /vms/import", auth.Operator, (*Server).importModal},
+	{"POST /vms/import/{source}", auth.Operator, (*Server).importVM},
+	{"GET /vms/{ns}/{name}/hardware", auth.Operator, (*Server).hardwareModal},
+	{"POST /vms/{ns}/{name}/hardware/{op}", auth.Operator, (*Server).hardwareAction},
+	{"GET /vms/{ns}/{name}/disks/{disk}/download", auth.Operator, (*Server).downloadDisk},
+}
+
+var hostPolicy, hostRoles = func() (*http.ServeMux, map[string]auth.Role) {
+	mux, roles := http.NewServeMux(), map[string]auth.Role{}
+	for _, hr := range hostRoutes {
+		mux.HandleFunc(hr.pattern, func(http.ResponseWriter, *http.Request) {})
+		roles[hr.pattern] = hr.role
+	}
+	return mux, roles
+}()
+
+func hostRouteRole(method, path string) (auth.Role, bool) {
+	_, pattern := hostPolicy.Handler(&http.Request{Method: method, URL: &url.URL{Path: path}})
+	role, ok := hostRoles[pattern]
+	return role, ok
 }
 
 func (s *Server) hostRoute(pattern string, min auth.Role, h http.HandlerFunc) {

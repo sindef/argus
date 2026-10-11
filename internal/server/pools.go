@@ -160,3 +160,8 @@ func (s *Server) poolAction(w http.ResponseWriter, r *http.Request) {
 	log.Printf("%s: pool %s %s", session(r).User, op, name)
 	w.Header().Set("HX-Refresh", "true")
 }
+
+func (s *Server) createPool(w http.ResponseWriter, r *http.Request) {
+	r.SetPathValue("op", "create")
+	s.poolAction(w, r)
+}

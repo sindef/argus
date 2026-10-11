@@ -26,6 +26,15 @@ func (s *Server) managerHostUI(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
+	role, ok := hostRouteRole(r.Method, "/"+r.PathValue("path"))
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	if !session(r).Role.Can(role) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 	path := "/api/ui/" + r.PathValue("path")
 	if r.URL.RawQuery != "" {
 		path += "?" + r.URL.RawQuery
