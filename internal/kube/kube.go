@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -52,6 +53,7 @@ type VM struct {
 	Name         string
 	DisplayName  string
 	Status       string
+	Template     bool
 	Backup       string
 	Running      bool
 	Cores        int64
@@ -208,13 +210,38 @@ func (c *Client) GetVM(ctx context.Context, ns, name string) (VM, error) {
 
 func ValidAction(action string) bool {
 	switch action {
-	case "start", "stop", "restart", "pause", "unpause":
+	case "start", "stop", "restart", "pause", "unpause", "template", "untemplate":
 		return true
 	}
 	return false
 }
 
+const TemplateLabel = "argus.io/template"
+
+func (c *Client) setTemplate(ctx context.Context, ns, name string, on bool) error {
+	if on {
+		if _, err := c.dyn.Resource(vmiGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+			return fmt.Errorf("power off %s first", name)
+		}
+	}
+	value := "null"
+	if on {
+		value = `"true"`
+	}
+	patch := []byte(`{"metadata":{"labels":{"` + TemplateLabel + `":` + value + `}}}`)
+	_, err := c.dyn.Resource(vmGVR).Namespace(ns).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	return err
+}
+
 func (c *Client) Action(ctx context.Context, ns, name, action string) error {
+	if action == "template" || action == "untemplate" {
+		return c.setTemplate(ctx, ns, name, action == "template")
+	}
+	if action == "start" || action == "restart" {
+		if vm, err := c.dyn.Resource(vmGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err == nil && vm.GetLabels()[TemplateLabel] == "true" {
+			return fmt.Errorf("%s is a template; convert it to a VM first", name)
+		}
+	}
 	if err := c.Power(ctx, ns, name, action); err != nil {
 		return err
 	}
@@ -306,7 +333,7 @@ func subresourcePath(ns, resource, name, sub string) string {
 
 func toVM(v, vmi *unstructured.Unstructured) VM {
 	o := v.Object
-	vm := VM{Namespace: v.GetNamespace(), Name: v.GetName(), DisplayName: v.GetAnnotations()[displayNameAnnotation], Backup: v.GetAnnotations()[BackupAnnotation]}
+	vm := VM{Namespace: v.GetNamespace(), Name: v.GetName(), DisplayName: v.GetAnnotations()[displayNameAnnotation], Backup: v.GetAnnotations()[BackupAnnotation], Template: v.GetLabels()[TemplateLabel] == "true"}
 	vm.Status, _, _ = unstructured.NestedString(o, "status", "printableStatus")
 	templates, _, _ := unstructured.NestedSlice(o, "spec", "dataVolumeTemplates")
 	for _, t := range templates {

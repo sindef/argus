@@ -46,8 +46,11 @@
   <a href="{{.Page}}/console">{{template "icon" "terminal"}}Open Console</a>
   {{else if eq $v.Status "Paused"}}
   <button hx-post="{{.Page}}/unpause">{{template "icon" "play"}}Resume</button>
+  {{else if $v.Template}}
+  <button hx-post="{{.Page}}/untemplate">{{template "icon" "monitor"}}Convert to VM</button>
   {{else}}
   <button hx-post="{{.Page}}/start">{{template "icon" "play"}}Power on</button>
+  <button hx-post="{{.Page}}/template" hx-confirm="Convert {{$v.Label}} to a template?">{{template "icon" "copy"}}Convert to template</button>
   {{end}}
   <hr>
   {{if .IsAdmin}}<a href="{{.Page}}#migrate">{{template "icon" "arrow-right-left"}}Migrate</a>{{end}}

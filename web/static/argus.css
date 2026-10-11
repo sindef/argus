@@ -265,6 +265,7 @@ h1 .dot { font-size: 14px; font-weight: 400; }
 .addr-form:not(:has(input[name=ipv4][value=static]:checked)) .v4-static,
 .addr-form:not(:has(input[name=ipv6][value=static]:checked)) .v6-static { display: none; }
 .addr-head { display: flex; align-items: center; gap: 12px; }
+.vm-form:not(:has(input[name=ipmode][value=static]:checked)) .guest-static { display: none; }
 .addr-head .field { width: 48px; }
 .modal-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .modal-head h2 { margin: 0; }

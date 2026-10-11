@@ -3,10 +3,12 @@ package kube
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"net"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/util/retry"
@@ -23,6 +25,56 @@ type VMSpec struct {
 	UserData     string
 	Start        bool
 	StorageClass string
+	Guest        Guest
+}
+
+type Guest struct {
+	Hostname string
+	User     string
+	SSHKeys  []string
+	Password string
+	Address  string
+	Gateway  string
+	DNS      []string
+}
+
+func (g Guest) userData() string {
+	if g.Hostname == "" && g.User == "" {
+		return ""
+	}
+	cfg := obj{}
+	if g.Hostname != "" {
+		cfg["hostname"] = g.Hostname
+		cfg["fqdn"] = g.Hostname
+	}
+	if g.User != "" {
+		u := obj{"name": g.User, "sudo": "ALL=(ALL) NOPASSWD:ALL", "shell": "/bin/bash", "lock_passwd": g.Password == ""}
+		if len(g.SSHKeys) > 0 {
+			u["ssh_authorized_keys"] = g.SSHKeys
+		}
+		cfg["users"] = []any{"default", u}
+		if g.Password != "" {
+			cfg["chpasswd"] = obj{"expire": false, "users": []any{obj{"name": g.User, "password": g.Password, "type": "text"}}}
+			cfg["ssh_pwauth"] = true
+		}
+	}
+	b, _ := json.Marshal(cfg)
+	return "#cloud-config\n" + string(b) + "\n"
+}
+
+func (g Guest) networkData(mac string) string {
+	if g.Address == "" {
+		return ""
+	}
+	eth := obj{"match": obj{"macaddress": mac}, "set-name": "eth0", "addresses": []string{g.Address}}
+	if g.Gateway != "" {
+		eth["routes"] = []any{obj{"to": "default", "via": g.Gateway}}
+	}
+	if len(g.DNS) > 0 {
+		eth["nameservers"] = obj{"addresses": g.DNS}
+	}
+	b, _ := json.Marshal(obj{"version": 2, "ethernets": obj{"eth0": eth}})
+	return string(b)
 }
 
 func storageSpec(sizeGiB int, class string) obj {
@@ -54,9 +106,21 @@ func (c *Client) CreateVM(ctx context.Context, s VMSpec) error {
 		disks = append(disks, obj{"name": "cdrom", "bootOrder": cdBoot, "cdrom": obj{"bus": "sata"}})
 		volumes = append(volumes, obj{"name": "cdrom", "persistentVolumeClaim": obj{"claimName": s.CDROM, "readOnly": true}})
 	}
-	if s.UserData != "" {
+	mac := randomMAC()
+	userData, networkData := s.UserData, s.Guest.networkData(mac)
+	if userData == "" {
+		userData = s.Guest.userData()
+	}
+	if userData != "" || networkData != "" {
+		ci := obj{"userData": userData}
+		if userData == "" {
+			ci["userData"] = "#cloud-config\n{}\n"
+		}
+		if networkData != "" {
+			ci["networkData"] = networkData
+		}
 		disks = append(disks, obj{"name": "cloudinit", "disk": obj{"bus": "virtio"}})
-		volumes = append(volumes, obj{"name": "cloudinit", "cloudInitNoCloud": obj{"userData": s.UserData}})
+		volumes = append(volumes, obj{"name": "cloudinit", "cloudInitNoCloud": ci})
 	}
 	strategy := "Halted"
 	if s.Start {
@@ -84,7 +148,7 @@ func (c *Client) CreateVM(ctx context.Context, s VMSpec) error {
 						"devices": obj{
 							"autoattachPodInterface": false,
 							"disks":                  disks,
-							"interfaces":             []interface{}{obj{"name": "nic0", "model": "virtio", "bridge": obj{}, "macAddress": randomMAC()}},
+							"interfaces":             []interface{}{obj{"name": "nic0", "model": "virtio", "bridge": obj{}, "macAddress": mac}},
 						},
 					},
 					"networks": []interface{}{obj{"name": "nic0", "multus": obj{"networkName": s.Network}}},
@@ -211,4 +275,49 @@ func without(items []interface{}, drop func(obj) bool) []interface{} {
 		out = append(out, it)
 	}
 	return out
+}
+
+type Template struct {
+	Name      string
+	Root      string
+	Cores     int64
+	MemoryMiB int64
+	DiskGiB   int64
+}
+
+func (c *Client) Templates(ctx context.Context) ([]Template, error) {
+	list, err := c.dyn.Resource(vmGVR).Namespace(Namespace).List(ctx, metav1.ListOptions{LabelSelector: TemplateLabel + "=true"})
+	if err != nil {
+		return nil, err
+	}
+	var out []Template
+	for _, v := range list.Items {
+		t := Template{Name: v.GetName()}
+		t.Cores, _, _ = unstructured.NestedInt64(v.Object, "spec", "template", "spec", "domain", "cpu", "cores")
+		if m, ok, _ := unstructured.NestedString(v.Object, "spec", "template", "spec", "domain", "memory", "guest"); ok {
+			if q, err := resource.ParseQuantity(m); err == nil {
+				t.MemoryMiB = q.Value() >> 20
+			}
+		}
+		vols, _, _ := unstructured.NestedSlice(v.Object, "spec", "template", "spec", "volumes")
+		for _, vol := range vols {
+			if vol.(obj)["name"] == "root" {
+				t.Root, _, _ = unstructured.NestedString(vol.(obj), "dataVolume", "name")
+			}
+		}
+		tpls, _, _ := unstructured.NestedSlice(v.Object, "spec", "dataVolumeTemplates")
+		for _, d := range tpls {
+			if n, _, _ := unstructured.NestedString(d.(obj), "metadata", "name"); n == t.Root {
+				if s, ok, _ := unstructured.NestedString(d.(obj), "spec", "storage", "resources", "requests", "storage"); ok {
+					if q, err := resource.ParseQuantity(s); err == nil {
+						t.DiskGiB = q.Value() >> 30
+					}
+				}
+			}
+		}
+		if t.Root != "" {
+			out = append(out, t)
+		}
+	}
+	return out, nil
 }

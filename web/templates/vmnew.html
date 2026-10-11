@@ -1,10 +1,19 @@
 {{define "content"}}{{template "modal" .}}{{end}}
 
 {{define "modal"}}
-<form hx-post="/vms" hx-target="#vm-form-error" class="form">
+<form hx-post="{{.Base}}/vms" hx-target="#vm-form-error" class="form vm-form">
   <h2>Create VM</h2>
   <p id="vm-form-error" class="error form-error">{{.Error}}</p>
-  <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required autofocus></label>
+  <div class="row">
+    <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required autofocus></label>
+    <label>Source
+      <select name="image" data-prefill>
+        <option value="">Empty disk</option>
+        {{with .Templates}}<optgroup label="Templates">{{range .}}<option value="tpl:{{.Name}}" data-cores="{{.Cores}}" data-memory="{{.MemoryMiB}}" data-disk="{{.DiskGiB}}">{{.Name}}</option>{{end}}</optgroup>{{end}}
+        {{with .Images}}<optgroup label="Images">{{range .}}<option value="{{.Name}}">{{.Name}}</option>{{end}}</optgroup>{{end}}
+      </select>
+    </label>
+  </div>
   <div class="row">
     <label>vCPUs <input name="cores" type="number" min="1" max="64" value="2" required></label>
     <label>Memory (MiB) <input name="memory" type="number" min="128" max="262144" step="128" value="2048" required></label>
@@ -14,19 +23,33 @@
     </label>
   </div>
   <div class="row">
-    <label>Disk source
-      <select name="image"><option value="">Empty disk</option>{{range .Images}}<option value="{{.Name}}">{{.Name}}</option>{{end}}</select>
+    <label>Network
+      <select name="network" required>{{range .Networks}}<option value="{{.Name}}">{{.Name}}{{if .VLAN}} (VLAN {{.VLAN}}){{end}}</option>{{end}}</select>
     </label>
     <label>CD-ROM
       <select name="cdrom"><option value="">None</option>{{range .Images}}<option value="{{.Name}}">{{.Name}}</option>{{end}}</select>
     </label>
-    <label>Network
-      <select name="network" required>{{range .Networks}}<option value="{{.Name}}">{{.Name}}{{if .VLAN}} (VLAN {{.VLAN}}){{end}}</option>{{end}}</select>
-    </label>
   </div>
   <details>
-    <summary>Cloud-init</summary>
-    <textarea name="userdata" rows="8" placeholder="#cloud-config" style="margin-top:8px"></textarea>
+    <summary>Guest customisation <span class="help" title="Applied by cloud-init on first boot. Needs a cloud-init enabled image.">?</span></summary>
+    <div class="row spaced">
+      <label>Hostname <input name="hostname" placeholder="web-01"></label>
+      <label>User <input name="user" placeholder="admin"></label>
+      <label>Password <input name="password" type="password" autocomplete="new-password"></label>
+    </div>
+    <label>SSH public keys <textarea name="ssh_keys" rows="2" placeholder="ssh-ed25519 AAAA… one per line"></textarea></label>
+    <div class="addr-head spaced"><span class="field">IP</span><div class="seg">
+      <label><input type="radio" name="ipmode" value="dhcp" checked> DHCP</label><label><input type="radio" name="ipmode" value="static"> Static</label>
+    </div></div>
+    <div class="row guest-static">
+      <label>Address (CIDR) <input name="address" placeholder="192.168.1.20/24"></label>
+      <label>Gateway <input name="gateway" placeholder="192.168.1.1"></label>
+      <label>DNS <input name="dns" placeholder="1.1.1.1"></label>
+    </div>
+  </details>
+  <details>
+    <summary>Advanced</summary>
+    <label class="spaced">Cloud-init user-data <span class="help" title="Replaces the generated user-data; static IP settings still apply.">?</span><textarea name="userdata" rows="6" placeholder="#cloud-config"></textarea></label>
   </details>
   <label class="check"><input name="start" type="checkbox" checked> Power on after creation</label>
   <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">{{template "icon" "plus"}}Create VM</button></div>

@@ -44,7 +44,7 @@
   {{range .VMs}}
   <tr class="clickable{{if $.Selected.Has .Namespace .Name}} selected{{end}}" data-href="/vms/{{.Namespace}}/{{.Name}}/drawer" data-page="/vms/{{.Namespace}}/{{.Name}}"{{if $.CanOperate}} data-context{{end}}>
     {{if $.CanOperate}}<td><input type="checkbox" name="sel" value="{{.Namespace}}/{{.Name}}"{{if $.Selected.Has .Namespace .Name}} checked{{end}} aria-label="Select {{.Label}}"></td>{{end}}
-    <td>{{template "icon" "monitor"}}{{.Label}}{{if $.CanOperate}}{{template "vm-ctx" .}}{{end}}</td>
+    <td>{{template "icon" "monitor"}}{{.Label}}{{if .Template}} <span class="badge">template</span>{{end}}{{if $.CanOperate}}{{template "vm-ctx" .}}{{end}}</td>
     <td><span class="dot {{.Status}}">{{.Status}}</span></td>
     <td>{{range .IPs}}{{.}} {{else}}<span class="muted">—</span>{{end}}</td>
     <td>{{if .Node}}{{.Node}}{{else}}<span class="muted">{{$.NodeName}}</span>{{end}}</td>
@@ -168,9 +168,12 @@
   <a href="{{$p}}/console">{{template "icon" "terminal"}}Open Console</a>
   {{else if eq .Status "Paused"}}
   <button hx-post="{{$p}}/unpause">{{template "icon" "play"}}Resume</button>
+  {{else if .Template}}
+  <button hx-post="{{$p}}/untemplate">{{template "icon" "monitor"}}Convert to VM</button>
   {{else}}
   <button hx-post="{{$p}}/start">{{template "icon" "play"}}Power on</button>
   <button hx-get="{{$p}}/disks/new" hx-target="#modal">{{template "icon" "hard-drive"}}Add disk</button>
+  <button hx-post="{{$p}}/template" hx-confirm="Convert {{.Label}} to a template? It can no longer be powered on until converted back.">{{template "icon" "copy"}}Convert to template</button>
   {{end}}
   <hr>
   <button hx-post="{{$p}}/snapshots">{{template "icon" "camera"}}Snapshot</button>

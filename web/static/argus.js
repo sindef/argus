@@ -101,7 +101,13 @@
     const sel = document.querySelector("select[name=org]"), sso = document.getElementById("sso");
     if (sel && sso) sso.hidden = !sel.selectedOptions[0]?.hasAttribute("data-sso");
   };
-  document.addEventListener("change", (e) => { if (e.target.matches("select[name=org]")) syncSSO(); });
+  document.addEventListener("change", (e) => {
+    if (e.target.matches("select[name=org]")) syncSSO();
+    if (e.target.matches("select[data-prefill]")) {
+      const o = e.target.selectedOptions[0];
+      for (const [k, v] of Object.entries(o.dataset)) { const i = e.target.form.querySelector(`[name="${k}"]`); if (i) i.value = v; }
+    }
+  });
 
   document.addEventListener("htmx:afterRequest", (e) => {
     const d = e.target.closest("dialog");

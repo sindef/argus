@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -250,7 +252,8 @@ func (s *Server) newVM(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("HX-Request") != "" {
 		tmpl = "modal"
 	}
-	s.render(w, r, "vmnew.html", tmpl, map[string]any{"Images": imgs, "Networks": nets, "Pools": s.poolChoices(r.Context()), "Error": errText(err)})
+	tpls, _ := s.kube.Templates(r.Context())
+	s.render(w, r, "vmnew.html", tmpl, map[string]any{"Images": imgs, "Templates": tpls, "Networks": nets, "Pools": s.poolChoices(r.Context()), "Error": errText(err)})
 }
 
 func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {
@@ -261,6 +264,19 @@ func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {
 		Network:  r.FormValue("network"),
 		UserData: r.FormValue("userdata"),
 		Start:    r.FormValue("start") != "",
+		Guest: kube.Guest{
+			Hostname: strings.TrimSpace(r.FormValue("hostname")),
+			User:     strings.TrimSpace(r.FormValue("user")),
+			SSHKeys:  slices.DeleteFunc(strings.Split(strings.TrimSpace(r.FormValue("ssh_keys")), "\n"), func(k string) bool { return strings.TrimSpace(k) == "" }),
+			Password: r.FormValue("password"),
+			Address:  map[bool]string{true: strings.TrimSpace(r.FormValue("address"))}[r.FormValue("ipmode") == "static"],
+			Gateway:  strings.TrimSpace(r.FormValue("gateway")),
+			DNS:      fields(r.FormValue("dns")),
+		},
+	}
+	if err := validGuest(spec.Guest); err != nil {
+		flash(w, r, err)
+		return
 	}
 	err := intField(r, "cores", 1, 64, &spec.Cores)
 	if err == nil {
@@ -277,6 +293,18 @@ func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {
 	}
 	if err == nil {
 		spec.StorageClass, err = s.poolClass(r.Context(), r.FormValue("pool"))
+	}
+	if tpl, ok := strings.CutPrefix(spec.Image, "tpl:"); ok && err == nil {
+		err = fmt.Errorf("template %s not found", tpl)
+		tpls, _ := s.kube.Templates(r.Context())
+		for _, t := range tpls {
+			if t.Name == tpl {
+				spec.Image, err = t.Root, nil
+				if int64(spec.DiskGiB) < t.DiskGiB {
+					err = fmt.Errorf("disk must be at least %d GiB for template %s", t.DiskGiB, tpl)
+				}
+			}
+		}
 	}
 	if err == nil {
 		err = s.kube.CreateVM(r.Context(), spec)
@@ -388,4 +416,36 @@ func (s *Server) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 func (s *Server) eventsPage(w http.ResponseWriter, r *http.Request) {
 	evs, err := s.kube.Events(r.Context(), "default", "", 200)
 	s.render(w, r, "events.html", "layout", map[string]any{"Events": evs, "Error": errText(err), "Nav": "events"})
+}
+
+var validHostname = regexp.MustCompile(`^[a-z0-9]([-a-z0-9.]{0,62}[a-z0-9])?$`)
+
+func validGuest(g kube.Guest) error {
+	switch {
+	case g.Hostname != "" && !validHostname.MatchString(g.Hostname):
+		return errors.New("invalid hostname")
+	case g.User != "" && !validName.MatchString(g.User):
+		return errors.New("invalid user name")
+	case (len(g.SSHKeys) > 0 || g.Password != "") && g.User == "":
+		return errors.New("SSH keys and password need a user")
+	}
+	if g.Address != "" {
+		if _, _, err := net.ParseCIDR(g.Address); err != nil {
+			return errors.New("address must be a CIDR, e.g. 192.168.1.20/24")
+		}
+	}
+	if g.Gateway != "" && net.ParseIP(g.Gateway) == nil {
+		return errors.New("invalid gateway")
+	}
+	for _, d := range g.DNS {
+		if net.ParseIP(d) == nil {
+			return fmt.Errorf("invalid DNS server %q", d)
+		}
+	}
+	for _, k := range g.SSHKeys {
+		if !strings.HasPrefix(strings.TrimSpace(k), "ssh-") && !strings.HasPrefix(strings.TrimSpace(k), "ecdsa-") {
+			return errors.New("SSH keys must be OpenSSH public keys")
+		}
+	}
+	return nil
 }
