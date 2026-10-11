@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"mime"
 	"errors"
 	"fmt"
 	"html/template"
@@ -52,22 +53,47 @@ func (s *Server) managerHostUI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	page := r.Method == http.MethodGet && r.Header.Get("HX-Request") == "" && resp.StatusCode == http.StatusOK && strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html")
+	base := "/hosts/" + n.Name
+	ct, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	binary := ct == "application/json" || ct == "application/gzip" || ct == "application/octet-stream"
+	isHTML := r.Header.Get("HX-Request") != "" || !binary
+	page := r.Method == http.MethodGet && r.Header.Get("HX-Request") == "" && resp.StatusCode == http.StatusOK && isHTML
 	if !page {
-		for k, v := range resp.Header {
-			if strings.HasPrefix(k, "Hx-") || k == "Content-Type" || k == "Content-Length" || k == "Content-Disposition" {
-				w.Header()[k] = v
+		for _, k := range []string{"Hx-Refresh", "Hx-Retarget", "Hx-Reswap"} {
+			if v := resp.Header.Get(k); v != "" {
+				w.Header().Set(k, v)
 			}
 		}
+		for _, k := range []string{"Hx-Redirect", "Hx-Location", "Hx-Push-Url", "Hx-Replace-Url"} {
+			if v := resp.Header.Get(k); v != "" && safeRedirect(v, n.Name) {
+				w.Header().Set(k, v)
+			}
+		}
+		if !isHTML {
+			for _, k := range []string{"Content-Type", "Content-Length", "Content-Disposition"} {
+				if v := resp.Header.Get(k); v != "" {
+					w.Header().Set(k, v)
+				}
+			}
+			if w.Header().Get("Content-Type") == "" {
+				w.Header().Set("Content-Type", "application/octet-stream")
+			}
+			w.WriteHeader(resp.StatusCode)
+			io.Copy(w, resp.Body)
+			return
+		}
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(resp.StatusCode)
-		io.Copy(w, resp.Body)
+		w.Write(sanitizeHTML(body, base))
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
 		flash(w, r, err)
 		return
 	}
+	body := sanitizeHTML(raw, base)
 	s.render(w, r, "remote.html", "layout", map[string]any{"Nav": "host:" + n.Name, "Host": n.Name, "Tabs": hostTabs, "Tab": r.PathValue("path"), "Body": template.HTML(body)})
 }
 
