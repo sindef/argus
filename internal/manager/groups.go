@@ -14,8 +14,17 @@ import (
 )
 
 type Group struct {
-	Datacenter string   `json:"datacenter"`
-	Clusters   []string `json:"clusters"`
+	Datacenter string             `json:"datacenter"`
+	Clusters   []string           `json:"clusters"`
+	Profiles   map[string]Profile `json:"profiles,omitempty"`
+}
+
+type Profile struct {
+	DNS             []string `json:"dns,omitempty"`
+	NTP             []string `json:"ntp,omitempty"`
+	Syslog          string   `json:"syslog,omitempty"`
+	MigrationBridge string   `json:"migrationBridge,omitempty"`
+	Networks        bool     `json:"networks,omitempty"`
 }
 
 var validGroup = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$`)
@@ -165,6 +174,10 @@ func (c *Manager) RenameCluster(ctx context.Context, org, dc, cl, name string) e
 			return nil, fmt.Errorf("cluster %s already exists in %s", name, dc)
 		}
 		gs[i].Clusters[slices.Index(gs[i].Clusters, cl)] = name
+		if p, ok := gs[i].Profiles[cl]; ok {
+			delete(gs[i].Profiles, cl)
+			gs[i].Profiles[name] = p
+		}
 		for j := range nodes {
 			if nodes[j].Org == org && nodes[j].Datacenter == dc && nodes[j].Cluster == cl {
 				nodes[j].Cluster = name
@@ -189,6 +202,7 @@ func (c *Manager) DeleteGroup(ctx context.Context, org, dc, cl string) error {
 			return slices.Delete(gs, i, i+1), nil
 		}
 		gs[i].Clusters = slices.DeleteFunc(gs[i].Clusters, func(x string) bool { return x == cl })
+		delete(gs[i].Profiles, cl)
 		return gs, nil
 	})
 }
@@ -215,5 +229,30 @@ func (c *Manager) MoveNode(ctx context.Context, org, name, dc, cl string) error 
 			}
 		}
 		return nil, fmt.Errorf("host %s not found", name)
+	})
+}
+
+func (c *Manager) Profile(ctx context.Context, org, dc, cl string) (Profile, error) {
+	gs, err := c.Groups(ctx, org)
+	if err != nil {
+		return Profile{}, err
+	}
+	if i := findDC(gs, dc); i >= 0 {
+		return gs[i].Profiles[cl], nil
+	}
+	return Profile{}, nil
+}
+
+func (c *Manager) SetProfile(ctx context.Context, org, dc, cl string, p Profile) error {
+	return c.updateGroups(ctx, org, func(gs []Group, _ []Node) ([]Group, error) {
+		i := findDC(gs, dc)
+		if i < 0 || !slices.Contains(gs[i].Clusters, cl) {
+			return nil, fmt.Errorf("cluster %s not found in %s", cl, dc)
+		}
+		if gs[i].Profiles == nil {
+			gs[i].Profiles = map[string]Profile{}
+		}
+		gs[i].Profiles[cl] = p
+		return gs, nil
 	})
 }

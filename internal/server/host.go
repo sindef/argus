@@ -2,6 +2,8 @@ package server
 
 import (
 	"bufio"
+	"context"
+	"slices"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 
+	"argus/internal/hostd"
 	"argus/internal/tlscert"
 )
 
@@ -152,6 +155,9 @@ func (s *Server) renderHost(w http.ResponseWriter, r *http.Request, notice strin
 		data["Status"] = strings.TrimSpace(readFile(filepath.Join(s.runDir, "status")))
 		data["Log"] = tail(readFile(filepath.Join(s.runDir, "upgrade.log")), 15)
 	}
+	if st, serr := s.hostSettings(r.Context()); serr == nil {
+		data["Settings"] = st
+	}
 	s.render(w, r, "host.html", "layout", data)
 }
 
@@ -178,4 +184,75 @@ func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("%s: revoked API token %s", session(r).User, name)
 	http.Redirect(w, r, "/host", http.StatusSeeOther)
+}
+
+type HostSettings struct {
+	hostd.Settings
+	MigrationBridge string   `json:"migrationBridge"`
+	Bridges         []string `json:"bridges"`
+}
+
+type HostSettingsUpdate struct {
+	hostd.SettingsUpdate
+	MigrationBridge *string `json:"migrationBridge,omitempty"`
+}
+
+func (s *Server) hostSettings(ctx context.Context) (HostSettings, error) {
+	if s.hostd == nil {
+		return HostSettings{}, errors.New("host helper not available")
+	}
+	st, err := s.hostd.Settings(ctx)
+	return HostSettings{Settings: st, MigrationBridge: s.kube.MigrationBridge(ctx), Bridges: s.bridges(ctx)}, err
+}
+
+func (s *Server) applyHostSettings(ctx context.Context, u HostSettingsUpdate) error {
+	if s.hostd == nil {
+		return errors.New("host helper not available")
+	}
+	if err := s.hostd.ApplySettings(ctx, u.SettingsUpdate); err != nil {
+		return err
+	}
+	if u.MigrationBridge != nil && *u.MigrationBridge != s.kube.MigrationBridge(ctx) {
+		if !slices.Contains(s.bridges(ctx), *u.MigrationBridge) {
+			return fmt.Errorf("bridge %s not found on %s", *u.MigrationBridge, s.nodeName)
+		}
+		return s.kube.SetMigrationBridge(ctx, *u.MigrationBridge)
+	}
+	return nil
+}
+
+func (s *Server) apiHostSettings(w http.ResponseWriter, r *http.Request) {
+	st, err := s.hostSettings(r.Context())
+	if err != nil {
+		apiError(w, r, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, st)
+}
+
+func (s *Server) apiApplyHostSettings(w http.ResponseWriter, r *http.Request) {
+	var u HostSettingsUpdate
+	err := json.NewDecoder(r.Body).Decode(&u)
+	if err == nil {
+		err = s.applyHostSettings(r.Context(), u)
+	}
+	if err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	log.Printf("%s: host settings applied", session(r).User)
+	writeJSON(w, map[string]string{})
+}
+
+func fields(v string) []string { return strings.Fields(strings.ReplaceAll(v, ",", " ")) }
+
+func (s *Server) hostSettingsForm(w http.ResponseWriter, r *http.Request) {
+	dns, ntp, syslog := fields(r.FormValue("dns")), fields(r.FormValue("ntp")), strings.TrimSpace(r.FormValue("syslog"))
+	u := HostSettingsUpdate{SettingsUpdate: hostd.SettingsUpdate{DNS: &dns, NTP: &ntp, Syslog: &syslog}}
+	if err := s.applyHostSettings(r.Context(), u); err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: host settings saved", session(r).User)
+	w.Header().Set("HX-Refresh", "true")
 }

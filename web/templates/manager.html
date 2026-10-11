@@ -114,7 +114,8 @@
         <button hx-post="/groups/apply-networks" hx-vals='{"dc":"{{$dc}}","cluster":"{{.Name}}"}' hx-confirm="Create all Argus Manager networks on the hosts in {{.Name}}?">{{template "icon" "network"}}Apply networks</button>
         <a href="/network/hosts?dc={{$dc}}&cluster={{.Name}}#rollout">{{template "icon" "cable"}}Create bridge on hosts</a>
         <button hx-get="/groups/modal/rolling-update?dc={{$dc}}&cluster={{.Name}}" hx-target="#modal">{{template "icon" "refresh-cw"}}Rolling update…</button>
-        {{if ne .Name "Unassigned"}}<hr>
+        {{if ne .Name "Unassigned"}}<a href="/profile?dc={{$dc}}&cluster={{.Name}}">{{template "icon" "shield-check"}}Host profile</a>
+        <hr>
         <button hx-get="/groups/modal/rename-cluster?dc={{$dc}}&cluster={{.Name}}" hx-target="#modal">{{template "icon" "pencil"}}Rename</button>
         <button class="danger" hx-post="/groups/delete-cluster" hx-vals='{"dc":"{{$dc}}","cluster":"{{.Name}}"}' hx-confirm="Delete cluster {{.Name}}?">{{template "icon" "trash-2"}}Delete</button>{{end}}
       </span>{{end}}</span>

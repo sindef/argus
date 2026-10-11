@@ -71,7 +71,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	}
 	s.version = readEnv(o.ReleaseFile)["KAIROS_VERSION"]
 	s.sso.m = map[string]ssoFlow{}
-	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html", "hostnet.html", "dashboard.html", "remote.html", "hostnets.html"} {
+	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html", "hostnet.html", "dashboard.html", "remote.html", "hostnets.html", "profile.html"} {
 		t, err := template.New(p).Funcs(funcs).ParseFS(web.FS, "templates/layout.html", "templates/manager-nav.html", "templates/"+p)
 		if err != nil {
 			return nil, err
@@ -118,6 +118,9 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("POST /hosts/{node}/volumes/{op}", s.require(auth.Operator, s.managerVolumeOp))
 		s.mux.HandleFunc("GET /hosts", s.require(auth.ReadOnly, s.managerHosts))
 		s.mux.HandleFunc("POST /hosts", s.require(auth.Admin, s.managerAddNode))
+		s.mux.HandleFunc("GET /profile", s.require(auth.Admin, s.profilePage))
+		s.mux.HandleFunc("POST /profile", s.require(auth.Admin, s.profileSave))
+		s.mux.HandleFunc("POST /profile/apply", s.require(auth.Admin, s.profileApply))
 		s.mux.HandleFunc("GET /groups/modal/{op}", s.require(auth.Admin, s.groupModal))
 		s.mux.HandleFunc("POST /groups/{op}", s.require(auth.Admin, s.groupAction))
 		s.mux.HandleFunc("POST /hosts/{node}/delete", s.require(auth.Admin, s.managerRemoveNode))
@@ -159,6 +162,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /networks", s.require(auth.Admin, s.createNetwork))
 	s.mux.HandleFunc("POST /networks/{name}/delete", s.require(auth.Admin, s.deleteNetwork))
 	s.mux.HandleFunc("GET /host", s.require(auth.Admin, s.host))
+	s.mux.HandleFunc("POST /host/settings", s.require(auth.Admin, s.hostSettingsForm))
 	s.mux.HandleFunc("POST /host/{action}", s.require(auth.Admin, s.hostRequest))
 	s.mux.HandleFunc("POST /tokens", s.require(auth.Admin, s.createToken))
 	s.mux.HandleFunc("POST /tokens/{name}/delete", s.require(auth.Admin, s.deleteToken))
@@ -167,6 +171,8 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("/api/ui/", s.require(auth.Admin, s.serveUI))
 	s.mux.HandleFunc("GET /api/host/network", s.require(auth.Admin, s.apiHostNetwork))
 	s.mux.HandleFunc("GET /api/host/status", s.require(auth.Admin, s.apiHostStatus))
+	s.mux.HandleFunc("GET /api/host/settings", s.require(auth.Admin, s.apiHostSettings))
+	s.mux.HandleFunc("POST /api/host/settings", s.require(auth.Admin, s.apiApplyHostSettings))
 	s.mux.HandleFunc("POST /api/host/power/{action}", s.require(auth.Admin, s.apiHostRequest))
 	s.mux.HandleFunc("POST /api/host/network/{op}", s.require(auth.Admin, s.apiHostNetworkOp))
 	s.mux.HandleFunc("GET /api/node", s.require(auth.Admin, s.apiNode))

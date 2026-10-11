@@ -1,0 +1,35 @@
+{{define "content"}}
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-shield-check"/></svg>
+  <div><h1>Host profile</h1><div class="crumbs">{{.DC}} / {{.Cluster}}</div></div>
+  <div class="actions"><button class="btn primary" hx-post="/profile/apply" hx-vals='{"dc":"{{.DC}}","cluster":"{{.Cluster}}"}' hx-target="#flash" hx-confirm="Apply the profile to every host in {{.Cluster}}?">{{template "icon" "check"}}Remediate</button></div>
+</div>
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(420px,1fr))">
+  <div class="card">
+    <div class="card-head">{{template "icon" "settings"}}<h2>Settings</h2><span class="help right" title="Empty fields are left as each host has them.">?</span></div>
+    {{with .Profile}}
+    <form hx-post="/profile" hx-target="#flash" class="form">
+      <input type="hidden" name="dc" value="{{$.DC}}"><input type="hidden" name="cluster" value="{{$.Cluster}}">
+      <label>DNS servers <input name="dns" value="{{join .DNS " "}}" placeholder="1.1.1.1 9.9.9.9"></label>
+      <label>NTP servers <input name="ntp" value="{{join .NTP " "}}" placeholder="pool.ntp.org"></label>
+      <label>Remote syslog <input name="syslog" value="{{.Syslog}}" placeholder="udp://syslog.example:514"></label>
+      <label>Migration bridge <input name="migration_bridge" value="{{.MigrationBridge}}" placeholder="br0"></label>
+      <label class="check"><input type="checkbox" name="networks"{{if .Networks}} checked{{end}}> All Argus Manager networks</label>
+      <div class="actions"><button class="btn primary" type="submit">Save</button></div>
+    </form>
+    {{end}}
+  </div>
+  <div class="card">
+    <div class="card-head">{{template "icon" "list"}}<h2>Compliance</h2></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Host</th><th>Status</th><th>Differences</th></tr></thead>
+      <tbody>{{range .Rows}}<tr>
+        <td><a href="/hosts/{{.Node.Name}}/dashboard">{{.Node.Name}}</a></td>
+        <td>{{if .Error}}<span class="dot Unreachable">Unreachable</span>{{else if .Diffs}}<span class="dot Warning">Drift</span>{{else}}<span class="dot Healthy">Compliant</span>{{end}}</td>
+        <td>{{with .Error}}<span class="muted">{{.}}</span>{{end}}{{range .Diffs}}<div>{{.}}</div>{{end}}</td>
+      </tr>{{else}}<tr><td colspan="3" class="muted">No hosts in this cluster.</td></tr>{{end}}</tbody>
+    </table></div>
+  </div>
+</div>
+{{end}}

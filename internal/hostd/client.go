@@ -129,6 +129,15 @@ func (c *Client) NetworkDecision(ctx context.Context, op string) error {
 	return c.do(ctx, http.MethodPost, "/network/"+op, nil, nil)
 }
 
+func (c *Client) Settings(ctx context.Context) (Settings, error) {
+	var st Settings
+	return st, c.do(ctx, http.MethodGet, "/settings", nil, &st)
+}
+
+func (c *Client) ApplySettings(ctx context.Context, u SettingsUpdate) error {
+	return c.do(ctx, http.MethodPost, "/settings", u, nil)
+}
+
 func (c *Client) Stats(ctx context.Context) (Stats, error) {
 	var st Stats
 	return st, c.do(ctx, http.MethodGet, "/stats", nil, &st)

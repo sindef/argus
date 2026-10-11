@@ -32,6 +32,16 @@ func NewServer() *Server {
 	s.mux.HandleFunc("POST /pools/{name}/import", s.locked(s.importPool))
 	s.mux.HandleFunc("POST /pools/{name}/{action}", s.locked(s.release))
 	s.mux.HandleFunc("GET /network", s.network)
+	s.mux.HandleFunc("GET /settings", func(w http.ResponseWriter, r *http.Request) { reply(w, readSettings(), nil) })
+	s.mux.HandleFunc("POST /settings", s.locked(func(w http.ResponseWriter, r *http.Request) {
+		var u SettingsUpdate
+		err := decode(r, &u)
+		if err == nil {
+			err = applySettings(r.Context(), u)
+		}
+		log.Printf("settings: %v", err)
+		reply(w, nil, err)
+	}))
 	s.mux.HandleFunc("GET /stats", func(w http.ResponseWriter, r *http.Request) { reply(w, hostStats(r.Context()), nil) })
 	s.mux.HandleFunc("POST /network/bridges", s.locked(s.bridge))
 	s.mux.HandleFunc("POST /network/bridges/{name}/delete", s.locked(s.unbridge))

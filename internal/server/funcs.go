@@ -51,6 +51,7 @@ var funcs = template.FuncMap{
 	"picks":  func(disks any, field string) map[string]any { return map[string]any{"Disks": disks, "Field": field} },
 	"min100": func(v int) int { return min(v, 100) },
 	"list":   func(v ...string) []string { return v },
+	"join":   strings.Join,
 	"has":    func(l []string, v string) bool { return slices.Contains(l, v) },
 	"add":    func(a, b int) int { return a + b },
 	"sub":    func(a, b int) int { return a - b },
