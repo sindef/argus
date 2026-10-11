@@ -6,56 +6,47 @@
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
 {{with .Notice}}<p class="notice">{{.}}</p>{{end}}
 <div class="settings">
-  <nav class="settings-nav">
-    {{if .Available}}<a href="#s-system">{{template "icon" "server"}}System</a>{{end}}
-    {{if .Settings}}<a href="#s-services">{{template "icon" "globe"}}Services</a>{{end}}
-    {{if .Notify}}<a href="#s-notify">{{template "icon" "bell"}}Notifications</a>{{end}}
-    {{if .Cert}}<a href="#s-cert">{{template "icon" "lock"}}Certificate</a>{{end}}
-    <a href="#s-access">{{template "icon" "key-round"}}Manager access</a>
-  </nav>
-  <div class="settings-body">
-    {{if .Available}}
-    <section class="settings-section" id="s-system">
-      <header><h2>System</h2>
-        <div class="actions">
-          <button class="btn" type="button" hx-post="/host/reboot" hx-target="#flash" hx-confirm="Reboot the host?">{{template "icon" "rotate-cw"}}Reboot</button>
-          <button class="btn danger" type="button" hx-post="/host/poweroff" hx-target="#flash" hx-confirm="Shut down the host?">{{template "icon" "power"}}Shut down</button>
-        </div>
-      </header>
-      <div hx-get="/host" hx-trigger="every 5s">{{template "state" .}}</div>
-      <h3>OS update</h3>
-      <form hx-post="/host/upgrade" hx-target="#flash" hx-confirm="Update the OS and reboot?" class="form inline">
-        <input name="image" placeholder="registry/argus-os:tag" aria-label="Image" required>
-        <button class="btn primary" type="submit">Update and reboot</button>
-      </form>
-    </section>
+  {{if .Available}}
+  <section class="settings-section" id="s-system" data-icon="server">
+    <header><h2>System</h2>
+      <div class="actions">
+        <button class="btn" type="button" hx-post="/host/reboot" hx-target="#flash" hx-confirm="Reboot the host?">{{template "icon" "rotate-cw"}}Reboot</button>
+        <button class="btn danger" type="button" hx-post="/host/poweroff" hx-target="#flash" hx-confirm="Shut down the host?">{{template "icon" "power"}}Shut down</button>
+      </div>
+    </header>
+    <div hx-get="/host" hx-trigger="every 5s">{{template "state" .}}</div>
+    <h3>OS update</h3>
+    <form hx-post="/host/upgrade" hx-target="#flash" hx-confirm="Update the OS and reboot?" class="form inline">
+      <input name="image" placeholder="registry/argus-os:tag" aria-label="Image" required>
+      <button class="btn primary" type="submit">Update and reboot</button>
+    </form>
+  </section>
+  {{end}}
+  {{with .Settings}}
+  <section class="settings-section" id="s-services" data-icon="globe">
+    <header><h2>Services</h2></header>
+    <form hx-post="/host/settings" hx-target="#flash" class="form">
+      <label>DNS servers <span class="help" title="Used in addition to servers learned from DHCP.">?</span><input name="dns" value="{{join .DNS ", "}}" placeholder="1.1.1.1, 9.9.9.9"></label>
+      <label>NTP servers <input name="ntp" value="{{join .NTP ", "}}" placeholder="0.pool.ntp.org, 1.pool.ntp.org"></label>
+      <label>Remote syslog <input name="syslog" value="{{.Syslog}}" placeholder="udp://syslog.example:514"></label>
+      <label>Backup target <span class="help" title="NFS export for VM backups. Tested for write access before saving.">?</span><input name="backup" value="{{.Backup}}" placeholder="nas.example:/backups/argus"></label>
+      <div class="actions"><button class="btn primary" type="submit">Save</button></div>
+    </form>
+  </section>
+  {{end}}
+  {{template "notify-section" .}}
+  {{template "cert-section" .}}
+  <section class="settings-section" id="s-access" data-icon="key-round">
+    <header><h2>Manager access</h2><div class="actions"><button class="btn" data-dialog="add-token">{{template "icon" "plus"}}Create token</button></div></header>
+    <dl class="kv"><dt>CA fingerprint</dt><dd class="mono wrap">{{.CAFingerprint}}</dd></dl>
+    {{if .Tokens}}
+    <div class="table-wrap spaced"><table>
+      <thead><tr><th>Token</th><th>Access</th><th>Created</th><th></th></tr></thead>
+      <tbody>{{range .Tokens}}<tr><td>{{.Name}}</td><td>{{if .Scope}}{{.Scope}}{{else}}full{{end}}</td><td>{{.Created.Local.Format "2006-01-02 15:04"}}</td>
+        <td class="row-actions"><form method="post" action="/tokens/{{.Name}}/delete" onsubmit="return confirm('Revoke {{.Name}}?')"><button type="submit" class="link danger">Revoke</button></form></td></tr>{{end}}</tbody>
+    </table></div>
     {{end}}
-    {{with .Settings}}
-    <section class="settings-section" id="s-services">
-      <header><h2>Services</h2></header>
-      <form hx-post="/host/settings" hx-target="#flash" class="form">
-        <label>DNS servers <span class="help" title="Used in addition to servers learned from DHCP.">?</span><input name="dns" value="{{join .DNS ", "}}" placeholder="1.1.1.1, 9.9.9.9"></label>
-        <label>NTP servers <input name="ntp" value="{{join .NTP ", "}}" placeholder="0.pool.ntp.org, 1.pool.ntp.org"></label>
-        <label>Remote syslog <input name="syslog" value="{{.Syslog}}" placeholder="udp://syslog.example:514"></label>
-        <label>Backup target <span class="help" title="NFS export for VM backups. Tested for write access before saving.">?</span><input name="backup" value="{{.Backup}}" placeholder="nas.example:/backups/argus"></label>
-        <div class="actions"><button class="btn primary" type="submit">Save</button></div>
-      </form>
-    </section>
-    {{end}}
-    {{template "notify-section" .}}
-    {{template "cert-section" .}}
-    <section class="settings-section" id="s-access">
-      <header><h2>Manager access</h2><div class="actions"><button class="btn" data-dialog="add-token">{{template "icon" "plus"}}Create token</button></div></header>
-      <dl class="kv"><dt>CA fingerprint</dt><dd class="mono wrap">{{.CAFingerprint}}</dd></dl>
-      {{if .Tokens}}
-      <div class="table-wrap spaced"><table>
-        <thead><tr><th>Token</th><th>Access</th><th>Created</th><th></th></tr></thead>
-        <tbody>{{range .Tokens}}<tr><td>{{.Name}}</td><td>{{if .Scope}}{{.Scope}}{{else}}full{{end}}</td><td>{{.Created.Local.Format "2006-01-02 15:04"}}</td>
-          <td class="row-actions"><form method="post" action="/tokens/{{.Name}}/delete" onsubmit="return confirm('Revoke {{.Name}}?')"><button type="submit" class="link danger">Revoke</button></form></td></tr>{{end}}</tbody>
-      </table></div>
-      {{end}}
-    </section>
-  </div>
+  </section>
 </div>
 <dialog id="add-token" class="card">
   <form method="post" action="/tokens" class="form">

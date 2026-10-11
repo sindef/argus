@@ -127,7 +127,23 @@
     document.querySelectorAll("[data-needs-selection]").forEach((b) => { b.disabled = n === 0; });
   }
 
+  const buildSettings = (root) => {
+    if (root.querySelector(":scope > .settings-nav")) return;
+    const nav = document.createElement("nav"), body = document.createElement("div");
+    nav.className = "settings-nav";
+    body.className = "settings-body";
+    root.querySelectorAll(":scope > .settings-section").forEach((s) => {
+      const a = document.createElement("a");
+      a.href = "#" + s.id;
+      a.innerHTML = `<svg class="i"><use href="/static/vendor/lucide/icons.svg#i-${s.dataset.icon}"/></svg>`;
+      a.append(s.querySelector("h2").textContent);
+      nav.append(a);
+      body.append(s);
+    });
+    root.append(nav, body);
+  };
   const showSetting = (root, id) => {
+    buildSettings(root);
     const links = [...root.querySelectorAll(".settings-nav a")];
     if (!links.length) return;
     const has = (v) => links.some((a) => a.hash === "#" + v);

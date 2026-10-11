@@ -285,7 +285,8 @@ h1 .dot { font-size: 14px; font-weight: 400; }
 .stat .value.sm { font-size: 18px; line-height: 1.6; }
 tr.bad td { color: var(--bad); }
 .cluster-row .right { margin-left: auto; }
-.settings { display: grid; grid-template-columns: 210px minmax(0, 720px); gap: 28px; align-items: start; }
+.settings { max-width: 958px; }
+.settings.ready { display: grid; grid-template-columns: 210px minmax(0, 720px); gap: 28px; align-items: start; }
 .settings-nav { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 2px; }
 .settings-nav a { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 6px; color: var(--muted); }
 .settings-nav a:hover { color: var(--fg); background: var(--panel); }
@@ -294,6 +295,7 @@ tr.bad td { color: var(--bad); }
 .settings-section + .settings-section { margin-top: 16px; }
 .settings-section > header { display: flex; align-items: center; gap: 12px; min-height: 34px; margin-bottom: 18px; }
 .settings-section > header h2 { margin: 0; font-size: 16px; }
+.settings-section > header > .help { margin-left: 0; }
 .settings-section > header .actions { margin-left: auto; }
 .settings-section h3 { display: flex; align-items: center; margin: 22px 0 12px; padding-top: 18px; border-top: 1px solid var(--line); font-size: 13.5px; }
 .settings-section .form h3 { margin: 8px 0 0; }
@@ -306,6 +308,6 @@ tr.bad td { color: var(--bad); }
 dd.wrap { word-break: break-all; }
 .tree .row > a { display: flex; align-items: center; gap: 8px; min-width: 0; color: inherit; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 900px) {
-  .settings { grid-template-columns: 1fr; }
+  .settings.ready { grid-template-columns: 1fr; }
   .settings-nav { position: static; flex-direction: row; overflow-x: auto; }
 }

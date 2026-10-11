@@ -2,12 +2,11 @@
 <div class="page-head">
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-shield-check"/></svg>
   <div><h1>Host profile</h1><div class="crumbs">{{.DC}} / {{.Cluster}}</div></div>
-  <div class="actions"><button class="btn primary" hx-post="/profile/apply" hx-vals='{"dc":"{{.DC}}","cluster":"{{.Cluster}}"}' hx-target="#flash" hx-confirm="Apply the profile to every host in {{.Cluster}}?">{{template "icon" "check"}}Remediate</button></div>
 </div>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
-<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(420px,1fr))">
-  <div class="card">
-    <div class="card-head">{{template "icon" "settings"}}<h2>Settings</h2><span class="help right" title="Empty fields are left as each host has them.">?</span></div>
+<div class="settings">
+  <section class="settings-section" id="s-profile" data-icon="settings">
+    <header><h2>Settings</h2><span class="help" title="Empty fields are left as each host has them.">?</span></header>
     {{with .Profile}}
     <form hx-post="/profile" hx-target="#flash" class="form">
       <input type="hidden" name="dc" value="{{$.DC}}"><input type="hidden" name="cluster" value="{{$.Cluster}}">
@@ -15,14 +14,15 @@
       <label>NTP servers <input name="ntp" value="{{join .NTP ", "}}" placeholder="0.pool.ntp.org, 1.pool.ntp.org"></label>
       <label>Remote syslog <input name="syslog" value="{{.Syslog}}" placeholder="udp://syslog.example:514"></label>
       <label>Backup target <input name="backup" value="{{.Backup}}" placeholder="nas.example:/backups/argus"></label>
+      <h3>Networking</h3>
       <label>Migration bridge <input name="migration_bridge" value="{{.MigrationBridge}}" placeholder="br0"></label>
-      <label class="check"><input type="checkbox" name="networks"{{if .Networks}} checked{{end}}> All Argus Manager networks</label>
+      <label class="check"><input type="checkbox" name="networks"{{if .Networks}} checked{{end}}>All Argus Manager networks</label>
       <div class="actions"><button class="btn primary" type="submit">Save</button></div>
     </form>
     {{end}}
-  </div>
-  <div class="card">
-    <div class="card-head">{{template "icon" "list"}}<h2>Compliance</h2></div>
+  </section>
+  <section class="settings-section" id="s-compliance" data-icon="list">
+    <header><h2>Compliance</h2><div class="actions"><button class="btn" hx-post="/profile/apply" hx-vals='{"dc":"{{.DC}}","cluster":"{{.Cluster}}"}' hx-target="#flash" hx-confirm="Apply the profile to every host in {{.Cluster}}?">{{template "icon" "check"}}Remediate</button></div></header>
     <div class="table-wrap"><table>
       <thead><tr><th>Host</th><th>Status</th><th>Differences</th></tr></thead>
       <tbody>{{range .Rows}}<tr>
@@ -31,6 +31,6 @@
         <td>{{with .Error}}<span class="muted">{{.}}</span>{{end}}{{range .Diffs}}<div>{{.}}</div>{{end}}</td>
       </tr>{{else}}<tr><td colspan="3" class="muted">No hosts in this cluster.</td></tr>{{end}}</tbody>
     </table></div>
-  </div>
+  </section>
 </div>
 {{end}}
