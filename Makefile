@@ -1,6 +1,6 @@
 VERSION ?= 0.1.0
 IMAGE ?= argus-os:$(VERSION)
-AURORABOOT ?= quay.io/kairos/auroraboot:v0.28.0
+AURORABOOT ?= quay.io/kairos/auroraboot:v0.28.0@sha256:9a3ae40ca2f4e5856055502ad72ff3b6343758b78a97968387ee3af0233892c2
 
 .PHONY: app manager hostd os iso
 

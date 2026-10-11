@@ -1,0 +1,36 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY: ghcr.io/${{ github.repository_owner }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - name: Build, attest and sign
+        run: |
+          set -eu
+          V="${GITHUB_REF_NAME#v}"
+          build() {
+            docker buildx build --push --sbom=true --provenance=mode=max --metadata-file "$1.json" -t "$REGISTRY/$1:$V" "${@:2}"
+            cosign sign --yes "$REGISTRY/$1@$(jq -r '."containerimage.digest"' "$1.json")"
+          }
+          build argus .
+          build argus-manager --build-arg CMD=argus-manager .
+          make hostd VERSION="$V"
+          docker buildx build --load -t "argus:$V" .
+          mkdir -p os/images && docker save -o os/images/argus.tar "argus:$V"
+          build argus-os --build-arg VERSION="$V" os

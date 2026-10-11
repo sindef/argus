@@ -1,8 +1,8 @@
 ARG KAIROS_INIT_VERSION=v4.3.0
 
-FROM quay.io/kairos/kairos-init:${KAIROS_INIT_VERSION} AS kairos-init
+FROM quay.io/kairos/kairos-init:${KAIROS_INIT_VERSION}@sha256:c8c5d46234ddda93908f090f136fb12826e312286f63e0b6f316e4063edeea53 AS kairos-init
 
-FROM ubuntu:26.04 AS build
+FROM ubuntu:26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7 AS build
 ARG VERSION=0.1.0
 ARG K3S_VERSION=v1.35.8+k3s1
 ARG KUBEVIRT_VERSION=v1.9.0
@@ -35,9 +35,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && systemctl mask iscsid.socket iscsid.service apt-daily.timer apt-daily-upgrade.timer motd-news.timer dpkg-db-backup.timer ua-timer.timer
 
-ADD https://github.com/kubevirt/kubevirt/releases/download/${KUBEVIRT_VERSION}/kubevirt-operator.yaml /usr/share/argus/manifests/10-kubevirt-operator.yaml
-ADD https://github.com/kubevirt/containerized-data-importer/releases/download/${CDI_VERSION}/cdi-operator.yaml /usr/share/argus/manifests/10-cdi-operator.yaml
-ADD https://raw.githubusercontent.com/k8snetworkplumbingwg/network-attachment-definition-client/${NAD_VERSION}/artifacts/networks-crd.yaml /usr/share/argus/manifests/10-nad-crd.yaml
+ADD --checksum=sha256:f11307caafc3c23ffedf9887d8beb5a4419e2694da242fa68f63d1ec820de2e0 https://github.com/kubevirt/kubevirt/releases/download/${KUBEVIRT_VERSION}/kubevirt-operator.yaml /usr/share/argus/manifests/10-kubevirt-operator.yaml
+ADD --checksum=sha256:c7d92bd1b2ee1a3952a5990000437c08d58109f31c0bd48ab6188ec27a13e224 https://github.com/kubevirt/containerized-data-importer/releases/download/${CDI_VERSION}/cdi-operator.yaml /usr/share/argus/manifests/10-cdi-operator.yaml
+ADD --checksum=sha256:2c83987cbc34c16e7b49921237c39151008e9239304ef2dc7163b92931ef1880 https://raw.githubusercontent.com/k8snetworkplumbingwg/network-attachment-definition-client/${NAD_VERSION}/artifacts/networks-crd.yaml /usr/share/argus/manifests/10-nad-crd.yaml
 RUN cd /usr/share/argus/manifests \
     && sed -i 's/^  replicas: 2$/  replicas: 1/; s/^            memory: 450Mi$/            memory: 256Mi/' 10-kubevirt-operator.yaml \
     && sed -i 's/^            memory: 150Mi$/            memory: 80Mi/' 10-cdi-operator.yaml \
