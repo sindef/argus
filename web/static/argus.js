@@ -195,7 +195,7 @@
       const v = store.get("nav:" + s.id);
       if (v) s.classList.toggle("closed", v === "closed");
     });
-    document.querySelectorAll(".panes:not(.static)").forEach((root) => showPane(root, location.hash.slice(1)));
+    document.querySelectorAll(".panes:not(.static)").forEach((root) => root.closest(".panes.static") || showPane(root, location.hash.slice(1)));
     document.querySelectorAll(".tree li[data-id]").forEach((li) => {
       const v = store.get("tree:" + li.dataset.id);
       if (v) li.classList.toggle("closed", v === "closed");

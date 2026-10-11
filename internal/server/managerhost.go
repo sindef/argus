@@ -19,7 +19,7 @@ import (
 	"argus/internal/manager"
 )
 
-var hostTabs = []struct{ Path, Label string }{{"dashboard", "Summary"}, {"pools", "Pools"}, {"disks", "Disks"}, {"network/host", "Network"}}
+var hostTabs = []struct{ Path, Label, Icon string }{{"dashboard", "Summary", "gauge"}, {"pools", "Pools", "database"}, {"disks", "Disks", "hard-drive"}, {"network/host", "Network", "cable"}}
 
 func (s *Server) managerHostUI(w http.ResponseWriter, r *http.Request) {
 	n, err := s.orgNode(r)
@@ -97,7 +97,7 @@ func (s *Server) managerHostUI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body := sanitizeHTML(raw, base)
-	s.render(w, r, "remote.html", "layout", map[string]any{"Nav": "host:" + n.Name, "Host": n.Name, "Tabs": hostTabs, "Tab": r.PathValue("path"), "Body": template.HTML(body)})
+	s.render(w, r, "remote.html", "layout", map[string]any{"Nav": "host:" + n.Name, "Host": n.Name, "Node": n, "Tabs": hostTabs, "Tab": r.PathValue("path"), "Body": template.HTML(body)})
 }
 
 type hostNetRow struct {
