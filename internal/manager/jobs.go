@@ -25,6 +25,7 @@ var errUnknown = errors.New("outcome unknown; source and target left in place, c
 
 type Job struct {
 	ID        string
+	Kind      string
 	Org       string
 	Namespace string
 	VM        string

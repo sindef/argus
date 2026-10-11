@@ -210,7 +210,7 @@ func (c *Manager) failover(ctx context.Context) {
 		}
 		owner, err1 := c.Node(ctx, p.Owner)
 		replica, err2 := c.Node(ctx, p.Replica)
-		if err1 != nil || err2 != nil {
+		if err1 != nil || err2 != nil || owner.Maintenance {
 			continue
 		}
 		var probe struct{ Reachable bool }

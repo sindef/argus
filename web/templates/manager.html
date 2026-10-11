@@ -87,10 +87,10 @@
 </div>
 {{with .Jobs}}
 <div class="card spaced">
-  <div class="card-head"><h2>Migrations</h2></div>
+  <div class="card-head"><h2>Tasks</h2></div>
   <div class="table-wrap"><table>
-    <thead><tr><th>VM</th><th>From</th><th>To</th><th>Started</th><th>Status</th></tr></thead>
-    <tbody>{{range .}}<tr><td>{{.VM}}{{if .Live}} <span class="muted">(live)</span>{{end}}</td><td>{{.From}}</td><td>{{.To}}</td><td>{{.Started.Local.Format "15:04"}}</td>
+    <thead><tr><th>Task</th><th>From</th><th>To</th><th>Started</th><th>Status</th></tr></thead>
+    <tbody>{{range .}}<tr><td>{{with .Kind}}{{.}}{{else}}{{.VM}}{{if .Live}} <span class="muted">(live migration)</span>{{end}}{{end}}</td><td>{{.From}}</td><td>{{.To}}</td><td>{{.Started.Local.Format "15:04"}}</td>
       <td><span class="dot {{if .Failed}}Failed{{else if .Done}}Succeeded{{else}}Migrating{{end}}">{{.Status}}</span></td></tr>{{end}}</tbody>
   </table></div>
 </div>
@@ -113,6 +113,7 @@
         <a href="/hosts?dc={{$dc}}&cluster={{.Name}}#add-host">{{template "icon" "server"}}Add host</a>
         <button hx-post="/groups/apply-networks" hx-vals='{"dc":"{{$dc}}","cluster":"{{.Name}}"}' hx-confirm="Create all Argus Manager networks on the hosts in {{.Name}}?">{{template "icon" "network"}}Apply networks</button>
         <a href="/network/hosts?dc={{$dc}}&cluster={{.Name}}#rollout">{{template "icon" "cable"}}Create bridge on hosts</a>
+        <button hx-get="/groups/modal/rolling-update?dc={{$dc}}&cluster={{.Name}}" hx-target="#modal">{{template "icon" "refresh-cw"}}Rolling update…</button>
         {{if ne .Name "Unassigned"}}<hr>
         <button hx-get="/groups/modal/rename-cluster?dc={{$dc}}&cluster={{.Name}}" hx-target="#modal">{{template "icon" "pencil"}}Rename</button>
         <button class="danger" hx-post="/groups/delete-cluster" hx-vals='{"dc":"{{$dc}}","cluster":"{{.Name}}"}' hx-confirm="Delete cluster {{.Name}}?">{{template "icon" "trash-2"}}Delete</button>{{end}}
@@ -125,6 +126,8 @@
           <a href="/hosts/{{.Node.Name}}/disks">{{template "icon" "hard-drive"}}Disks</a>
           <a href="/hosts/{{.Node.Name}}/network/host">{{template "icon" "cable"}}Network</a>
           <hr>
+          {{if .Node.Maintenance}}<button hx-post="/groups/exit-maintenance" hx-vals='{"host":"{{.Node.Name}}"}'>{{template "icon" "play"}}Exit maintenance</button>
+          {{else}}<button hx-get="/groups/modal/enter-maintenance?host={{.Node.Name}}" hx-target="#modal">{{template "icon" "pause"}}Enter maintenance…</button>{{end}}
           <button hx-get="/groups/modal/move-host?host={{.Node.Name}}&dc={{.Node.Datacenter}}&cluster={{.Node.Cluster}}" hx-target="#modal">{{template "icon" "arrow-right-left"}}Move to…</button>
           <button class="danger" hx-post="/hosts/{{.Node.Name}}/delete" hx-confirm="Remove {{.Node.Name}} from Argus Manager? The host and its VMs keep running.">{{template "icon" "trash-2"}}Remove</button>
         </span>{{end}}</span>
@@ -142,7 +145,15 @@
 <form hx-post="/groups/{{.Op}}" hx-target="#group-error" class="form">
   <h2>{{.Title}}</h2>
   <p id="group-error" class="error form-error"></p>
-  {{if eq .Op "move-host"}}
+  {{if eq .Op "enter-maintenance"}}
+  <input type="hidden" name="host" value="{{.Host}}">
+  <p class="muted">Running VMs live-migrate to other hosts in the cluster; protected VMs fail over to their replica.</p>
+  <label class="check"><input type="checkbox" name="shutdown"> Shut down VMs that cannot move <span class="help" title="They are started again when the host exits maintenance.">?</span></label>
+  {{else if eq .Op "rolling-update"}}
+  <input type="hidden" name="dc" value="{{.DC}}"><input type="hidden" name="cluster" value="{{.Cluster}}">
+  <label>OS image <span class="help" title="Leave empty to reboot each host without updating.">?</span><input name="image" placeholder="registry/argus-os:tag"></label>
+  <label class="check"><input type="checkbox" name="shutdown"> Shut down VMs that cannot move <span class="help" title="Needed when the cluster has no spare capacity, e.g. a single host. They start again after each host returns.">?</span></label>
+  {{else if eq .Op "move-host"}}
   <input type="hidden" name="host" value="{{.Host}}">
   <div class="row">
     <label>Datacenter <input name="datacenter" list="group-dcs" value="{{.DC}}"></label>

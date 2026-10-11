@@ -66,6 +66,8 @@ func groupName(s string) string {
 
 func hostStatus(st manager.NodeState) string {
 	switch {
+	case st.Node.Maintenance:
+		return "Maintenance"
 	case !st.Reachable():
 		return "Unreachable"
 	case st.Stale():
@@ -75,7 +77,7 @@ func hostStatus(st manager.NodeState) string {
 }
 
 func worse(a, b string) string {
-	rank := map[string]int{"Healthy": 0, "Warning": 1, "Unreachable": 2}
+	rank := map[string]int{"Healthy": 0, "Maintenance": 1, "Warning": 1, "Unreachable": 2}
 	if rank[b] > rank[a] {
 		return b
 	}

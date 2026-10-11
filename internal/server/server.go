@@ -166,6 +166,8 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("GET /export/{ns}/{export}/{volume}", s.exportPassthrough)
 	s.mux.HandleFunc("/api/ui/", s.require(auth.Admin, s.serveUI))
 	s.mux.HandleFunc("GET /api/host/network", s.require(auth.Admin, s.apiHostNetwork))
+	s.mux.HandleFunc("GET /api/host/status", s.require(auth.Admin, s.apiHostStatus))
+	s.mux.HandleFunc("POST /api/host/power/{action}", s.require(auth.Admin, s.apiHostRequest))
 	s.mux.HandleFunc("POST /api/host/network/{op}", s.require(auth.Admin, s.apiHostNetworkOp))
 	s.mux.HandleFunc("GET /api/node", s.require(auth.Admin, s.apiNode))
 	s.mux.HandleFunc("GET /api/vms", s.require(auth.Admin, s.apiVMs))

@@ -138,7 +138,7 @@ td .i { color: var(--muted); margin-right: 8px; }
 .dot { display: inline-flex; align-items: center; gap: 8px; }
 .dot::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--faint); flex: none; }
 .dot.Running::before, .dot.Succeeded::before, .dot.Healthy::before, .dot.Connected::before, .dot.Ready::before, .dot.Up::before, .dot.Applied::before, .dot.Protected::before { background: var(--ok); }
-.dot.Starting::before, .dot.Stopping::before, .dot.Provisioning::before, .dot.Migrating::before, .dot.Paused::before, .dot.Pending::before, .dot.Warning::before, .dot.ImportInProgress::before, .dot.UploadReady::before, .dot.CloneInProgress::before, .dot.WaitingForVolumeBinding::before, .dot.Replicating::before, .dot.Degraded::before { background: var(--warn); }
+.dot.Starting::before, .dot.Stopping::before, .dot.Provisioning::before, .dot.Migrating::before, .dot.Paused::before, .dot.Pending::before, .dot.Warning::before, .dot.ImportInProgress::before, .dot.UploadReady::before, .dot.CloneInProgress::before, .dot.WaitingForVolumeBinding::before, .dot.Replicating::before, .dot.Degraded::before, .dot.Maintenance::before { background: var(--warn); }
 .dot.Failed::before, .dot.ErrorUnschedulable::before, .dot.CrashLoopBackOff::before, .dot.DataVolumeError::before, .dot.Unreachable::before, .dot.Error::before { background: var(--bad); }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; background: var(--accent-bg); color: var(--accent-2); }
 

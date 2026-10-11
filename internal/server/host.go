@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -28,46 +29,67 @@ func (s *Server) host(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) hostRequest(w http.ResponseWriter, r *http.Request) {
-	action := r.PathValue("action")
+func (s *Server) requestHost(r *http.Request, action, img string) error {
 	req := action
 	switch action {
 	case "reboot", "poweroff":
 	case "upgrade":
-		img := strings.TrimSpace(r.FormValue("image"))
 		if !validImage.MatchString(img) {
-			flash(w, r, errors.New("invalid image reference"))
-			return
+			return errors.New("invalid image reference")
 		}
 		req += " " + img
 	default:
-		http.Error(w, "unknown action", http.StatusBadRequest)
-		return
+		return errors.New("unknown action")
 	}
 	if s.runDir == "" {
-		flash(w, r, errors.New("host control not available"))
-		return
+		return errors.New("host control not available")
 	}
-	err := s.maintenance()
-	var n int
-	if err == nil {
-		n, err = s.kube.RunningVMs(r.Context())
+	if err := s.maintenance(); err != nil {
+		return err
 	}
-	if err == nil && n > 0 {
-		err = fmt.Errorf("power off all VMs first (%d running)", n)
-	}
-	if err == nil {
-		tmp := filepath.Join(s.runDir, ".request")
-		if err = os.WriteFile(tmp, []byte(req+"\n"), 0o644); err == nil {
-			err = os.Rename(tmp, filepath.Join(s.runDir, "request"))
-		}
-	}
+	n, err := s.kube.RunningVMs(r.Context())
 	if err != nil {
+		return err
+	}
+	if n > 0 {
+		return fmt.Errorf("power off all VMs first (%d running)", n)
+	}
+	tmp := filepath.Join(s.runDir, ".request")
+	if err := os.WriteFile(tmp, []byte(req+"\n"), 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, filepath.Join(s.runDir, "request")); err != nil {
+		return err
+	}
+	log.Printf("%s: host %s", session(r).User, req)
+	return nil
+}
+
+func (s *Server) hostRequest(w http.ResponseWriter, r *http.Request) {
+	if err := s.requestHost(r, r.PathValue("action"), strings.TrimSpace(r.FormValue("image"))); err != nil {
 		flash(w, r, err)
 		return
 	}
-	log.Printf("%s: host %s", session(r).User, req)
 	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) apiHostRequest(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Image string }
+	json.NewDecoder(r.Body).Decode(&req)
+	if err := s.requestHost(r, r.PathValue("action"), strings.TrimSpace(req.Image)); err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, map[string]string{})
+}
+
+func (s *Server) apiHostStatus(w http.ResponseWriter, r *http.Request) {
+	n, err := s.kube.RunningVMs(r.Context())
+	if err != nil {
+		apiError(w, r, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, map[string]any{"status": strings.TrimSpace(readFile(filepath.Join(s.runDir, "status"))), "version": readEnv(s.releaseFile)["KAIROS_VERSION"], "running": n})
 }
 
 var errMaintenance = errors.New("host maintenance in progress")

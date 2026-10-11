@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"regexp"
 	"slices"
 	"sort"
@@ -69,7 +70,7 @@ func (c *Manager) updateGroups(ctx context.Context, org string, fn func([]Group,
 	for i := range gs {
 		sort.Strings(gs[i].Clusters)
 	}
-	if !slices.Equal(before, nodes) {
+	if !reflect.DeepEqual(before, nodes) {
 		if err := c.save(ctx, nodes, nrv); err != nil {
 			return err
 		}

@@ -35,8 +35,10 @@ type Node struct {
 	Slot             int    `json:"slot,omitempty"`
 	MigrationAddress string `json:"migrationAddress,omitempty"`
 	Org              string `json:"org"`
-	Datacenter       string `json:"datacenter"`
-	Cluster          string `json:"cluster"`
+	Datacenter       string   `json:"datacenter"`
+	Cluster          string   `json:"cluster"`
+	Maintenance      bool     `json:"maintenance,omitempty"`
+	Parked           []string `json:"parked,omitempty"`
 }
 
 type NodeInfo = kube.NodeInfo
@@ -288,6 +290,9 @@ func (n Node) Action(ctx context.Context, ns, vm, action string) error {
 }
 
 func (c *Manager) preflight(ctx context.Context, src, dst Node, ns, vm string) error {
+	if dst, err := c.Node(ctx, dst.Name); err == nil && dst.Maintenance {
+		return fmt.Errorf("%s is in maintenance mode", dst.Name)
+	}
 	vms, err := src.VMs(ctx)
 	if err != nil {
 		return err

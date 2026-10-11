@@ -6,10 +6,10 @@
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
 {{with .Jobs}}
 <div class="card">
-  <div class="card-head"><h2>Migrations</h2></div>
+  <div class="card-head"><h2>Tasks</h2></div>
   <div class="table-wrap"><table>
-    <thead><tr><th>VM</th><th>From</th><th>To</th><th>Started</th><th>Status</th><th></th></tr></thead>
-    <tbody>{{range .}}<tr><td>{{.VM}}{{if .Live}} <span class="muted">(live)</span>{{end}}</td><td>{{.From}}</td><td>{{.To}}</td><td>{{.Started.Local.Format "15:04"}}</td>
+    <thead><tr><th>Task</th><th>From</th><th>To</th><th>Started</th><th>Status</th><th></th></tr></thead>
+    <tbody>{{range .}}<tr><td>{{with .Kind}}{{.}}{{else}}{{.VM}}{{if .Live}} <span class="muted">(live migration)</span>{{end}}{{end}}</td><td>{{.From}}</td><td>{{.To}}</td><td>{{.Started.Local.Format "15:04"}}</td>
       <td class="clip" title="{{.Status}}"><span class="dot {{if .Attention}}Warning{{else if .Failed}}Failed{{else if .Done}}Succeeded{{else}}Migrating{{end}}">{{.Status}}</span></td>
       <td class="row-actions">{{if and .Attention (eq $.Session.Role "admin")}}<button class="link" hx-post="/jobs/{{.ID}}/resolve" hx-target="#flash" hx-confirm="Roll back {{.VM}}: keep it on {{.From}} and remove what this job created on {{.To}}?">Resolve</button>{{end}}</td></tr>{{end}}</tbody>
   </table></div>
