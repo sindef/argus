@@ -278,7 +278,7 @@ func (s *Server) jobs(r *http.Request) []manager.Job {
 	for _, st := range s.inventory(r) {
 		hosts[st.Node.Name] = true
 	}
-	return slices.DeleteFunc(js, func(j manager.Job) bool { return !hosts[j.From] && !hosts[j.To] })
+	return slices.DeleteFunc(js, func(j manager.Job) bool { return !hosts[j.From] || (j.To != "" && !hosts[j.To]) })
 }
 
 func (s *Server) inventory(r *http.Request) []manager.NodeState {
@@ -803,6 +803,11 @@ func (s *Server) managerEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) managerResolve(w http.ResponseWriter, r *http.Request) {
+	visible := slices.ContainsFunc(s.jobs(r), func(j manager.Job) bool { return j.ID == r.PathValue("id") })
+	if !visible {
+		flash(w, r, errors.New("no unresolved job with that ID"))
+		return
+	}
 	if err := s.manager.Resolve(r.Context(), session(r).Org, r.PathValue("id")); err != nil {
 		flash(w, r, err)
 		return

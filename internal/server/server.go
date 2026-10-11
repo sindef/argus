@@ -374,7 +374,7 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page, tmpl strin
 	data["Session"] = session(r)
 	data["Alarms"] = s.activeAlarms()
 	data["OrgAdmin"] = session(r).Role.Can(auth.Admin) && len(session(r).Scopes) == 0
-	if s.manager != nil && len(session(r).Scopes) > 0 {
+	if s.manager != nil {
 		hosts := map[string]bool{}
 		for _, st := range s.inventory(r) {
 			hosts[st.Node.Name] = true
