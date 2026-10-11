@@ -24,6 +24,7 @@ type Profile struct {
 	NTP             []string `json:"ntp,omitempty"`
 	Syslog          string   `json:"syslog,omitempty"`
 	MigrationBridge string   `json:"migrationBridge,omitempty"`
+	Backup          string   `json:"backup,omitempty"`
 	Networks        bool     `json:"networks,omitempty"`
 }
 

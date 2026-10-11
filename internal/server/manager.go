@@ -249,7 +249,7 @@ func (s *Server) orgNode(r *http.Request) (manager.Node, error) {
 	return s.manager.NodeIn(r.Context(), session(r).Org, r.PathValue("node"))
 }
 
-var vmTabs = []string{"summary", "hardware", "snapshots", "logs"}
+var vmTabs = []string{"summary", "hardware", "snapshots", "backups", "logs"}
 
 func (s *Server) managerVM(w http.ResponseWriter, r *http.Request) {
 	n, err := s.orgNode(r)
@@ -283,6 +283,10 @@ func (s *Server) managerVM(w http.ResponseWriter, r *http.Request) {
 		var snaps []kube.Snapshot
 		err = n.Call(r.Context(), http.MethodGet, fmt.Sprintf("/api/vms/%s/%s/snapshots", ns, name), nil, &snaps)
 		data["Snapshots"] = snaps
+	case "backups":
+		var b VMBackups
+		err = n.Call(r.Context(), http.MethodGet, fmt.Sprintf("/api/vms/%s/%s/backups", ns, name), nil, &b)
+		data["Backups"] = map[string]any{"B": b, "P": fmt.Sprintf("/nodes/%s/vms/%s/%s", n.Name, ns, name), "Name": name, "CanOperate": data["CanOperate"]}
 	}
 	data["Error"] = errText(err)
 	s.render(w, r, "manager-vm.html", "layout", data)
@@ -753,5 +757,23 @@ func (s *Server) managerResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("%s: resolved job %s", session(r).User, r.PathValue("id"))
+	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) managerBackupOp(w http.ResponseWriter, r *http.Request) {
+	n, err := s.orgNode(r)
+	if err == nil {
+		r.ParseForm()
+		req := map[string]string{}
+		for k := range r.Form {
+			req[k] = r.FormValue(k)
+		}
+		err = n.Call(r.Context(), http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/backups/%s", r.PathValue("ns"), r.PathValue("name"), r.PathValue("op")), req, nil)
+	}
+	if err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: backup %s %s on %s", session(r).User, r.PathValue("op"), r.PathValue("name"), n.Name)
 	w.Header().Set("HX-Refresh", "true")
 }

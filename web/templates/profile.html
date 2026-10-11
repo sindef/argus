@@ -14,6 +14,7 @@
       <label>DNS servers <input name="dns" value="{{join .DNS " "}}" placeholder="1.1.1.1 9.9.9.9"></label>
       <label>NTP servers <input name="ntp" value="{{join .NTP " "}}" placeholder="pool.ntp.org"></label>
       <label>Remote syslog <input name="syslog" value="{{.Syslog}}" placeholder="udp://syslog.example:514"></label>
+      <label>Backup target <input name="backup" value="{{.Backup}}" placeholder="nas.example:/backups/argus"></label>
       <label>Migration bridge <input name="migration_bridge" value="{{.MigrationBridge}}" placeholder="br0"></label>
       <label class="check"><input type="checkbox" name="networks"{{if .Networks}} checked{{end}}> All Argus Manager networks</label>
       <div class="actions"><button class="btn primary" type="submit">Save</button></div>

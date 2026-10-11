@@ -3,7 +3,6 @@ package server
 import (
 	"bufio"
 	"context"
-	"slices"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"argus/internal/hostd"
@@ -247,8 +247,8 @@ func (s *Server) apiApplyHostSettings(w http.ResponseWriter, r *http.Request) {
 func fields(v string) []string { return strings.Fields(strings.ReplaceAll(v, ",", " ")) }
 
 func (s *Server) hostSettingsForm(w http.ResponseWriter, r *http.Request) {
-	dns, ntp, syslog := fields(r.FormValue("dns")), fields(r.FormValue("ntp")), strings.TrimSpace(r.FormValue("syslog"))
-	u := HostSettingsUpdate{SettingsUpdate: hostd.SettingsUpdate{DNS: &dns, NTP: &ntp, Syslog: &syslog}}
+	dns, ntp, syslog, backup := fields(r.FormValue("dns")), fields(r.FormValue("ntp")), strings.TrimSpace(r.FormValue("syslog")), strings.TrimSpace(r.FormValue("backup"))
+	u := HostSettingsUpdate{SettingsUpdate: hostd.SettingsUpdate{DNS: &dns, NTP: &ntp, Syslog: &syslog, Backup: &backup}}
 	if err := s.applyHostSettings(r.Context(), u); err != nil {
 		flash(w, r, err)
 		return

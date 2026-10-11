@@ -2,14 +2,17 @@ package kube
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 var (
@@ -22,7 +25,13 @@ type Snapshot struct {
 	Created time.Time
 	Phase   string
 	Ready   bool
+	Auto    bool
 }
+
+const (
+	autoLabel        = "argus.io/auto"
+	BackupAnnotation = "argus.io/backup"
+)
 
 func (c *Client) ListSnapshots(ctx context.Context, ns, vm string) ([]Snapshot, error) {
 	list, err := c.dyn.Resource(vmSnapGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
@@ -31,10 +40,10 @@ func (c *Client) ListSnapshots(ctx context.Context, ns, vm string) ([]Snapshot, 
 	}
 	var out []Snapshot
 	for _, s := range list.Items {
-		if src, _, _ := unstructured.NestedString(s.Object, "spec", "source", "name"); src != vm {
+		if src, _, _ := unstructured.NestedString(s.Object, "spec", "source", "name"); src != vm || strings.HasPrefix(s.GetName(), "argus-") {
 			continue
 		}
-		snap := Snapshot{Name: s.GetName(), Created: s.GetCreationTimestamp().Time}
+		snap := Snapshot{Name: s.GetName(), Created: s.GetCreationTimestamp().Time, Auto: s.GetLabels()[autoLabel] == "true"}
 		snap.Phase, _, _ = unstructured.NestedString(s.Object, "status", "phase")
 		snap.Ready, _, _ = unstructured.NestedBool(s.Object, "status", "readyToUse")
 		out = append(out, snap)
@@ -44,11 +53,32 @@ func (c *Client) ListSnapshots(ctx context.Context, ns, vm string) ([]Snapshot, 
 }
 
 func (c *Client) CreateSnapshot(ctx context.Context, ns, vm string) (string, error) {
-	name := fmt.Sprintf("%s-%s", vm, time.Now().UTC().Format("20060102-150405"))
+	return c.createSnapshot(ctx, ns, vm, fmt.Sprintf("%s-%s", vm, time.Now().UTC().Format("20060102-150405")), nil)
+}
+
+func (c *Client) CreateAutoSnapshot(ctx context.Context, ns, vm string) (string, error) {
+	return c.createSnapshot(ctx, ns, vm, fmt.Sprintf("%s-auto-%s", vm, time.Now().UTC().Format("20060102-150405")), obj{autoLabel: "true"})
+}
+
+func (c *Client) SetBackupPolicy(ctx context.Context, ns, vm, policy string) error {
+	var v any = policy
+	if policy == "" {
+		v = nil
+	}
+	patch, _ := json.Marshal(obj{"metadata": obj{"annotations": obj{BackupAnnotation: v}}})
+	_, err := c.dyn.Resource(vmGVR).Namespace(ns).Patch(ctx, vm, types.MergePatchType, patch, metav1.PatchOptions{})
+	return err
+}
+
+func (c *Client) createSnapshot(ctx context.Context, ns, vm, name string, labels obj) (string, error) {
+	meta := obj{"name": name}
+	if labels != nil {
+		meta["labels"] = labels
+	}
 	snap := &unstructured.Unstructured{Object: obj{
 		"apiVersion": "snapshot.kubevirt.io/v1beta1",
 		"kind":       "VirtualMachineSnapshot",
-		"metadata":   obj{"name": name},
+		"metadata":   meta,
 		"spec":       obj{"source": obj{"apiGroup": "kubevirt.io", "kind": "VirtualMachine", "name": vm}},
 	}}
 	_, err := c.dyn.Resource(vmSnapGVR).Namespace(ns).Create(ctx, snap, metav1.CreateOptions{})

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -49,14 +50,13 @@ func (c *Client) ExportVM(ctx context.Context, ns, name, baseURL, caPEM string) 
 	if err := migratable(vm); err != nil {
 		return Export{}, err
 	}
-	return c.export(ctx, ns, name, baseURL, caPEM, vm, obj{"apiGroup": "kubevirt.io", "kind": "VirtualMachine", "name": name})
+	return c.export(ctx, ns, exportName(name), baseURL, caPEM, vm, obj{"apiGroup": "kubevirt.io", "kind": "VirtualMachine", "name": name})
 }
 
-func (c *Client) export(ctx context.Context, ns, name, baseURL, caPEM string, vm *unstructured.Unstructured, source obj) (Export, error) {
+func (c *Client) export(ctx context.Context, ns, exp, baseURL, caPEM string, vm *unstructured.Unstructured, source obj) (Export, error) {
 	b := make([]byte, 24)
 	rand.Read(b)
 	token := hex.EncodeToString(b)
-	exp := exportName(name)
 	for _, gvr := range []schema.GroupVersionResource{vmExportGVR, secGVR} {
 		if err := c.dyn.Resource(gvr).Namespace(ns).Delete(ctx, exp, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 			return Export{}, err
@@ -282,4 +282,32 @@ func (c *Client) DiskStatus(ctx context.Context, ns, name string) ([]DiskStatus,
 		out = append(out, st)
 	}
 	return out, nil
+}
+
+func RenameSpec(spec obj, from, to string) map[string]string {
+	names := map[string]string{}
+	templates, _, _ := unstructured.NestedSlice(spec, "dataVolumeTemplates")
+	for _, t := range templates {
+		dv, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
+		n := to + "-" + dv
+		if strings.HasPrefix(dv, from) {
+			n = to + strings.TrimPrefix(dv, from)
+		}
+		names[dv] = n
+		unstructured.SetNestedField(t.(obj), n, "metadata", "name")
+	}
+	unstructured.SetNestedSlice(spec, templates, "dataVolumeTemplates")
+	vols, _, _ := unstructured.NestedSlice(spec, "template", "spec", "volumes")
+	for _, v := range vols {
+		if dv, ok, _ := unstructured.NestedString(v.(obj), "dataVolume", "name"); ok && names[dv] != "" {
+			unstructured.SetNestedField(v.(obj), names[dv], "dataVolume", "name")
+		}
+	}
+	unstructured.SetNestedSlice(spec, vols, "template", "spec", "volumes")
+	ifaces, _, _ := unstructured.NestedSlice(spec, "template", "spec", "domain", "devices", "interfaces")
+	for _, i := range ifaces {
+		i.(obj)["macAddress"] = randomMAC()
+	}
+	unstructured.SetNestedSlice(spec, ifaces, "template", "spec", "domain", "devices", "interfaces")
+	return names
 }

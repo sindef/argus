@@ -52,10 +52,17 @@ var funcs = template.FuncMap{
 	"min100": func(v int) int { return min(v, 100) },
 	"list":   func(v ...string) []string { return v },
 	"join":   strings.Join,
-	"has":    func(l []string, v string) bool { return slices.Contains(l, v) },
-	"add":    func(a, b int) int { return a + b },
-	"sub":    func(a, b int) int { return a - b },
-	"add64":  func(a, b int64) int64 { return a + b },
+	"stamp": func(s string) string {
+		t, err := time.Parse("20060102-150405", s)
+		if err != nil {
+			return s
+		}
+		return t.Local().Format("2006-01-02 15:04")
+	},
+	"has":   func(l []string, v string) bool { return slices.Contains(l, v) },
+	"add":   func(a, b int) int { return a + b },
+	"sub":   func(a, b int) int { return a - b },
+	"add64": func(a, b int64) int64 { return a + b },
 	"vmCtx": func(v vmRow, root map[string]any) map[string]any {
 		return map[string]any{"V": v, "Page": fmt.Sprintf("/nodes/%s/vms/%s/%s", v.Host, v.Namespace, v.Name), "CanOperate": root["CanOperate"], "IsAdmin": root["IsAdmin"]}
 	},

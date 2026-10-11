@@ -9,6 +9,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/util/retry"
 )
 
@@ -87,7 +88,37 @@ func (c *Client) ExportVMSnapshot(ctx context.Context, ns, name, baseURL, caPEM 
 	if err := c.DeleteExport(ctx, ns, name); err != nil {
 		return Export{}, err
 	}
-	snap := snapshotName(name)
+	return c.snapshotExport(ctx, ns, vm, exportName(name), snapshotName(name), baseURL, caPEM)
+}
+
+func backupName(vm string) string { return "argus-backup-" + vm }
+
+func (c *Client) BackupExport(ctx context.Context, ns, name string) (Export, error) {
+	vm, err := c.dyn.Resource(vmGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return Export{}, err
+	}
+	if err := c.DeleteBackupExport(ctx, ns, name); err != nil {
+		return Export{}, err
+	}
+	return c.snapshotExport(ctx, ns, vm, backupName(name), backupName(name), "", "")
+}
+
+func (c *Client) BackupSource(ctx context.Context, ns, name, volume string) (string, string, error) {
+	return c.ExportSource(ctx, ns, backupName(name), volume)
+}
+
+func (c *Client) DeleteBackupExport(ctx context.Context, ns, name string) error {
+	for _, gvr := range []schema.GroupVersionResource{vmExportGVR, secGVR, vmSnapGVR} {
+		if err := c.dyn.Resource(gvr).Namespace(ns).Delete(ctx, backupName(name), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Client) snapshotExport(ctx context.Context, ns string, vm *unstructured.Unstructured, exp, snap, baseURL, caPEM string) (Export, error) {
+	name := vm.GetName()
 	wctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	for {
@@ -97,7 +128,7 @@ func (c *Client) ExportVMSnapshot(ctx context.Context, ns, name, baseURL, caPEM 
 		}
 		select {
 		case <-wctx.Done():
-			return Export{}, errors.New("previous replication snapshot is still being deleted")
+			return Export{}, errors.New("previous export snapshot is still being deleted")
 		case <-time.After(2 * time.Second):
 		}
 	}
@@ -113,7 +144,7 @@ func (c *Client) ExportVMSnapshot(ctx context.Context, ns, name, baseURL, caPEM 
 	if err := c.waitSnapshotReady(ctx, ns, snap); err != nil {
 		return Export{}, err
 	}
-	return c.export(ctx, ns, name, baseURL, caPEM, vm, obj{"apiGroup": "snapshot.kubevirt.io", "kind": "VirtualMachineSnapshot", "name": snap})
+	return c.export(ctx, ns, exp, baseURL, caPEM, vm, obj{"apiGroup": "snapshot.kubevirt.io", "kind": "VirtualMachineSnapshot", "name": snap})
 }
 
 func (c *Client) waitSnapshotReady(ctx context.Context, ns, name string) error {

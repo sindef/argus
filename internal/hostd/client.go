@@ -14,19 +14,58 @@ import (
 
 type Client struct {
 	hc     *http.Client
+	raw    *http.Client
 	nodeIP string
 }
 
 func NewClient(socket, nodeIP string) *Client {
-	return &Client{nodeIP: nodeIP, hc: &http.Client{
-		Timeout: 10 * time.Minute,
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-				return (&net.Dialer{}).DialContext(ctx, "unix", socket)
-			},
-			IdleConnTimeout: 30 * time.Second,
+	tr := &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", socket)
 		},
-	}}
+		IdleConnTimeout: 30 * time.Second,
+	}
+	return &Client{nodeIP: nodeIP, hc: &http.Client{Timeout: 10 * time.Minute, Transport: tr}, raw: &http.Client{Transport: tr}}
+}
+
+func (c *Client) PutBackupFile(ctx context.Context, rel string, body io.Reader) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, "http://hostd/backup/files/"+rel, body)
+	if err != nil {
+		return err
+	}
+	resp, err := c.raw.Do(req)
+	if err != nil {
+		return fmt.Errorf("host helper unavailable: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		var e struct{ Error string }
+		json.NewDecoder(resp.Body).Decode(&e)
+		return errors.New(e.Error)
+	}
+	return nil
+}
+
+func (c *Client) GetBackupFile(ctx context.Context, rel string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://hostd/backup/files/"+rel, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.raw.Do(req)
+	if err == nil && resp.StatusCode >= 300 {
+		resp.Body.Close()
+		return nil, fmt.Errorf("backup file %s: %s", rel, resp.Status)
+	}
+	return resp, err
+}
+
+func (c *Client) Backups(ctx context.Context) ([]Backup, error) {
+	var bs []Backup
+	return bs, c.do(ctx, http.MethodGet, "/backup/list", nil, &bs)
+}
+
+func (c *Client) DeleteBackup(ctx context.Context, rel string) error {
+	return c.do(ctx, http.MethodPost, "/backup/delete", map[string]string{"path": rel}, nil)
 }
 
 func (c *Client) do(ctx context.Context, method, path string, in, out any) error {

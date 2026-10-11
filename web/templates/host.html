@@ -28,6 +28,7 @@
       <label>DNS servers <span class="help" title="Used in addition to servers learned from DHCP.">?</span><input name="dns" value="{{join .DNS " "}}" placeholder="1.1.1.1 9.9.9.9"></label>
       <label>NTP servers <input name="ntp" value="{{join .NTP " "}}" placeholder="pool.ntp.org"></label>
       <label>Remote syslog <input name="syslog" value="{{.Syslog}}" placeholder="udp://syslog.example:514"></label>
+      <label>Backup target <span class="help" title="NFS export for VM backups. Tested for write access before saving.">?</span><input name="backup" value="{{.Backup}}" placeholder="nas.example:/backups/argus"></label>
       <div class="actions"><button class="btn primary" type="submit">Save</button></div>
     </form>
   </div>

@@ -62,7 +62,12 @@
       return;
     }
     const dlg = e.target.closest("[data-dialog]");
-    if (dlg) { document.getElementById(dlg.dataset.dialog).showModal(); return; }
+    if (dlg) {
+      const d = document.getElementById(dlg.dataset.dialog);
+      if (dlg.dataset.fill) for (const [k, v] of Object.entries(JSON.parse(dlg.dataset.fill))) d.querySelector(`[name="${k}"]`).value = v;
+      d.showModal();
+      return;
+    }
     if (e.target.closest("[data-close-dialog]")) { e.target.closest("dialog").close(); return; }
     const close = e.target.closest("[data-close-drawer]");
     if (close) {

@@ -32,6 +32,20 @@ func NewServer() *Server {
 	s.mux.HandleFunc("POST /pools/{name}/import", s.locked(s.importPool))
 	s.mux.HandleFunc("POST /pools/{name}/{action}", s.locked(s.release))
 	s.mux.HandleFunc("GET /network", s.network)
+	s.mux.HandleFunc("GET /backup/files/{rel...}", s.backupFile)
+	s.mux.HandleFunc("PUT /backup/files/{rel...}", s.backupFile)
+	s.mux.HandleFunc("GET /backup/list", func(w http.ResponseWriter, r *http.Request) {
+		bs, err := listBackups(r.Context())
+		reply(w, bs, err)
+	})
+	s.mux.HandleFunc("POST /backup/delete", func(w http.ResponseWriter, r *http.Request) {
+		var req struct{ Path string }
+		err := decode(r, &req)
+		if err == nil {
+			err = deleteBackup(r.Context(), req.Path)
+		}
+		reply(w, nil, err)
+	})
 	s.mux.HandleFunc("GET /settings", func(w http.ResponseWriter, r *http.Request) { reply(w, readSettings(), nil) })
 	s.mux.HandleFunc("POST /settings", s.locked(func(w http.ResponseWriter, r *http.Request) {
 		var u SettingsUpdate

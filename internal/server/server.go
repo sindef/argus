@@ -43,6 +43,7 @@ type Server struct {
 	limiter     *loginLimiter
 	mux         *http.ServeMux
 	ui          *http.ServeMux
+	backups     backupState
 }
 
 type Options struct {
@@ -106,6 +107,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/unprotect", s.require(auth.Admin, s.managerUnprotect))
 		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/disks/{disk}/delete", s.require(auth.Operator, s.managerRemoveDisk))
 		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/snapshots/{snap}/{op}", s.require(auth.Operator, s.managerSnapshotOp))
+		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/backups/{op}", s.require(auth.Operator, s.managerBackupOp))
 		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/{action}", s.require(auth.Operator, s.managerVMAction))
 		s.mux.HandleFunc("GET /events", s.require(auth.ReadOnly, s.managerEvents))
 		s.mux.HandleFunc("POST /jobs/{id}/resolve", s.require(auth.Admin, s.managerResolve))
@@ -168,6 +170,9 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /tokens/{name}/delete", s.require(auth.Admin, s.deleteToken))
 	s.mux.HandleFunc("GET /ca.pem", s.caCert)
 	s.mux.HandleFunc("GET /export/{ns}/{export}/{volume}", s.exportPassthrough)
+	s.mux.HandleFunc("GET /backups/{vm}/{stamp}/{file}", s.serveBackup)
+	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/backups", s.require(auth.Admin, s.apiVMBackups))
+	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/backups/{op}", s.require(auth.Admin, s.apiVMBackupOp))
 	s.mux.HandleFunc("/api/ui/", s.require(auth.Admin, s.serveUI))
 	s.mux.HandleFunc("GET /api/host/network", s.require(auth.Admin, s.apiHostNetwork))
 	s.mux.HandleFunc("GET /api/host/status", s.require(auth.Admin, s.apiHostStatus))
@@ -226,12 +231,16 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("GET /vms/{ns}/{name}/disks/new", s.require(auth.Operator, s.newDisk))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/disks/{disk}/delete", s.require(auth.Operator, s.removeDisk))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/snapshots", s.require(auth.Operator, s.snapshot))
+	s.mux.HandleFunc("POST /vms/{ns}/{name}/backups/{op}", s.require(auth.Operator, s.vmBackupForm))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/snapshots/{snap}/restore", s.require(auth.Operator, s.restoreSnapshot))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/snapshots/{snap}/delete", s.require(auth.Operator, s.deleteSnapshot))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/{action}", s.require(auth.Operator, s.action))
 	s.mux.HandleFunc("GET /vms/{ns}/{name}/console", s.require(auth.Operator, s.console))
 	s.mux.HandleFunc("GET /ws/{ns}/{name}/{kind}", s.require(auth.Operator, s.consoleWS))
 	go s.haLoop()
+	if s.manager == nil && k != nil {
+		go s.backupLoop()
+	}
 	return s, nil
 }
 

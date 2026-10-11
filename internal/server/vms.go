@@ -28,7 +28,7 @@ var powerActions = [][3]string{
 	{"unpause", "Resume", "play"},
 }
 
-var drawerTabs = []string{"overview", "hardware", "snapshots", "logs"}
+var drawerTabs = []string{"overview", "hardware", "snapshots", "backups", "logs"}
 
 func filterVMs(vms []kube.VM, q string) []kube.VM {
 	q = strings.ToLower(strings.TrimSpace(q))
@@ -95,6 +95,8 @@ func (s *Server) vmDrawer(w http.ResponseWriter, r *http.Request) {
 		data["Snapshots"], err = s.kube.ListSnapshots(r.Context(), vm.Namespace, vm.Name)
 	case "logs":
 		data["Events"], err = s.kube.Events(r.Context(), vm.Namespace, vm.Name, 50)
+	case "backups":
+		data["Backups"] = map[string]any{"B": s.vmBackupInfo(r.Context(), vm.Namespace, vm.Name), "P": "/vms/" + vm.Namespace + "/" + vm.Name, "Name": vm.Name, "CanOperate": data["CanOperate"]}
 	}
 	data["Error"] = errText(err)
 	s.render(w, r, "vms.html", "drawer", data)

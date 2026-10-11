@@ -52,6 +52,7 @@ type VM struct {
 	Name         string
 	DisplayName  string
 	Status       string
+	Backup       string
 	Running      bool
 	Cores        int64
 	Memory       string
@@ -305,7 +306,7 @@ func subresourcePath(ns, resource, name, sub string) string {
 
 func toVM(v, vmi *unstructured.Unstructured) VM {
 	o := v.Object
-	vm := VM{Namespace: v.GetNamespace(), Name: v.GetName(), DisplayName: v.GetAnnotations()[displayNameAnnotation]}
+	vm := VM{Namespace: v.GetNamespace(), Name: v.GetName(), DisplayName: v.GetAnnotations()[displayNameAnnotation], Backup: v.GetAnnotations()[BackupAnnotation]}
 	vm.Status, _, _ = unstructured.NestedString(o, "status", "printableStatus")
 	templates, _, _ := unstructured.NestedSlice(o, "spec", "dataVolumeTemplates")
 	for _, t := range templates {

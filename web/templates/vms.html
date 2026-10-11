@@ -123,6 +123,8 @@
 </table></div>
 {{else}}<p class="muted">No snapshots.</p>{{end}}
 {{if $.CanOperate}}<button class="btn sm spaced" hx-post="/vms/{{.Namespace}}/{{.Name}}/snapshots" hx-target="#flash">{{template "icon" "camera"}}Take snapshot</button>{{end}}
+{{else if eq $.Tab "backups"}}
+{{template "vm-backups" $.Backups}}
 {{else if eq $.Tab "logs"}}
 {{with $.Events}}
 <div class="table-wrap"><table>

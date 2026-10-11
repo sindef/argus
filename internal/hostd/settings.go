@@ -22,12 +22,14 @@ type Settings struct {
 	DNS    []string `json:"dns"`
 	NTP    []string `json:"ntp"`
 	Syslog string   `json:"syslog"`
+	Backup string   `json:"backup"`
 }
 
 type SettingsUpdate struct {
 	DNS    *[]string `json:"dns,omitempty"`
 	NTP    *[]string `json:"ntp,omitempty"`
 	Syslog *string   `json:"syslog,omitempty"`
+	Backup *string   `json:"backup,omitempty"`
 }
 
 var (
@@ -47,7 +49,7 @@ func confValues(path, key string) []string {
 }
 
 func readSettings() Settings {
-	st := Settings{DNS: confValues(resolvedConf, "DNS"), NTP: confValues(timesyncdConf, "NTP")}
+	st := Settings{DNS: confValues(resolvedConf, "DNS"), NTP: confValues(timesyncdConf, "NTP"), Backup: backupTarget()}
 	b, _ := os.ReadFile(syslogConf)
 	if m := syslogLine.FindStringSubmatch(strings.TrimSpace(string(b))); m != nil {
 		proto := "udp"
@@ -104,6 +106,11 @@ func applySettings(ctx context.Context, u SettingsUpdate) error {
 			return err
 		}
 		if _, err := run(ctx, "systemctl", "restart", "systemd-timesyncd"); err != nil {
+			return err
+		}
+	}
+	if u.Backup != nil {
+		if err := setBackupTarget(ctx, strings.TrimSpace(*u.Backup)); err != nil {
 			return err
 		}
 	}

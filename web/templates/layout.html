@@ -88,3 +88,34 @@
 </div>
 {{end}}
 {{end}}
+
+{{define "vm-backups"}}{{$b := .B}}
+{{with $b.Error}}<p class="error">{{.}}</p>{{end}}
+<form hx-post="{{.P}}/backups/policy" hx-target="#flash" class="form">
+  <div class="row">
+    <label>Every (hours) <input name="every" type="number" min="0" max="720" value="{{if $b.Enabled}}{{$b.Policy.Every}}{{end}}" placeholder="Off"></label>
+    <label>Keep <input name="keep" type="number" min="1" max="365" value="{{if $b.Enabled}}{{$b.Policy.Keep}}{{else}}7{{end}}"></label>
+  </div>
+  <label class="check"><input type="checkbox" name="offsite"{{if $b.Policy.Offsite}} checked{{end}}{{if not $b.Target}} disabled{{end}}> Copy to backup target {{with $b.Target}}<span class="muted mono">{{.}}</span>{{else}}<span class="help" title="Set a backup target in the host's Services settings or host profile.">?</span>{{end}}</label>
+  {{if .CanOperate}}<div class="actions"><button class="btn" type="button" hx-post="{{.P}}/backups/now" hx-target="#flash">Back up now</button><button class="btn primary" type="submit">Save</button></div>{{end}}
+</form>
+{{with $b.Status}}<p class="muted">Last backup: {{.}}</p>{{end}}
+{{if $b.Target}}
+<h2 class="spaced">On backup target</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Taken</th><th>Size</th><th></th></tr></thead>
+  <tbody>{{range $b.Backups}}<tr><td title="{{.Stamp}}">{{stamp .Stamp}}</td><td>{{bytes .Size}}</td>
+    <td class="row-actions">{{if $.CanOperate}}<button class="link" data-dialog="restore-backup" data-fill='{"stamp":"{{.Stamp}}"}'>Restore</button><button class="link danger" hx-post="{{$.P}}/backups/delete" hx-vals='{"stamp":"{{.Stamp}}"}' hx-target="#flash" hx-confirm="Delete this backup from the target?">Delete</button>{{end}}</td></tr>
+  {{else}}<tr><td colspan="3" class="muted">No backups yet.</td></tr>{{end}}</tbody>
+</table></div>
+<dialog id="restore-backup" class="card">
+  <form hx-post="{{.P}}/backups/restore" hx-target="#restore-error" class="form">
+    <h2>Restore backup</h2>
+    <p id="restore-error" class="error form-error"></p>
+    <input type="hidden" name="stamp">
+    <label>VM name <span class="help" title="Restoring alongside the original needs a new name; disks and MAC addresses are renamed.">?</span><input name="target" value="{{.Name}}-restore" required></label>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Restore</button></div>
+  </form>
+</dialog>
+{{end}}
+{{end}}

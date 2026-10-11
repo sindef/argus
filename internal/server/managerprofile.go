@@ -43,6 +43,9 @@ func profileDiffs(p manager.Profile, st HostSettings, nets []kube.Network, defs 
 	if p.Syslog != "" && p.Syslog != st.Syslog {
 		d = append(d, fmt.Sprintf("syslog is %q", st.Syslog))
 	}
+	if p.Backup != "" && p.Backup != st.Backup {
+		d = append(d, fmt.Sprintf("backup target is %q", st.Backup))
+	}
 	if p.MigrationBridge != "" && p.MigrationBridge != st.MigrationBridge {
 		d = append(d, "migration bridge is "+st.MigrationBridge)
 	}
@@ -94,7 +97,7 @@ func (s *Server) profilePage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) profileSave(w http.ResponseWriter, r *http.Request) {
-	p := manager.Profile{DNS: fields(r.FormValue("dns")), NTP: fields(r.FormValue("ntp")), Syslog: strings.TrimSpace(r.FormValue("syslog")), MigrationBridge: strings.TrimSpace(r.FormValue("migration_bridge")), Networks: r.FormValue("networks") != ""}
+	p := manager.Profile{DNS: fields(r.FormValue("dns")), NTP: fields(r.FormValue("ntp")), Syslog: strings.TrimSpace(r.FormValue("syslog")), MigrationBridge: strings.TrimSpace(r.FormValue("migration_bridge")), Backup: strings.TrimSpace(r.FormValue("backup")), Networks: r.FormValue("networks") != ""}
 	if err := s.manager.SetProfile(r.Context(), session(r).Org, r.FormValue("dc"), r.FormValue("cluster"), p); err != nil {
 		flash(w, r, err)
 		return
@@ -124,6 +127,9 @@ func (s *Server) profileApply(w http.ResponseWriter, r *http.Request) {
 	if p.MigrationBridge != "" {
 		u.MigrationBridge = &p.MigrationBridge
 	}
+	if p.Backup != "" {
+		u.Backup = &p.Backup
+	}
 	members := s.clusterMembers(r, dc, cl)
 	if len(members) == 0 {
 		flash(w, r, errors.New("no hosts in this cluster"))
@@ -149,4 +155,3 @@ func (s *Server) profileApply(w http.ResponseWriter, r *http.Request) {
 	log.Printf("%s: host profile for %s/%s applied", session(r).User, dc, cl)
 	w.Header().Set("HX-Refresh", "true")
 }
-
