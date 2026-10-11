@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base32"
 	"encoding/hex"
 	"encoding/json"
@@ -82,8 +83,57 @@ type Session struct {
 }
 
 type Sessions struct {
-	mu sync.Mutex
-	m  map[string]Session
+	mu    sync.Mutex
+	m     map[string]Session
+	dirty bool
+}
+
+const sessionsSecret = "argus-sessions"
+
+func tokenKey(tok string) string {
+	h := sha256.Sum256([]byte(tok))
+	return hex.EncodeToString(h[:])
+}
+
+func (s *Store) PersistSessions(ctx context.Context) {
+	if data, _, err := s.secrets.Get(ctx, sessionsSecret); err == nil {
+		var m map[string]Session
+		if json.Unmarshal(data["sessions"], &m) == nil {
+			s.sessions.mu.Lock()
+			for k, v := range m {
+				if _, ok := s.sessions.m[k]; !ok && time.Now().Before(v.Expires) {
+					s.sessions.m[k] = v
+				}
+			}
+			s.sessions.mu.Unlock()
+		}
+	}
+	for range time.Tick(5 * time.Second) {
+		s.sessions.mu.Lock()
+		if !s.sessions.dirty {
+			s.sessions.mu.Unlock()
+			continue
+		}
+		b, err := json.Marshal(s.sessions.m)
+		s.sessions.dirty = false
+		s.sessions.mu.Unlock()
+		if err != nil {
+			continue
+		}
+		data := map[string][]byte{"sessions": b}
+		_, rv, err := s.secrets.Get(ctx, sessionsSecret)
+		switch {
+		case apierrors.IsNotFound(err):
+			err = s.secrets.Create(ctx, sessionsSecret, "Opaque", data)
+		case err == nil:
+			err = s.secrets.Update(ctx, sessionsSecret, rv, data)
+		}
+		if err != nil {
+			s.sessions.mu.Lock()
+			s.sessions.dirty = true
+			s.sessions.mu.Unlock()
+		}
+	}
 }
 
 func NewStore(secrets Secrets) *Store {
@@ -116,7 +166,8 @@ func (ss *Sessions) add(sess Session, remember bool) string {
 		}
 	}
 	sess.Expires = now.Add(ttl)
-	ss.m[tok] = sess
+	ss.m[tokenKey(tok)] = sess
+	ss.dirty = true
 	return tok
 }
 
@@ -305,12 +356,13 @@ func (s *Store) ChangePassword(ctx context.Context, tok, current, password strin
 	s.sessions.mu.Lock()
 	defer s.sessions.mu.Unlock()
 	for k, v := range s.sessions.m {
-		if v.Org == s.org && v.User == sess.User && k != tok {
+		if v.Org == s.org && v.User == sess.User && k != tokenKey(tok) {
 			delete(s.sessions.m, k)
 		}
 	}
 	sess.MustChange = false
-	s.sessions.m[tok] = sess
+	s.sessions.m[tokenKey(tok)] = sess
+	s.sessions.dirty = true
 	return nil
 }
 
@@ -360,7 +412,7 @@ func (s *Store) Login(ctx context.Context, name, password string, remember bool)
 func (s *Store) Session(tok string) (Session, bool) {
 	s.sessions.mu.Lock()
 	defer s.sessions.mu.Unlock()
-	v, ok := s.sessions.m[tok]
+	v, ok := s.sessions.m[tokenKey(tok)]
 	if !ok || time.Now().After(v.Expires) {
 		return Session{}, false
 	}
@@ -370,7 +422,8 @@ func (s *Store) Session(tok string) (Session, bool) {
 func (s *Store) Logout(tok string) {
 	s.sessions.mu.Lock()
 	defer s.sessions.mu.Unlock()
-	delete(s.sessions.m, tok)
+	delete(s.sessions.m, tokenKey(tok))
+	s.sessions.dirty = true
 }
 
 func (s *Store) dropSessions(name string) {
@@ -379,6 +432,7 @@ func (s *Store) dropSessions(name string) {
 	for k, v := range s.sessions.m {
 		if v.Org == s.org && v.User == name {
 			delete(s.sessions.m, k)
+			s.sessions.dirty = true
 		}
 	}
 }

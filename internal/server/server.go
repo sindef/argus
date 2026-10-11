@@ -88,6 +88,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	}
 
 	go s.auditLoop()
+	go s.auth.PersistSessions(context.Background())
 	if k != nil || s.manager != nil {
 		go s.alarmLoop()
 	}
