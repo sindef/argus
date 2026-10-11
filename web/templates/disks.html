@@ -51,6 +51,6 @@
 <div class="actions spaced">
   {{if .Smart.Supported}}<button class="btn" hx-post="{{$.Base}}/disks/{{$d.Name}}/smart-test" hx-vals='{"test":"short"}' hx-target="#disk-error">Short test</button>
   <button class="btn" hx-post="{{$.Base}}/disks/{{$d.Name}}/smart-test" hx-vals='{"test":"long"}' hx-target="#disk-error" hx-confirm="Start an extended SMART test? It can take hours; the disk stays usable.">Extended test</button>{{end}}
-  {{if $d.Free}}<button class="btn danger" hx-post="{{$.Base}}/disks/{{$d.Name}}/wipe" hx-target="#disk-error" hx-prompt="Type {{$d.Name}} to erase all partitions and signatures">{{template "icon" "trash-2"}}Wipe</button>{{end}}
+  {{if $d.Free}}<button class="btn danger" hx-post="{{$.Base}}/disks/{{$d.Name}}/wipe" hx-target="#disk-error" data-prompt="Erase {{$d.Name}}" data-prompt-placeholder="Type {{$d.Name}} to erase all partitions and signatures" data-prompt-match="{{$d.Name}}">{{template "icon" "trash-2"}}Wipe</button>{{end}}
 </div>
 {{end}}{{end}}

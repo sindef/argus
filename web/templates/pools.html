@@ -26,7 +26,7 @@
           <button hx-get="{{$.Base}}/pools/{{.Name}}/add" hx-target="#modal">{{template "icon" "plus"}}Add devices</button>
           {{if not .System}}<hr>
           <button hx-post="{{$.Base}}/pools/{{.Name}}/export" hx-confirm="Export {{.Name}}? Its disks keep their data and can be imported again.">{{template "icon" "upload"}}Export</button>
-          <button class="danger" hx-post="{{$.Base}}/pools/{{.Name}}/destroy" hx-prompt="Type {{.Name}} to destroy the pool and erase its disks">{{template "icon" "trash-2"}}Destroy</button>{{end}}
+          <button class="danger" hx-post="{{$.Base}}/pools/{{.Name}}/destroy" data-prompt="Destroy {{.Name}}" data-prompt-placeholder="Type {{.Name}} to destroy the pool and erase its disks" data-prompt-match="{{.Name}}">{{template "icon" "trash-2"}}Destroy</button>{{end}}
         </div>
       </div>
     </td>

@@ -127,6 +127,33 @@
     document.querySelectorAll("[data-needs-selection]").forEach((b) => { b.disabled = n === 0; });
   }
 
+  document.addEventListener("htmx:confirm", (e) => {
+    const el = e.detail.elt, d = el.dataset, dlg = document.getElementById("prompt");
+    if (d.prompt === undefined || !dlg) return;
+    e.preventDefault();
+    const form = dlg.querySelector("form"), input = form.elements.value;
+    dlg.querySelector("h2").textContent = d.prompt;
+    input.value = d.promptValue || "";
+    input.placeholder = d.promptPlaceholder || "";
+    input.required = d.promptOptional === undefined;
+    input.setCustomValidity("");
+    input.oninput = () => input.setCustomValidity("");
+    form.onsubmit = (ev) => {
+      ev.preventDefault();
+      if (d.promptMatch !== undefined && input.value !== d.promptMatch) {
+        input.setCustomValidity("Type " + d.promptMatch + " to confirm");
+        input.reportValidity();
+        return;
+      }
+      const v = input.value;
+      dlg.close();
+      el.addEventListener("htmx:configRequest", (c) => { c.detail.headers["HX-Prompt"] = v; }, { once: true });
+      e.detail.issueRequest(true);
+    };
+    dlg.showModal();
+    input.select();
+  });
+
   const buildPanes = (root) => {
     if (root.querySelector(":scope > .panes-nav")) return;
     const nav = document.createElement("nav"), body = document.createElement("div");

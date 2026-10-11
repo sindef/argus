@@ -56,9 +56,9 @@
   {{end}}
   <hr>
   {{if .IsAdmin}}<a href="{{.Page}}#migrate">{{template "icon" "arrow-right-left"}}Migrate</a>{{end}}
-  <button hx-post="{{.Page}}/clone" hx-prompt="Name for the clone">{{template "icon" "copy"}}Clone</button>
+  <button hx-post="{{.Page}}/clone" data-prompt="Clone" data-prompt-placeholder="Name for the clone">{{template "icon" "copy"}}Clone</button>
   <button hx-post="{{.Page}}/snapshot">{{template "icon" "camera"}}Snapshot</button>
-  <button hx-post="{{.Page}}/rename" hx-prompt="Display name (empty to clear)">{{template "icon" "pencil"}}Rename</button>
+  <button hx-post="{{.Page}}/rename" data-prompt="Rename" data-prompt-placeholder="Display name" data-prompt-value="{{$v.DisplayName}}" data-prompt-optional>{{template "icon" "pencil"}}Rename</button>
   <button data-dialog="vm-tags" data-fill='{"action":"{{.Page}}/tags","tags":"{{join $v.Tags ", "}}"}'>{{template "icon" "tag"}}Tags…</button>
   {{if .IsAdmin}}<hr><button class="danger" hx-post="{{.Page}}/delete" hx-confirm="Delete {{$v.Label}} and its disks?">{{template "icon" "trash-2"}}Delete</button>{{end}}
   {{end}}
