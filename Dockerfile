@@ -12,5 +12,8 @@ FROM scratch AS bin
 COPY --from=build /app /app
 
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+LABEL org.opencontainers.image.licenses="AGPL-3.0-only" \
+      org.opencontainers.image.source="https://github.com/sindef/argus"
+COPY LICENSE /LICENSE
 COPY --from=build /app /app
 ENTRYPOINT ["/app"]
