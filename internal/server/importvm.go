@@ -281,6 +281,11 @@ func (s *Server) importESXi(ctx context.Context, f func(string) string) (string,
 	if err := e.pinCert(); err != nil {
 		return "", err
 	}
+	seen := hex.EncodeToString(e.pin[:])
+	want := strings.ToLower(strings.NewReplacer(":", "", " ", "").Replace(f("fingerprint")))
+	if want != seen {
+		return "", fmt.Errorf("confirm the ESXi certificate fingerprint before credentials are sent; this host presents %s", seen)
+	}
 	vmx, err := e.get(ctx, path.Base(m[2]))
 	if err != nil {
 		return "", err

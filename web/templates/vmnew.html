@@ -76,6 +76,7 @@
       <label>VM file <span class="help" title="Datastore path of the powered-off VM's .vmx; disks must not have snapshots.">?</span><input name="vmx" placeholder="[datastore1] web01/web01.vmx" required></label>
       <label>Datacenter <span class="help" title="ha-datacenter for a standalone ESXi host; the datacenter name on vCenter.">?</span><input name="dc" placeholder="ha-datacenter"></label>
     </div>
+    <label>Certificate fingerprint (SHA-256) <span class="help" title="Compare with the host's certificate before sending credentials. Leave empty to be shown the fingerprint the host presents.">?</span><input name="fingerprint" class="mono" placeholder="e.g. 3f:9a:…"></label>
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Import</button></div>
   </form>
 </div>

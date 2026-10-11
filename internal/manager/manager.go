@@ -497,12 +497,10 @@ func trustPinnedOrPublic(pinned *x509.CertPool, rawURL string) *tls.Config {
 			for _, c := range cs.PeerCertificates[1:] {
 				inter.AddCert(c)
 			}
-			opts := x509.VerifyOptions{DNSName: host, Intermediates: inter, Roots: pinned}
-			if _, err := cs.PeerCertificates[0].Verify(opts); err == nil {
+			if _, err := cs.PeerCertificates[0].Verify(x509.VerifyOptions{Intermediates: inter, Roots: pinned}); err == nil {
 				return nil
 			}
-			opts.Roots = nil
-			_, err := cs.PeerCertificates[0].Verify(opts)
+			_, err := cs.PeerCertificates[0].Verify(x509.VerifyOptions{DNSName: host, Intermediates: inter})
 			return err
 		},
 	}
