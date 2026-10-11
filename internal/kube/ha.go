@@ -176,3 +176,27 @@ func (c *Client) deleteSnapshot(ctx context.Context, ns, vm string) error {
 	}
 	return err
 }
+
+func (c *Client) CheckBackupable(ctx context.Context, ns, name string) error {
+	vm, err := c.dyn.Resource(vmGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	owned := map[string]bool{}
+	templates, _, _ := unstructured.NestedSlice(vm.Object, "spec", "dataVolumeTemplates")
+	for _, t := range templates {
+		n, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
+		owned[n] = true
+	}
+	volumes, _, _ := unstructured.NestedSlice(vm.Object, "spec", "template", "spec", "volumes")
+	for _, v := range volumes {
+		vo := v.(obj)
+		if dv, ok := vo["dataVolume"].(obj); ok && !owned[dv["name"].(string)] {
+			return fmt.Errorf("disk %s is an attached volume, which backups do not include; detach it first", vo["name"])
+		}
+		if _, ok := vo["persistentVolumeClaim"]; ok && vo["name"] != "cdrom" {
+			return fmt.Errorf("disk %s is an attached volume, which backups do not include; detach it first", vo["name"])
+		}
+	}
+	return nil
+}

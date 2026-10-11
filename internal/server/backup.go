@@ -204,6 +204,9 @@ func (s *Server) offsite(ctx context.Context, ns, name string) error {
 	if st.Backup == "" {
 		return errors.New("no backup target configured on this host")
 	}
+	if err := s.kube.CheckBackupable(ctx, ns, name); err != nil {
+		return err
+	}
 	ex, err := s.kube.BackupExport(ctx, ns, name)
 	defer s.kube.DeleteBackupExport(context.Background(), ns, name)
 	if err != nil {
@@ -382,6 +385,11 @@ func (s *Server) backupOp(ctx context.Context, ns, name, op string, f func(strin
 		if every == 0 {
 			return s.kube.SetBackupPolicy(ctx, ns, name, "")
 		}
+		if p.Offsite {
+			if err := s.kube.CheckBackupable(ctx, ns, name); err != nil {
+				return err
+			}
+		}
 		if every < 1 || every > 24*30 || keep < 1 || keep > 365 {
 			return errors.New("interval must be 1-720 hours and keep 1-365")
 		}
@@ -394,6 +402,11 @@ func (s *Server) backupOp(ctx context.Context, ns, name, op string, f func(strin
 		p, ok := parsePolicy(vm.Backup)
 		if !ok {
 			p = BackupPolicy{Every: 24, Keep: 7, Offsite: true}
+		}
+		if p.Offsite {
+			if err := s.kube.CheckBackupable(ctx, ns, name); err != nil {
+				return err
+			}
 		}
 		if !s.startBackup(ns, name, p) {
 			return errors.New("a backup of this VM is already running")
