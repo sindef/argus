@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"argus/internal/kube"
 )
 
 const (
@@ -173,4 +175,45 @@ func (s *Server) haLoop() {
 		}
 		cancel()
 	}
+}
+
+type replicaReq struct {
+	Export  kube.Export       `json:"export"`
+	Mapping map[string]string `json:"mapping"`
+}
+
+func (s *Server) apiReplica(w http.ResponseWriter, r *http.Request) {
+	ns, name := r.PathValue("ns"), r.PathValue("name")
+	var req replicaReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apiError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	var out any = map[string]string{}
+	var err error
+	switch r.PathValue("op") {
+	case "refresh":
+		out, err = s.kube.RefreshReplicaDisks(r.Context(), ns, name, req.Export)
+	case "status":
+		var st []kube.DiskStatus
+		for _, dv := range req.Mapping {
+			phase, perr := s.kube.DataVolumePhase(r.Context(), ns, dv)
+			if perr != nil {
+				phase = "Failed"
+			}
+			st = append(st, kube.DiskStatus{Name: dv, Phase: phase})
+		}
+		out = st
+	case "swap":
+		err = s.kube.SwapReplica(r.Context(), ns, name, req.Export.Spec, req.Mapping)
+	case "abort":
+		s.kube.AbortReplicaRefresh(r.Context(), ns, name, req.Mapping)
+	default:
+		err = errors.New("unknown replica operation")
+	}
+	if err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, out)
 }

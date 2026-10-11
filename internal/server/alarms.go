@@ -313,6 +313,9 @@ func (s *Server) fleetAlarms(ctx context.Context) []Alarm {
 			if !auto && s.manager.Down(p.Owner) && !p.LastSync.IsZero() {
 				out = append(out, Alarm{Key: "ha-down:" + p.VM, Severity: "critical", Host: p.Owner, Object: "VM " + p.VM, Message: "host down; fail over manually to " + p.Replica + " once it is confirmed off"})
 			}
+			if !p.LastSync.IsZero() && time.Since(p.LastSync) > 3*time.Duration(p.Interval)*time.Minute {
+				out = append(out, Alarm{Key: "ha-stale:" + p.VM, Severity: "warning", Host: p.Owner, Object: "VM " + p.VM, Message: fmt.Sprintf("replica is %s old", time.Since(p.LastSync).Round(time.Minute))})
+			}
 			if p.LastError != "" {
 				out = append(out, Alarm{Key: "ha:" + p.VM, Severity: "warning", Host: p.Owner, Object: "VM " + p.VM, Message: "replication: " + p.LastError})
 			}

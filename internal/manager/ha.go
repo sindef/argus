@@ -366,39 +366,51 @@ func (c *Manager) sync(ctx context.Context, p Protected) error {
 		return err
 	}
 	defer owner.do(context.Background(), http.MethodPost, vmPath(p.VM, "unexport"), nil, nil)
-
-	err = c.updateHA(ctx, func(ps []Protected) ([]Protected, error) {
-		for i := range ps {
-			if ps[i].VM == p.VM && ps[i].Owner == p.Owner {
-				ps[i].LastSync = time.Time{}
-			}
-		}
-		return ps, nil
-	})
+	vms, err := replica.VMs(ctx)
 	if err != nil {
 		return err
 	}
-	if err := replica.do(ctx, http.MethodPost, vmPath(p.VM, "abort"), map[string]string{"operation": kube.HAReplicaOperation}, nil); err != nil {
+	if !slices.ContainsFunc(vms, func(v kube.VM) bool { return v.Name == p.VM }) {
+		return c.firstReplica(ctx, p, replica, ex)
+	}
+	var mapping map[string]string
+	if err := replica.do(ctx, http.MethodPost, vmPath(p.VM, "replica/refresh"), map[string]any{"export": ex}, &mapping); err != nil {
 		return err
 	}
+	abort := func(cause error) error {
+		cctx, cancel := cleanupCtx()
+		defer cancel()
+		replica.do(cctx, http.MethodPost, vmPath(p.VM, "replica/abort"), map[string]any{"mapping": mapping}, nil)
+		return cause
+	}
 	for {
-		vms, err := replica.VMs(ctx)
-		if err != nil {
-			return err
+		var disks []kube.DiskStatus
+		if err := replica.do(ctx, http.MethodPost, vmPath(p.VM, "replica/status"), map[string]any{"mapping": mapping}, &disks); err != nil {
+			return abort(err)
 		}
-		present := false
-		for _, v := range vms {
-			present = present || v.Name == p.VM
+		done := true
+		for _, d := range disks {
+			if d.Phase == "Failed" {
+				return abort(fmt.Errorf("disk %s failed to copy; previous replica kept", d.Name))
+			}
+			done = done && d.Phase == "Succeeded"
 		}
-		if !present {
+		if done {
 			break
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(3 * time.Second):
+			return abort(ctx.Err())
+		case <-time.After(5 * time.Second):
 		}
 	}
+	if err := replica.do(ctx, http.MethodPost, vmPath(p.VM, "replica/swap"), map[string]any{"export": ex, "mapping": mapping}, nil); err != nil {
+		return abort(err)
+	}
+	return nil
+}
+
+func (c *Manager) firstReplica(ctx context.Context, p Protected, replica Node, ex kube.Export) error {
 	if err := replica.do(ctx, http.MethodPost, "/api/import", map[string]any{"name": p.VM, "operation": kube.HAReplicaOperation, "export": ex}, nil); err != nil {
 		return err
 	}

@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/util/retry"
 )
@@ -198,5 +201,123 @@ func (c *Client) CheckBackupable(ctx context.Context, ns, name string) error {
 			return fmt.Errorf("disk %s is an attached volume, which backups do not include; detach it first", vo["name"])
 		}
 	}
+	return nil
+}
+
+var genSuffix = regexp.MustCompile(`-g[0-9]+$`)
+
+func replGenName(vm string) string { return "argus-replgen-" + vm }
+
+func (c *Client) RefreshReplicaDisks(ctx context.Context, ns, vm string, ex Export) (map[string]string, error) {
+	if _, err := c.dyn.Resource(vmGVR).Namespace(ns).Get(ctx, vm, metav1.GetOptions{}); err != nil {
+		return nil, err
+	}
+	src := replGenName(vm)
+	c.deleteReplGenSource(ctx, ns, src)
+	cm := &unstructured.Unstructured{Object: obj{"apiVersion": "v1", "kind": "ConfigMap", "metadata": obj{"name": src}, "data": obj{"ca.pem": ex.CA}}}
+	if _, err := c.dyn.Resource(cmGVR).Namespace(ns).Create(ctx, cm, metav1.CreateOptions{}); err != nil {
+		return nil, err
+	}
+	if err := c.Secrets(ns).Create(ctx, src, "Opaque", map[string][]byte{"token": []byte("x-kubevirt-export-token: " + ex.Token)}); err != nil {
+		return nil, err
+	}
+	sizes := map[string]any{}
+	templates, _, _ := unstructured.NestedSlice(ex.Spec, "dataVolumeTemplates")
+	for _, t := range templates {
+		n, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
+		sizes[n], _, _ = unstructured.NestedMap(t.(obj), "spec", "storage")
+	}
+	stamp := strconv.FormatInt(time.Now().Unix(), 10)
+	mapping := map[string]string{}
+	for _, d := range ex.Disks {
+		name := genSuffix.ReplaceAllString(d.DataVolume, "") + "-g" + stamp
+		storage, _ := sizes[d.DataVolume].(map[string]any)
+		dv := &unstructured.Unstructured{Object: obj{
+			"apiVersion": "cdi.kubevirt.io/v1beta1",
+			"kind":       "DataVolume",
+			"metadata":   obj{"name": name},
+			"spec": obj{
+				"source":  obj{"http": obj{"url": d.URL, "certConfigMap": src, "secretExtraHeaders": []any{src}}},
+				"storage": storage,
+			},
+		}}
+		if _, err := c.dyn.Resource(dvGVR).Namespace(ns).Create(ctx, dv, metav1.CreateOptions{}); err != nil {
+			c.AbortReplicaRefresh(context.Background(), ns, vm, mapping)
+			return nil, err
+		}
+		mapping[d.DataVolume] = name
+	}
+	return mapping, nil
+}
+
+func (c *Client) deleteReplGenSource(ctx context.Context, ns, src string) {
+	for _, gvr := range []schema.GroupVersionResource{cmGVR, secGVR} {
+		c.dyn.Resource(gvr).Namespace(ns).Delete(ctx, src, metav1.DeleteOptions{})
+	}
+}
+
+func (c *Client) AbortReplicaRefresh(ctx context.Context, ns, vm string, mapping map[string]string) {
+	for _, n := range mapping {
+		c.DeleteDataVolume(ctx, ns, n)
+	}
+	c.deleteReplGenSource(ctx, ns, replGenName(vm))
+}
+
+func (c *Client) SwapReplica(ctx context.Context, ns, vm string, spec obj, mapping map[string]string) error {
+	for _, n := range mapping {
+		if phase, err := c.DataVolumePhase(ctx, ns, n); err != nil || phase != "Succeeded" {
+			return fmt.Errorf("refreshed disk %s is not complete", n)
+		}
+	}
+	var old []string
+	err := c.editStoppedVM(ctx, ns, vm, func(o obj) error {
+		old = old[:0]
+		templates, _, _ := unstructured.NestedSlice(o, "spec", "dataVolumeTemplates")
+		for _, t := range templates {
+			n, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
+			old = append(old, n)
+		}
+		next := runtime.DeepCopyJSON(spec)
+		tpls, _, _ := unstructured.NestedSlice(next, "dataVolumeTemplates")
+		for _, t := range tpls {
+			n, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
+			nn, ok := mapping[n]
+			if !ok {
+				return fmt.Errorf("no refreshed copy of disk %s", n)
+			}
+			dv, err := c.dyn.Resource(dvGVR).Namespace(ns).Get(ctx, nn, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			dvSpec, _, _ := unstructured.NestedMap(dv.Object, "spec")
+			unstructured.SetNestedField(t.(obj), nn, "metadata", "name")
+			unstructured.SetNestedMap(t.(obj), dvSpec, "spec")
+		}
+		unstructured.SetNestedSlice(next, tpls, "dataVolumeTemplates")
+		vols, _, _ := unstructured.NestedSlice(next, "template", "spec", "volumes")
+		for _, v := range vols {
+			if n, ok, _ := unstructured.NestedString(v.(obj), "dataVolume", "name"); ok && mapping[n] != "" {
+				unstructured.SetNestedField(v.(obj), mapping[n], "dataVolume", "name")
+			}
+		}
+		unstructured.SetNestedSlice(next, vols, "template", "spec", "volumes")
+		next["runStrategy"] = "Halted"
+		delete(next, "running")
+		o["spec"] = next
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	keep := map[string]bool{}
+	for _, n := range mapping {
+		keep[n] = true
+	}
+	for _, n := range old {
+		if !keep[n] {
+			c.DeleteDataVolume(ctx, ns, n)
+		}
+	}
+	c.deleteReplGenSource(ctx, ns, replGenName(vm))
 	return nil
 }
