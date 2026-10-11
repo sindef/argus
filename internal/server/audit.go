@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
@@ -74,14 +76,24 @@ func (s *Server) audited(w http.ResponseWriter, r *http.Request, user string, h 
 	}
 	aw := &auditWriter{ResponseWriter: w, status: http.StatusOK}
 	h(aw)
-	body := strings.TrimSpace(aw.body.String())
-	hx := w.Header().Get("HX-Refresh") != "" || w.Header().Get("HX-Redirect") != ""
-	ok := aw.status < 400 && (hx || body == "" || strings.HasPrefix(body, "{") || aw.status >= 300 || strings.HasPrefix(body, "<"))
-	result := ""
-	if !ok {
-		result = body
-	}
+	ok, result := auditResult(aw, w.Header())
 	s.record(user, r.Method+" "+r.URL.Path, ok, result)
+}
+
+func auditResult(aw *auditWriter, h http.Header) (bool, string) {
+	body := strings.TrimSpace(aw.body.String())
+	text := body != "" && utf8.ValidString(body) && !strings.ContainsAny(body[:1], "<{[") && h.Get("Content-Disposition") == ""
+	ok := aw.status < 400 && (aw.status >= 300 || !text || h.Get("HX-Refresh") != "" || h.Get("HX-Redirect") != "")
+	switch {
+	case ok:
+		return true, ""
+	case text:
+		if r := []rune(body); len(r) > 200 {
+			body = string(r[:200]) + "…"
+		}
+		return false, body
+	}
+	return false, fmt.Sprintf("HTTP %d", aw.status)
 }
 
 func (s *Server) auditLoop() {
