@@ -309,6 +309,8 @@ type hostStatus struct {
 	Status  string `json:"status"`
 	Version string `json:"version"`
 	Running int    `json:"running"`
+	Ready   bool   `json:"ready"`
+	Reason  string `json:"reason"`
 }
 
 func (c *Manager) RollingUpdate(org, dc, cluster, image string, shutdown bool) error {
@@ -358,6 +360,10 @@ func (c *Manager) cycleHost(ctx context.Context, n Node, image string, shutdown 
 	if err := c.evacuate(ctx, sub, n, shutdown); err != nil {
 		return err
 	}
+	var before hostStatus
+	if err := n.do(ctx, http.MethodGet, "/api/host/status", nil, &before); err != nil {
+		return err
+	}
 	action, body := "reboot", map[string]string{}
 	if image != "" {
 		action, body["image"] = "upgrade", image
@@ -380,11 +386,20 @@ func (c *Manager) cycleHost(ctx context.Context, n Node, image string, shutdown 
 		return err
 	}
 	step("waiting for the host to return")
+	var after hostStatus
 	if err := waitFor(ctx, 30*time.Minute, func() (bool, error) {
-		var st hostStatus
-		return n.do(ctx, http.MethodGet, "/api/host/status", nil, &st) == nil, nil
+		if n.do(ctx, http.MethodGet, "/api/host/status", nil, &after) != nil {
+			return false, nil
+		}
+		if !after.Ready {
+			step("back, waiting for " + after.Reason)
+		}
+		return after.Ready, nil
 	}); err != nil {
-		return fmt.Errorf("did not come back: %w", err)
+		return fmt.Errorf("did not become healthy (%s): %w", after.Reason, err)
+	}
+	if image != "" && after.Version == before.Version {
+		return fmt.Errorf("came back on %s; the update did not apply", after.Version)
 	}
 	step("exiting maintenance")
 	return c.leave(ctx, sub, n)

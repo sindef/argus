@@ -64,10 +64,10 @@ func diskIDs() map[string]string {
 	return best
 }
 
-func poolMembers(ctx context.Context) map[string]string {
+func poolMembers(ctx context.Context) (map[string]string, error) {
 	out, err := run(ctx, "zpool", "status", "-LP")
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("cannot read pool membership: %w", err)
 	}
 	members := map[string]string{}
 	pool := ""
@@ -82,7 +82,7 @@ func poolMembers(ctx context.Context) map[string]string {
 			members[f[0]] = pool
 		}
 	}
-	return members
+	return members, nil
 }
 
 func virtualDisk(name string) bool {
@@ -113,7 +113,10 @@ func listDisks(ctx context.Context) ([]Disk, error) {
 		return nil, err
 	}
 	ids := diskIDs()
-	members := poolMembers(ctx)
+	members, err := poolMembers(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var disks []Disk
 	for _, b := range tree.Blockdevices {
 		if b.Type != "disk" || b.Size == 0 || virtualDisk(b.Name) {

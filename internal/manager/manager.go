@@ -338,19 +338,28 @@ func (c *Manager) preflight(ctx context.Context, src, dst Node, ns, vm string) e
 	if err := dst.do(ctx, http.MethodGet, "/api/storage", nil, &st); err != nil {
 		return err
 	}
-	var free int64
-	classes := map[string]bool{"": true}
+	free := map[string]int64{}
 	for _, p := range st.Pools {
-		free += p.Free
-		classes[p.StorageClass] = true
-	}
-	for _, d := range source.Disks {
-		if !classes[d.StorageClass] {
-			return fmt.Errorf("disk %s uses storage pool %s, which %s does not have", d.Name, d.StorageClass, dst.Name)
+		if p.StorageClass != "" {
+			free[p.StorageClass] = p.Free
 		}
 	}
-	if free < source.StorageBytes {
-		return fmt.Errorf("%s has %d GiB free, %s needs %d GiB", dst.Name, free>>30, vm, source.StorageBytes>>30)
+	free[""] = free["zfs"]
+	need := map[string]int64{}
+	for _, d := range source.Disks {
+		if _, ok := free[d.StorageClass]; !ok {
+			return fmt.Errorf("disk %s uses storage pool %s, which %s does not have", d.Name, d.StorageClass, dst.Name)
+		}
+		need[d.StorageClass] += d.SizeBytes
+	}
+	for class, n := range need {
+		if have := free[class]; have < n+n/10 {
+			pool := class
+			if pool == "" {
+				pool = "zfs"
+			}
+			return fmt.Errorf("pool %s on %s has %d GiB free, %s needs %d GiB plus headroom", pool, dst.Name, have>>30, vm, n>>30)
+		}
 	}
 	if source.Running {
 		var m kube.MetricsSample

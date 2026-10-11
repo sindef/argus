@@ -94,7 +94,21 @@ func (s *Server) apiHostStatus(w http.ResponseWriter, r *http.Request) {
 		apiError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, map[string]any{"status": strings.TrimSpace(readFile(filepath.Join(s.runDir, "status"))), "version": readEnv(s.releaseFile)["KAIROS_VERSION"], "running": n})
+	reason := ""
+	if err := s.kube.PlatformReady(r.Context()); err != nil {
+		reason = err.Error()
+	} else if s.hostd != nil {
+		if ps, err := s.hostd.Pools(r.Context()); err != nil {
+			reason = err.Error()
+		} else {
+			for _, p := range ps.Pools {
+				if p.Health != "ONLINE" {
+					reason = "pool " + p.Name + " is " + p.Health
+				}
+			}
+		}
+	}
+	writeJSON(w, map[string]any{"status": strings.TrimSpace(readFile(filepath.Join(s.runDir, "status"))), "version": readEnv(s.releaseFile)["KAIROS_VERSION"], "running": n, "ready": reason == "", "reason": reason})
 }
 
 var errMaintenance = errors.New("host maintenance in progress")

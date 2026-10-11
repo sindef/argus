@@ -437,3 +437,25 @@ func (c *Client) CleanupMigration(ctx context.Context, ns, migrationID string) e
 	}
 	return err
 }
+
+var cdiGVR = schema.GroupVersionResource{Group: "cdi.kubevirt.io", Version: "v1beta1", Resource: "cdis"}
+
+func (c *Client) PlatformReady(ctx context.Context) error {
+	kv, err := c.dyn.Resource(kvGVR).Namespace(kubevirtNS).Get(ctx, "kubevirt", metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("KubeVirt: %w", err)
+	}
+	if phase, _, _ := unstructured.NestedString(kv.Object, "status", "phase"); phase != "Deployed" {
+		return fmt.Errorf("KubeVirt is %s", phase)
+	}
+	cdis, err := c.dyn.Resource(cdiGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("CDI: %w", err)
+	}
+	for _, cdi := range cdis.Items {
+		if phase, _, _ := unstructured.NestedString(cdi.Object, "status", "phase"); phase != "Deployed" {
+			return fmt.Errorf("CDI is %s", phase)
+		}
+	}
+	return nil
+}

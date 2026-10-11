@@ -584,7 +584,9 @@ func Confirm(ctx context.Context) error {
 	if readPending() == nil {
 		return errors.New("nothing to confirm")
 	}
-	run(ctx, "systemctl", "stop", rollbackUnit+".timer")
+	if out, err := run(ctx, "systemctl", "stop", rollbackUnit+".timer"); err != nil && !strings.Contains(out, "not loaded") {
+		return fmt.Errorf("could not cancel the rollback timer: %w", err)
+	}
 	os.RemoveAll(snapshotDir)
 	return os.Remove(PendingFile)
 }
@@ -595,23 +597,28 @@ func Rollback(ctx context.Context) error {
 		return errors.New("nothing to roll back")
 	}
 	run(ctx, "systemctl", "stop", rollbackUnit+".timer")
+	var errs []error
 	current, _ := filepath.Glob(filepath.Join(networkDir, managedGlob))
 	for _, f := range current {
-		os.Remove(f)
+		if err := os.Remove(f); err != nil && !os.IsNotExist(err) {
+			errs = append(errs, err)
+		}
 	}
-	os.Remove(mgmtFile)
+	if err := os.Remove(mgmtFile); err != nil && !os.IsNotExist(err) {
+		errs = append(errs, err)
+	}
 	if b, err := os.ReadFile(filepath.Join(snapshotDir, filepath.Base(mgmtFile))); err == nil {
-		os.WriteFile(mgmtFile, b, 0o644)
+		errs = append(errs, os.WriteFile(mgmtFile, b, 0o644))
 	}
-	LoadFirewall(ctx)
+	errs = append(errs, LoadFirewall(ctx))
 	saved, _ := filepath.Glob(filepath.Join(snapshotDir, managedGlob))
 	var ifaces []string
 	for _, f := range saved {
 		b, err := os.ReadFile(f)
-		if err != nil {
-			return err
+		if err == nil {
+			err = os.WriteFile(filepath.Join(networkDir, filepath.Base(f)), b, 0o644)
 		}
-		os.WriteFile(filepath.Join(networkDir, filepath.Base(f)), b, 0o644)
+		errs = append(errs, err)
 	}
 	for _, f := range append(current, saved...) {
 		base := strings.TrimPrefix(filepath.Base(f), "01-argus-")
@@ -620,7 +627,10 @@ func Rollback(ctx context.Context) error {
 	for _, c := range p.Created {
 		run(ctx, "ip", "link", "del", c)
 	}
-	reloadNetwork(ctx, ifaces)
+	errs = append(errs, reloadNetwork(ctx, ifaces))
+	if err := errors.Join(errs...); err != nil {
+		return fmt.Errorf("rollback incomplete, recovery files kept in %s: %w", snapshotDir, err)
+	}
 	os.RemoveAll(snapshotDir)
 	return os.Remove(PendingFile)
 }
