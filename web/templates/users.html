@@ -2,10 +2,12 @@
 <div class="page-head">
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-users"/></svg>
   <div><h1>Users</h1></div>
-  <div class="actions"><button class="btn primary" data-dialog="add-user">{{template "icon" "plus"}}Add user</button></div>
 </div>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
 {{with .Notice}}<p class="notice">{{.}}</p>{{end}}
+<div class="panes wide">
+<section class="pane" id="s-users" data-icon="users">
+  <header><h2>Users</h2><div class="actions"><button class="btn primary" data-dialog="add-user">{{template "icon" "plus"}}Add user</button></div></header>
 <div class="table-wrap">
 <table>
   <thead><tr><th>Name</th><th>Role</th>{{if $.Manager}}<th>Scope <span class="help" title="Datacenters or clusters the user can see and act on. Empty means the whole organization.">?</span></th>{{end}}<th></th></tr></thead>
@@ -32,6 +34,8 @@
   {{end}}
   </tbody>
 </table>
+</div>
+</section>
 </div>
 <dialog id="add-user" class="card">
   <form method="post" action="/users" class="form">

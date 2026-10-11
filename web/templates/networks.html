@@ -2,10 +2,12 @@
 <div class="page-head">
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-network"/></svg>
   <div><h1>Networks</h1><div class="crumbs">Network / Networks</div></div>
-  {{if and .CanEdit (not .Manager)}}<div class="actions"><button class="btn primary" data-dialog="new-network">{{template "icon" "plus"}}Add network</button></div>{{end}}
 </div>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
 {{if .Manager}}{{template "fleet-networks" .}}{{else}}
+<div class="panes wide">
+<section class="pane" id="s-networks" data-icon="network">
+  <header><h2>Networks</h2>{{if .CanEdit}}<div class="actions"><button class="btn primary" data-dialog="new-network">{{template "icon" "plus"}}Add network</button></div>{{end}}</header>
 <div class="table-wrap">
 <table>
   <thead><tr><th>Name</th><th>VLAN</th><th>Bridge</th><th>Attached VMs</th><th></th></tr></thead>
@@ -21,6 +23,8 @@
   {{end}}
   </tbody>
 </table>
+</div>
+</section>
 </div>
 {{if .CanEdit}}
 <dialog id="new-network" class="card">
@@ -40,7 +44,9 @@
 {{end}}
 
 {{define "fleet-networks"}}
-{{if .CanEdit}}<div class="toolbar"><button class="btn primary" data-dialog="new-network">{{template "icon" "plus"}}Define network</button></div>{{end}}
+<div class="panes wide">
+<section class="pane" id="s-networks" data-icon="network">
+  <header><h2>Networks</h2>{{if .CanEdit}}<div class="actions"><button class="btn primary" data-dialog="new-network">{{template "icon" "plus"}}Define network</button></div>{{end}}</header>
 <div class="table-wrap">
 <table>
   <thead><tr><th>Name</th><th>VLAN</th><th>Bridge</th><th>CIDR</th><th>Gateway</th><th>Applied</th><th>Attached VMs</th><th></th></tr></thead>
@@ -59,9 +65,11 @@
   </tr>{{else}}<tr><td colspan="8" class="muted">No networks.</td></tr>{{end}}</tbody>
 </table>
 </div>
-<div class="card spaced">
-  <div class="card-head">{{template "icon" "split"}}<h2>Virtual Switches</h2></div>
+</section>
+<section class="pane" id="s-switches" data-icon="split">
+  <header><h2>Virtual switches</h2></header>
   <dl class="kv">{{range $h, $b := .Bridges}}<dt>{{$h}}</dt><dd class="mono">{{range $b}}{{.}} {{end}}</dd>{{else}}<dd class="muted">No reachable hosts.</dd>{{end}}</dl>
+</section>
 </div>
 {{if .CanEdit}}
 <dialog id="new-network" class="card">

@@ -2,9 +2,11 @@
 <div class="page-head">
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-database"/></svg>
   <div><h1>Pools</h1><div class="crumbs">Storage / Pools</div></div>
-  <div class="actions"><button class="btn primary" hx-get="{{$.Base}}/pools/new" hx-target="#modal">{{template "icon" "plus"}}Create pool</button></div>
 </div>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
+<div class="panes wide">
+<section class="pane" id="s-pools" data-icon="database">
+  <header><h2>Pools</h2><div class="actions"><button class="btn primary" hx-get="{{$.Base}}/pools/new" hx-target="#modal">{{template "icon" "plus"}}Create pool</button></div></header>
 <div class="table-wrap">
 <table>
   <thead><tr><th>Name</th><th>Media</th><th>Health</th><th>Size</th><th>Used</th><th>Free</th><th>Provisioned</th><th>Volumes</th><th></th></tr></thead>
@@ -31,16 +33,19 @@
   </tr>{{else}}<tr><td colspan="9" class="muted">No pools.</td></tr>{{end}}</tbody>
 </table>
 </div>
+</section>
 {{with .Importable}}
-<div class="card spaced">
-  <div class="card-head">{{template "icon" "download"}}<h2>Pools found on disks</h2></div>
+<section class="pane" id="s-import" data-icon="download">
+  <header><h2>Pools found on disks</h2></header>
   <div class="table-wrap"><table>
     <thead><tr><th>Name</th><th>State</th><th>ID</th><th></th></tr></thead>
     <tbody>{{range .}}<tr><td>{{.Name}}</td><td>{{.State}}</td><td class="mono">{{.ID}}</td>
       <td class="row-actions"><button class="link" hx-post="{{$.Base}}/pools/{{.Name}}/import" hx-target="#flash" hx-confirm="Import pool {{.Name}}?">Import</button><button class="link danger" hx-post="{{$.Base}}/pools/{{.Name}}/force-import" hx-target="#flash" hx-confirm="Force import {{.Name}}? Only do this if no other host is using these disks.">Force import</button></td></tr>{{end}}</tbody>
   </table></div>
-</div>
+</section>
 {{end}}
+</div>
+
 {{end}}
 
 {{define "disk-picks"}}

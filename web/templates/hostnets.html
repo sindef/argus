@@ -2,8 +2,10 @@
 <div class="page-head">
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-cable"/></svg>
   <div><h1>Host networks</h1><div class="crumbs">Networking / Host networks</div></div>
-  <div class="actions"><button class="btn primary" data-dialog="rollout">{{template "icon" "plus"}}Create bridge on hosts</button></div>
 </div>
+<div class="panes wide">
+<section class="pane" id="s-hostnets" data-icon="cable">
+  <header><h2>Host networks</h2><div class="actions"><button class="btn primary" data-dialog="rollout">{{template "icon" "plus"}}Create bridge on hosts</button></div></header>
 <div class="table-wrap">
 <table>
   <thead><tr><th>Host</th><th>Bridges</th><th>Management</th><th>Migration</th><th>Pending change</th></tr></thead>
@@ -17,6 +19,8 @@
     {{end}}
   </tr>{{else}}<tr><td colspan="5" class="muted">No hosts.</td></tr>{{end}}</tbody>
 </table>
+</div>
+</section>
 </div>
 <dialog id="rollout" class="card wide">
   <form hx-post="/network/hosts/bridge" hx-target="#rollout-result" class="form" hx-disabled-elt="find button[type=submit]">

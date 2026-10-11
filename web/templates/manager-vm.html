@@ -28,10 +28,12 @@
   </div>
   {{end}}
 </div>
-<nav class="tabs">
-  {{range $t := $.Tabs}}<a href="?tab={{$t}}"{{if eq $t $.Tab}} class="active"{{end}}>{{title $t}}</a>{{end}}
-  {{if and $.CanOperate .Running}}<a href="{{$p}}/console">Console</a>{{end}}
+<div class="panes static">
+<nav class="panes-nav">
+  {{range $t := $.Tabs}}{{$i := "gauge"}}{{if eq $t "hardware"}}{{$i = "cpu"}}{{else if eq $t "snapshots"}}{{$i = "camera"}}{{else if eq $t "backups"}}{{$i = "download"}}{{else if eq $t "logs"}}{{$i = "file-text"}}{{end}}<a href="?tab={{$t}}"{{if eq $t $.Tab}} class="active"{{end}}>{{template "icon" $i}}{{title $t}}</a>{{end}}
+  {{if and $.CanOperate .Running}}<a href="{{$p}}/console">{{template "icon" "terminal"}}Console</a>{{end}}
 </nav>
+<div class="panes-body">
 {{with $.Error}}<p class="error">{{.}}</p>{{end}}
 {{if eq $.Tab "summary"}}
 <div class="grid vm-summary">
@@ -102,6 +104,8 @@
 {{else if eq $.Tab "logs"}}
 <div class="card">{{template "events" $.Events}}</div>
 {{end}}
+</div>
+</div>
 {{if $.IsAdmin}}
 <dialog id="migrate" class="card">
   <form hx-post="{{$p}}/migrate" hx-target="#migrate-error" class="form">

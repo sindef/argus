@@ -4,8 +4,8 @@
   <div><h1>Host profile</h1><div class="crumbs">{{.DC}} / {{.Cluster}}</div></div>
 </div>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
-<div class="settings">
-  <section class="settings-section" id="s-profile" data-icon="settings">
+<div class="panes">
+  <section class="pane" id="s-profile" data-icon="settings">
     <header><h2>Settings</h2><span class="help" title="Empty fields are left as each host has them.">?</span></header>
     {{with .Profile}}
     <form hx-post="/profile" hx-target="#flash" class="form">
@@ -21,7 +21,7 @@
     </form>
     {{end}}
   </section>
-  <section class="settings-section" id="s-compliance" data-icon="list">
+  <section class="pane" id="s-compliance" data-icon="list">
     <header><h2>Compliance</h2><div class="actions"><button class="btn" hx-post="/profile/apply" hx-vals='{"dc":"{{.DC}}","cluster":"{{.Cluster}}"}' hx-target="#flash" hx-confirm="Apply the profile to every host in {{.Cluster}}?">{{template "icon" "check"}}Remediate</button></div></header>
     <div class="table-wrap"><table>
       <thead><tr><th>Host</th><th>Status</th><th>Differences</th></tr></thead>

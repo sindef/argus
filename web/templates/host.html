@@ -5,9 +5,9 @@
 </div>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
 {{with .Notice}}<p class="notice">{{.}}</p>{{end}}
-<div class="settings">
+<div class="panes">
   {{if .Available}}
-  <section class="settings-section" id="s-system" data-icon="server">
+  <section class="pane" id="s-system" data-icon="server">
     <header><h2>System</h2>
       <div class="actions">
         <button class="btn" type="button" hx-post="/host/reboot" hx-target="#flash" hx-confirm="Reboot the host?">{{template "icon" "rotate-cw"}}Reboot</button>
@@ -23,7 +23,7 @@
   </section>
   {{end}}
   {{with .Settings}}
-  <section class="settings-section" id="s-services" data-icon="globe">
+  <section class="pane" id="s-services" data-icon="globe">
     <header><h2>Services</h2></header>
     <form hx-post="/host/settings" hx-target="#flash" class="form">
       <label>DNS servers <span class="help" title="Used in addition to servers learned from DHCP.">?</span><input name="dns" value="{{join .DNS ", "}}" placeholder="1.1.1.1, 9.9.9.9"></label>
@@ -36,7 +36,7 @@
   {{end}}
   {{template "notify-section" .}}
   {{template "cert-section" .}}
-  <section class="settings-section" id="s-access" data-icon="key-round">
+  <section class="pane" id="s-access" data-icon="key-round">
     <header><h2>Manager access</h2><div class="actions"><button class="btn" data-dialog="add-token">{{template "icon" "plus"}}Create token</button></div></header>
     <dl class="kv"><dt>CA fingerprint</dt><dd class="mono wrap">{{.CAFingerprint}}</dd></dl>
     {{if .Tokens}}

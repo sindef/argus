@@ -127,12 +127,12 @@
     document.querySelectorAll("[data-needs-selection]").forEach((b) => { b.disabled = n === 0; });
   }
 
-  const buildSettings = (root) => {
-    if (root.querySelector(":scope > .settings-nav")) return;
+  const buildPanes = (root) => {
+    if (root.querySelector(":scope > .panes-nav")) return;
     const nav = document.createElement("nav"), body = document.createElement("div");
-    nav.className = "settings-nav";
-    body.className = "settings-body";
-    root.querySelectorAll(":scope > .settings-section").forEach((s) => {
+    nav.className = "panes-nav";
+    body.className = "panes-body";
+    root.querySelectorAll(":scope > .pane").forEach((s) => {
       const a = document.createElement("a");
       a.href = "#" + s.id;
       a.innerHTML = `<svg class="i"><use href="/static/vendor/lucide/icons.svg#i-${s.dataset.icon}"/></svg>`;
@@ -142,25 +142,25 @@
     });
     root.append(nav, body);
   };
-  const showSetting = (root, id) => {
-    buildSettings(root);
-    const links = [...root.querySelectorAll(".settings-nav a")];
+  const showPane = (root, id) => {
+    buildPanes(root);
+    const links = [...root.querySelectorAll(".panes-nav a")];
     if (!links.length) return;
     const has = (v) => links.some((a) => a.hash === "#" + v);
-    if (!has(id)) id = store.get("set:" + location.pathname);
+    if (!has(id)) id = store.get("pane:" + location.pathname);
     if (!has(id)) id = links[0].hash.slice(1);
     links.forEach((a) => a.classList.toggle("active", a.hash === "#" + id));
-    root.querySelectorAll(".settings-section").forEach((s) => s.classList.toggle("active", s.id === id));
+    root.querySelectorAll(".pane").forEach((s) => s.classList.toggle("active", s.id === id));
     root.classList.add("ready");
   };
   document.addEventListener("click", (e) => {
-    const a = e.target.closest(".settings-nav a");
+    const a = e.target.closest(".panes:not(.static) > .panes-nav a");
     if (!a) return;
     e.preventDefault();
     const id = a.hash.slice(1);
-    store.set("set:" + location.pathname, id);
+    store.set("pane:" + location.pathname, id);
     history.replaceState(null, "", a.hash);
-    showSetting(a.closest(".settings"), id);
+    showPane(a.closest(".panes"), id);
   });
 
   const restore = () => {
@@ -168,7 +168,7 @@
       const v = store.get("nav:" + s.id);
       if (v) s.classList.toggle("closed", v === "closed");
     });
-    document.querySelectorAll(".settings").forEach((root) => showSetting(root, location.hash.slice(1)));
+    document.querySelectorAll(".panes:not(.static)").forEach((root) => showPane(root, location.hash.slice(1)));
     document.querySelectorAll(".tree li[data-id]").forEach((li) => {
       const v = store.get("tree:" + li.dataset.id);
       if (v) li.classList.toggle("closed", v === "closed");

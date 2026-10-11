@@ -4,12 +4,18 @@
   <div><h1>Disks</h1><div class="crumbs">Storage / Disks</div></div>
 </div>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
+<div class="panes wide">
+<section class="pane" id="s-disks" data-icon="hard-drive">
+  <header><h2>Disks</h2></header>
 <div class="table-wrap">
 <table>
   <thead><tr><th>Device</th><th>Model</th><th>Serial</th><th>Size</th><th>Media</th><th>Status</th><th>Contents</th></tr></thead>
   <tbody>{{range .Disks}}<tr class="clickable" data-modal="{{$.Base}}/disks/{{.Name}}">
     <td title="{{.ID}}">{{template "icon" "hard-drive"}}{{.Name}}</td>
-    <td>{{with .Model}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
+    <td>{{with .Model}}{{.}}{{else}}<span class="muted">—</span>
+</section>
+</div>
+{{end}}</td>
     <td class="mono">{{with .Serial}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
     <td>{{bytes .Size}}</td>
     <td><span class="badge">{{.Media}}</span>{{with .Transport}} <span class="muted">{{.}}</span>{{end}}</td>

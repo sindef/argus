@@ -5,6 +5,9 @@
   <div><h1>Storage Pools</h1><div class="crumbs">Storage / Storage Pools</div></div>
 </div>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
+<div class="panes wide">
+<section class="pane" id="s-pools" data-icon="database">
+  <header><h2>Storage pools</h2></header>
 <div class="stats">
   <div class="stat">{{template "icon" "database"}}<div><div class="label">Total Pools</div><div class="value">{{len .Pools}}</div><div class="detail">One local ZFS pool per host</div></div></div>
   <div class="stat">{{template "icon" "server"}}<div><div class="label">Total Capacity</div><div class="value">{{bytes .Total}}</div></div></div>
@@ -29,8 +32,8 @@
   </tr>{{else}}<tr><td colspan="10" class="muted">No reachable hosts.</td></tr>{{end}}</tbody>
 </table>
 </div>
-<div class="card spaced">
-  <div class="card-head">{{template "icon" "activity"}}<h2>Capacity Utilization</h2><span class="right muted">Last 7 days</span></div>
+<h3>Capacity, last 7 days</h3>
   <div class="chart" data-src="/metrics?range=7d" data-window="604800" data-cols="poolUsed,poolFree" data-labels="Used,Free" data-unit="B" data-height="220"></div>
+</section>
 </div>
 {{end}}

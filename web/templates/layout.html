@@ -130,7 +130,7 @@
 {{end}}
 
 {{define "notify-section"}}{{with .Notify}}
-<section class="settings-section" id="s-notify" data-icon="bell">
+<section class="pane" id="s-notify" data-icon="bell">
   <header><h2>Notifications</h2></header>
   <form hx-post="/notify" hx-target="#flash" class="form">
     <label>Webhook URL <span class="help" title="JSON POST with text and content fields; works with Slack and Discord incoming webhooks.">?</span><input name="webhook" type="url" value="{{.Webhook}}" placeholder="https://hooks.slack.com/…"></label>
@@ -163,7 +163,7 @@
 {{end}}
 
 {{define "cert-section"}}{{with .Cert}}
-<section class="settings-section" id="s-cert" data-icon="lock">
+<section class="pane" id="s-cert" data-icon="lock">
   <header><h2>Web certificate</h2>{{if .Custom}}<div class="actions"><button class="btn" type="button" hx-post="/certificate" hx-vals='{"revert":"1"}' hx-target="#flash" hx-confirm="Go back to the built-in certificate?">Use built-in</button></div>{{end}}</header>
   <dl class="kv">
     <dt>Current</dt><dd>{{if .Custom}}{{.Subject}}{{else}}Built-in self-signed{{end}}</dd>

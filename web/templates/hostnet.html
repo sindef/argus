@@ -2,9 +2,11 @@
 <div class="page-head">
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-cable"/></svg>
   <div><h1>Host network</h1><div class="crumbs">Network / Host network</div></div>
-  <div class="actions"><button class="btn primary" data-dialog="new-bridge">{{template "icon" "plus"}}Create bridge</button></div>
 </div>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
+<div class="panes wide">
+<section class="pane" id="s-ifaces" data-icon="cable">
+  <header><h2>Interfaces</h2><div class="actions"><button class="btn primary" data-dialog="new-bridge">{{template "icon" "plus"}}Create bridge</button></div></header>
 {{with .Net}}
 <div class="table-wrap">
 <table>
@@ -22,6 +24,8 @@
 </table>
 </div>
 {{end}}
+</section>
+</div>
 <dialog id="new-bridge" class="card wide">
   <form hx-post="{{.Base}}/network/host/bridge" hx-target="#bridge-form-error" class="form">
     <h2>Create bridge</h2>
