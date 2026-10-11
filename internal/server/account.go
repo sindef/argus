@@ -43,12 +43,14 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	if tok == "" {
 		s.limiter.fail(ip)
 		log.Printf("login: failed for %q from %s", r.FormValue("username"), ip)
+		s.record(s.auditUser(r.FormValue("org"), r.FormValue("username")), "sign in from "+ip, false, "invalid username or password")
 		time.Sleep(time.Second)
 		w.WriteHeader(http.StatusUnauthorized)
 		s.render(w, r, "login.html", "auth", s.loginData(r, "Invalid username or password"))
 		return
 	}
 	s.limiter.succeed(ip)
+	s.record(s.auditUser(r.FormValue("org"), r.FormValue("username")), "sign in from "+ip, true, "")
 	s.setSessionCookie(w, tok, remember)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

@@ -1,0 +1,18 @@
+{{define "content"}}
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-file-text"/></svg>
+  <div><h1>Audit log</h1></div>
+</div>
+<form class="toolbar" method="get"><div class="grow input-icon">{{template "icon" "search"}}<input name="q" placeholder="Filter by user, action or result" value="{{.Query}}"></div></form>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Result</th></tr></thead>
+  <tbody>{{range .Entries}}<tr>
+    <td title="{{.Time.Local.Format "2006-01-02 15:04:05"}}">{{.Time.Local.Format "Jan 02 15:04:05"}}</td>
+    <td>{{.User}}</td>
+    <td class="mono">{{.Action}}</td>
+    <td>{{if .OK}}<span class="dot Succeeded">OK</span>{{else}}<span class="dot Failed" title="{{.Result}}">{{.Result}}</span>{{end}}</td>
+  </tr>{{else}}<tr><td colspan="4" class="muted">No entries.</td></tr>{{end}}</tbody>
+</table>
+</div>
+{{end}}

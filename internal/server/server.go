@@ -44,6 +44,7 @@ type Server struct {
 	mux         *http.ServeMux
 	ui          *http.ServeMux
 	backups     backupState
+	auditLog    auditLog
 }
 
 type Options struct {
@@ -72,7 +73,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	}
 	s.version = readEnv(o.ReleaseFile)["KAIROS_VERSION"]
 	s.sso.m = map[string]ssoFlow{}
-	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html", "hostnet.html", "dashboard.html", "remote.html", "hostnets.html", "profile.html", "manager-images.html"} {
+	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html", "hostnet.html", "dashboard.html", "remote.html", "hostnets.html", "profile.html", "manager-images.html", "audit.html"} {
 		t, err := template.New(p).Funcs(funcs).ParseFS(web.FS, "templates/layout.html", "templates/manager-nav.html", "templates/"+p)
 		if err != nil {
 			return nil, err
@@ -80,7 +81,9 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.pages[p] = t
 	}
 
+	go s.auditLoop()
 	s.mux.Handle("GET /static/", http.FileServerFS(web.FS))
+	s.mux.HandleFunc("GET /audit", s.require(auth.Admin, s.auditPage))
 	s.mux.HandleFunc("GET /login", s.loginPage)
 	s.mux.HandleFunc("POST /login", s.login)
 	s.mux.HandleFunc("POST /logout", s.logout)
@@ -352,7 +355,8 @@ func (s *Server) require(min auth.Role, h http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 			sess := auth.Session{User: "token:" + name, Role: auth.Admin}
-			h(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, reqAuth{Session: sess})))
+			r2 := r.WithContext(context.WithValue(r.Context(), ctxKey{}, reqAuth{Session: sess}))
+			s.audited(w, r2, sess.User, func(w http.ResponseWriter) { h(w, r2) })
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/") {
@@ -377,7 +381,8 @@ func (s *Server) require(min auth.Role, h http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
-		h(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, reqAuth{Session: sess, Token: c.Value})))
+		r2 := r.WithContext(context.WithValue(r.Context(), ctxKey{}, reqAuth{Session: sess, Token: c.Value}))
+		s.audited(w, r2, s.auditUser(sess.Org, sess.User), func(w http.ResponseWriter) { h(w, r2) })
 	}
 }
 

@@ -402,3 +402,5 @@ func pendingAdmin(users []User) bool {
 	}
 	return false
 }
+
+func (s *Store) Secrets() Secrets { return s.secrets }
