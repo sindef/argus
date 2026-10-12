@@ -1,5 +1,15 @@
 {{define "content"}}
-{{if .Manager}}
+{{if .Pending}}
+<form method="post" action="/login/totp" class="auth-card">
+  <div class="auth-logo"><img src="/static/logo.svg" alt=""><h1>{{if .Manager}}Argus Manager{{else}}Argus{{end}}</h1></div>
+  {{with .Error}}<p class="error">{{.}}</p>{{end}}
+  <input type="hidden" name="pending" value="{{.Pending}}">
+  <label class="field">Authentication code
+    <span class="input-icon">{{template "icon" "key-round"}}<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" required autofocus></span>
+  </label>
+  <button class="btn primary" type="submit">{{template "icon" "log-in"}}Verify</button>
+</form>
+{{else if .Manager}}
 <div class="auth-card split">
   <div class="side"><img src="/static/logo.svg" alt=""><h1>Argus Manager</h1></div>
   <form method="post" action="/login">

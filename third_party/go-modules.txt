@@ -31,6 +31,7 @@ modernc.org/libc v1.77.1
 modernc.org/mathutil v1.7.1
 modernc.org/memory v1.12.1
 modernc.org/sqlite v1.60.1
+rsc.io/qr v0.2.0
 sigs.k8s.io/json v0.0.0-20260909141634-11ed52e25bc5
 sigs.k8s.io/randfill v1.0.0
 sigs.k8s.io/structured-merge-diff/v6 v6.3.0

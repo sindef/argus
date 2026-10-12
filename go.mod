@@ -6,11 +6,11 @@ require (
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	golang.org/x/crypto v0.58.0
-	golang.org/x/net v0.60.0
 	golang.org/x/oauth2 v0.37.0
 	k8s.io/apimachinery v0.35.9
 	k8s.io/client-go v0.35.9
 	modernc.org/sqlite v1.60.1
+	rsc.io/qr v0.2.0
 )
 
 require (
@@ -31,6 +31,7 @@ require (
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/term v0.47.0 // indirect
 	golang.org/x/text v0.43.0 // indirect

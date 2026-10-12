@@ -46,6 +46,7 @@ type Server struct {
 	sso         ssoFlows
 	pages       map[string]*template.Template
 	limiter     *loginLimiter
+	mfa         mfaState
 	mux         *http.ServeMux
 	backups     backupState
 	certs       *tlscert.Holder
@@ -104,6 +105,9 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /certificate", s.requireOrg(auth.Admin, s.setCertificate))
 	s.mux.HandleFunc("GET /login", s.loginPage)
 	s.mux.HandleFunc("POST /login", s.login)
+	s.mux.HandleFunc("POST /login/totp", s.loginTOTP)
+	s.mux.HandleFunc("POST /account/mfa/{op}", s.require(auth.ReadOnly, s.mfaAction))
+	s.mux.HandleFunc("POST /users/{name}/mfa-reset", s.requireOrg(auth.Admin, s.resetMFA))
 	s.mux.HandleFunc("POST /logout", s.logout)
 	s.mux.HandleFunc("GET /password", s.require(auth.ReadOnly, s.passwordPage))
 	s.mux.HandleFunc("POST /password", s.require(auth.ReadOnly, s.changePassword))

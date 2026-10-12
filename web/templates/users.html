@@ -24,6 +24,7 @@
         <button data-dialog="{{if .SSO}}sso-user{{else}}edit-user{{end}}" data-fill='{{.Fill}}'>{{template "icon" "pencil"}}{{if .SSO}}Details{{else}}Edit…{{end}}</button>
         {{if ne .Name $.Session.User}}
         {{if not .SSO}}<form method="post" action="/users/{{.Name}}/reset" data-confirm="Reset the password for {{.Name}}?"><button type="submit">{{template "icon" "key-round"}}Reset password</button></form>{{end}}
+        {{if .TOTP}}<button hx-post="/users/{{.Name}}/mfa-reset" hx-target="#flash" hx-confirm="Turn off two-factor authentication for {{.Name}}?">{{template "icon" "key-round"}}Reset two-factor</button>{{end}}
         <hr><form method="post" action="/users/{{.Name}}/delete" data-confirm="Delete {{.Name}}?"><button type="submit" class="danger">{{template "icon" "trash-2"}}Delete</button></form>
         {{end}}
       </div></div></td>

@@ -47,6 +47,7 @@ type User struct {
 	Scopes     []string `json:"scopes,omitempty"`
 	Subject    string   `json:"subject,omitempty"`
 	Groups     []string `json:"groups,omitempty"`
+	TOTP       string   `json:"totp,omitempty"`
 }
 
 const (
@@ -509,8 +510,7 @@ func (s *Store) Login(ctx context.Context, name, password string, remember bool)
 	if !ok {
 		return "", err
 	}
-	role, scopes := s.Access(ctx, u)
-	return s.NewSession(Session{User: u.Name, Role: role, MustChange: u.MustChange, Scopes: scopes}, remember), nil
+	return s.StartSession(ctx, u, remember), nil
 }
 
 func (s *Store) Session(tok string) (Session, bool) {

@@ -50,12 +50,12 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, "login.html", "auth", s.loginData(r, "Too many sign-ins at once, try again"))
 		return
 	}
-	tok, err := store.Login(r.Context(), r.FormValue("username"), r.FormValue("password"), remember)
+	u, ok, err := store.Verify(r.Context(), r.FormValue("username"), r.FormValue("password"))
 	<-s.limiter.slots
 	if err != nil {
 		log.Printf("login: %v", err)
 	}
-	if tok == "" {
+	if !ok {
 		s.limiter.fail(ip)
 		s.limiter.fail(acct)
 		log.Printf("login: failed for %q from %s", r.FormValue("username"), ip)
@@ -65,10 +65,16 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, "login.html", "auth", s.loginData(r, "Invalid username or password"))
 		return
 	}
+	if u.TOTP != "" {
+		data := s.loginData(r, "")
+		data["Pending"] = s.mfaStart(r.FormValue("org"), u.Name, remember)
+		s.render(w, r, "login.html", "auth", data)
+		return
+	}
 	s.limiter.succeed(ip)
 	s.limiter.succeed(acct)
 	s.record(s.auditUser(r.FormValue("org"), r.FormValue("username")), "sign in from "+ip, true, "")
-	s.setSessionCookie(w, tok, remember)
+	s.setSessionCookie(w, store.StartSession(r.Context(), u, remember), remember)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -96,7 +102,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) passwordPage(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, "password.html", "layout", nil)
+	s.render(w, r, "password.html", "layout", s.passwordData(r, ""))
 }
 
 func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
@@ -123,7 +129,7 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(http.StatusBadRequest)
-	s.render(w, r, "password.html", "layout", map[string]any{"Error": msg})
+	s.render(w, r, "password.html", "layout", s.passwordData(r, msg))
 }
 
 func (s *Server) usersPage(w http.ResponseWriter, r *http.Request) {
