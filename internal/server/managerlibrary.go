@@ -251,7 +251,7 @@ func freeSpace(dir string, need int64) error {
 	return nil
 }
 
-func (s *Server) storeDisk(org, name, tag, file string, src io.Reader) error {
+func (s *Server) storeDisk(org, name, tag, file, arch string, src io.Reader) error {
 	switch {
 	case !validObject.MatchString(name):
 		return errors.New("name must be lowercase letters, digits and dashes")
@@ -283,7 +283,7 @@ func (s *Server) storeDisk(org, name, tag, file string, src io.Reader) error {
 	if file == "" || file == "." {
 		file = name + ".img"
 	}
-	_, err = s.registry.PutDisk(org+"/"+name, tag, file, n, tmp)
+	_, err = s.registry.PutDisk(org+"/"+name, tag, file, arch, n, tmp)
 	return err
 }
 
@@ -326,12 +326,12 @@ func (s *Server) libraryAdd(r *http.Request) error {
 			if err := freeSpace(s.dataDir, r.ContentLength); err != nil {
 				return err
 			}
-			return s.storeDisk(org, vals["name"], vals["tag"], filepath.Base(part.FileName()), part)
+			return s.storeDisk(org, vals["name"], vals["tag"], filepath.Base(part.FileName()), vals["arch"], part)
 		}
 		b, _ := io.ReadAll(io.LimitReader(part, 4096))
 		vals[part.FormName()] = strings.TrimSpace(string(b))
 	}
-	name, tag, src := vals["name"], vals["tag"], vals["url"]
+	name, tag, src, arch := vals["name"], vals["tag"], vals["url"], vals["arch"]
 	switch {
 	case vals["via"] != "url":
 		return errors.New("choose a file to upload")
@@ -358,7 +358,7 @@ func (s *Server) libraryAdd(r *http.Request) error {
 		}
 		pr := &progressReader{r: resp.Body, last: time.Now(), fn: func(n int64) { progress(fmt.Sprintf("Downloaded %.1f GiB", float64(n)/gib)) }}
 		progress("Downloading")
-		if err := s.storeDisk(org, name, tag, filepath.Base(req.URL.Path), pr); err != nil {
+		if err := s.storeDisk(org, name, tag, filepath.Base(req.URL.Path), arch, pr); err != nil {
 			return err
 		}
 		progress("Stored")

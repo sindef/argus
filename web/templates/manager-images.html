@@ -9,11 +9,11 @@
   <header><h2>Images</h2>{{if .CanOperate}}<div class="actions"><button class="btn primary" data-dialog="library-add">{{template "icon" "plus"}}Add image</button></div>{{end}}</header>
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Library</th><th>Tag</th><th>Size</th><th>Added</th><th></th></tr></thead>
+  <thead><tr><th>Library</th><th>Tag</th><th>Architecture</th><th>Size</th><th>Added</th><th></th></tr></thead>
   <tbody>{{range .Library}}<tr>
-    <td>{{template "icon" "image"}}{{.Name}}</td><td class="mono">{{.Tag}}</td><td>{{bytes .Size}}</td><td>{{.Created.Local.Format "2006-01-02 15:04"}}</td>
-    <td class="row-actions">{{if $.CanOperate}}<button class="link" data-dialog="send-image" data-fill='{"image":"{{.Name}}:{{.Tag}}","name":"{{.HostName}}","size":"{{.SizeGiB}}"}'>Send to hosts</button><button class="link danger" hx-post="/images/library-delete" hx-vals='{"image":"{{.Name}}:{{.Tag}}"}' hx-target="#flash" hx-confirm="Delete {{.Name}}:{{.Tag}} from the library?">Delete</button>{{end}}</td>
-  </tr>{{else}}<tr><td colspan="5" class="muted">No images in the library.</td></tr>{{end}}</tbody>
+    <td>{{template "icon" "image"}}{{.Name}}</td><td class="mono">{{.Tag}}</td><td>{{.Arch}}</td><td>{{bytes .Size}}</td><td>{{.Created.Local.Format "2006-01-02 15:04"}}</td>
+    <td class="row-actions">{{if $.CanOperate}}<button class="link" data-dialog="send-image" data-fill='{"image":"{{.Name}}:{{.Tag}}","name":"{{.HostName}}","size":"{{.SizeGiB}}","arch":"{{.Arch}}"}'>Send to hosts</button><button class="link danger" hx-post="/images/library-delete" hx-vals='{"image":"{{.Name}}:{{.Tag}}"}' hx-target="#flash" hx-confirm="Delete {{.Name}}:{{.Tag}} from the library?">Delete</button>{{end}}</td>
+  </tr>{{else}}<tr><td colspan="6" class="muted">No images in the library.</td></tr>{{end}}</tbody>
 </table>
 </div>
 <h3>On hosts</h3>
@@ -58,6 +58,7 @@
     <div class="row">
       <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
       <label>Tag <input name="tag" value="latest" required></label>
+      <label>Architecture <select name="arch"><option value="amd64">x86-64</option><option value="arm64">ARM64</option></select></label>
     </div>
     <label class="via-url">Image URL <input name="url" type="url" placeholder="https://…/image.qcow2"></label>
     <label class="via-file">File <span class="help" title="qcow2, raw or ISO; gzip compressed is fine.">?</span><input name="file" type="file" accept=".qcow2,.img,.raw,.iso,.gz"></label>
@@ -70,12 +71,14 @@
     <h2>Send to hosts</h2>
     <p id="send-error" class="error form-error"></p>
     <input type="hidden" name="image">
+    <input type="hidden" name="arch" data-arch-source>
     <div class="row">
       <label>Name on hosts <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
       <label>Size (GiB) <span class="help" title="Disk size on each host. Must be at least the image's virtual size.">?</span><input name="size" type="number" min="1" max="4096" required></label>
     </div>
     <div class="field">Hosts</div>
-    {{template "host-picks" .HostNames}}
+    {{template "host-picks" $}}
+    <p class="arch-warn" hidden>Some selected hosts have a different CPU architecture from this image. VMs using it there will only start if the guest supports it.</p>
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Send</button></div>
   </form>
 </dialog>
@@ -84,9 +87,10 @@
     <h2>Copy image</h2>
     <p id="copy-error" class="error form-error"></p>
     <input type="hidden" name="image">
-    <label>From <select name="from">{{range .HostNames}}<option>{{.}}</option>{{end}}</select></label>
+    <label>From <select name="from" data-arch-source>{{range .HostNames}}<option data-arch="{{index $.HostArch .}}">{{.}}</option>{{end}}</select></label>
     <div class="field">To</div>
-    {{template "host-picks" .HostNames}}
+    {{template "host-picks" $}}
+    <p class="arch-warn" hidden>Some selected hosts have a different CPU architecture from the source host.</p>
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Copy</button></div>
   </form>
 </dialog>
@@ -101,7 +105,7 @@
       <label>Size (GiB) <input name="size" type="number" min="1" max="4096" value="10" required></label>
     </div>
     <div class="field">Hosts</div>
-    {{template "host-picks" .HostNames}}
+    {{template "host-picks" $}}
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Import</button></div>
   </form>
 </dialog>
@@ -138,4 +142,4 @@ document.getElementById("library-form")?.addEventListener("htmx:xhr:progress", (
 </script>
 {{end}}
 
-{{define "host-picks"}}<div class="table-wrap picks"><table><tbody>{{range .}}<tr><td><label class="check"><input type="checkbox" name="hosts" value="{{.}}"> {{.}}</label></td></tr>{{end}}</tbody></table></div>{{end}}
+{{define "host-picks"}}<div class="table-wrap picks"><table><tbody>{{range .HostNames}}{{$a := index $.HostArch .}}<tr><td><label class="check"><input type="checkbox" name="hosts" value="{{.}}" data-arch="{{$a}}"> {{.}}{{if ne $a "amd64"}} <span class="muted">· {{$a}}</span>{{end}}</label></td></tr>{{end}}</tbody></table></div>{{end}}

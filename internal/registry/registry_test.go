@@ -134,12 +134,12 @@ func TestPutDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	disk := rawDisk()
-	d, err := g.PutDisk("org/cirros", "0.6", "cirros.qcow2", int64(len(disk)), bytes.NewReader(disk))
+	d, err := g.PutDisk("org/cirros", "0.6", "cirros.qcow2", "arm64", int64(len(disk)), bytes.NewReader(disk))
 	if err != nil {
 		t.Fatal(err)
 	}
 	imgs := g.List("org/")
-	if len(imgs) != 1 || imgs[0].Digest != d || imgs[0].Tag != "0.6" {
+	if len(imgs) != 1 || imgs[0].Digest != d || imgs[0].Tag != "0.6" || imgs[0].Arch != "arm64" {
 		t.Fatalf("list: %+v", imgs)
 	}
 	b, _ := io.ReadAll(must(t, g.blob(d)))
@@ -162,7 +162,7 @@ func TestPutDisk(t *testing.T) {
 	if strings.Join(names, ",") != "disk/,disk/cirros.qcow2" {
 		t.Fatalf("layer entries: %v", names)
 	}
-	if _, err := g.PutDisk("org/text", "x", "a.raw", 3, bytes.NewReader([]byte("abc"))); err != ErrNotDisk {
+	if _, err := g.PutDisk("org/text", "x", "a.raw", "amd64", 3, bytes.NewReader([]byte("abc"))); err != ErrNotDisk {
 		t.Fatalf("non-disk upload: %v", err)
 	}
 }

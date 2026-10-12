@@ -57,6 +57,7 @@ type Registry struct {
 }
 
 type Image struct {
+	Arch    string
 	Repo    string
 	Tag     string
 	Digest  string
@@ -678,9 +679,12 @@ func (g *Registry) putBlob(repo string, b []byte) (descriptor, error) {
 	return descriptor{Digest: d, Size: int64(len(b))}, g.commit(repo, p, d)
 }
 
-func (g *Registry) PutDisk(repo, tag, file string, size int64, src io.Reader) (string, error) {
+func (g *Registry) PutDisk(repo, tag, file, arch string, size int64, src io.Reader) (string, error) {
 	if !repoRE.MatchString(repo) || !tagRE.MatchString(tag) {
 		return "", errors.New("invalid image name or tag")
+	}
+	if arch != "amd64" && arch != "arm64" {
+		return "", errors.New("architecture must be amd64 or arm64")
 	}
 	src, err := sniff(src)
 	if err != nil {
@@ -720,7 +724,7 @@ func (g *Registry) PutDisk(repo, tag, file string, size int64, src io.Reader) (s
 	if err := g.commit(repo, tmp, layer.Digest); err != nil {
 		return "", err
 	}
-	cfg, _ := json.Marshal(map[string]any{"architecture": "amd64", "os": "linux", "created": now.UTC().Format(time.RFC3339), "rootfs": map[string]any{"type": "layers", "diff_ids": []string{layer.Digest}}})
+	cfg, _ := json.Marshal(map[string]any{"architecture": arch, "os": "linux", "created": now.UTC().Format(time.RFC3339), "rootfs": map[string]any{"type": "layers", "diff_ids": []string{layer.Digest}}})
 	config, err := g.putBlob(repo, cfg)
 	if err != nil {
 		return "", err
@@ -749,6 +753,12 @@ func (g *Registry) List(prefix string) []Image {
 			if b, err := os.ReadFile(g.blob(d)); err == nil && json.Unmarshal(b, &m) == nil {
 				for _, l := range m.Layers {
 					img.Size += l.Size
+				}
+				if m.Config != nil {
+					var cfg struct{ Architecture string }
+					if b, err := os.ReadFile(g.blob(m.Config.Digest)); err == nil && json.Unmarshal(b, &cfg) == nil {
+						img.Arch = cfg.Architecture
+					}
 				}
 			}
 			out = append(out, img)
