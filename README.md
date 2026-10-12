@@ -1,8 +1,44 @@
 # Argus
 
-Lightweight KubeVirt hypervisor on Kairos and K3s, with an optional fleet coordinator: **Argus Manager**.
+Create and manage virtual machines from your browser. Argus is a lightweight KubeVirt hypervisor on Kairos and K3s. **Argus Manager** adds optional fleet orchestration.
 
 **Experimental alpha.** See [security and deployment limits](SECURITY.md).
+
+## Host
+
+VMs, storage and networking on a single host.
+
+![Argus host dashboard with live CPU, memory, disk and network metrics and local ZFS pools](docs/screenshots/host-dashboard.png)
+
+- VM provisioning, OVA/ESXi import, image uploads and VNC/serial consoles.
+- Local ZFS pools, disks, snapshots, clones and scheduled NFS backups.
+- Bridges, VLANs and management networking.
+- Local users, roles, host metrics and OS upgrades.
+
+<details>
+<summary>VM provisioning</summary>
+
+Choose CPU, memory, storage and networking; add cloud-init guest settings.
+
+![Argus VM creation form with CPU, memory, disk, storage pool and network options](docs/screenshots/create-vm.png)
+
+</details>
+
+## Manager
+
+One view across your hosts.
+
+![Argus Manager infrastructure overview with host groups, fleet health and resource utilization](docs/screenshots/manager-overview.png)
+
+- Fleet inventory, host groups, metrics and consoles.
+- Shared image library, VM templates and placement.
+- Cold migration, scheduled replication and manual failover; experimental live migration.
+- Maintenance mode, rolling updates and host profiles.
+- Organizations, scoped roles, local users, OIDC and encrypted configuration backups.
+
+Automatic failover is disabled by default.
+
+*Screenshots from a single-host lab. VM provisioning is shown before submission.*
 
 ## Architecture
 
@@ -11,26 +47,6 @@ Each host runs an independent single-node K3s cluster with SQLite, KubeVirt, CDI
 Storage is local per host. Migration and replication copy VM data between hosts. Manager uses host HTTPS APIs with node tokens and pinned CAs.
 
 [Architecture diagram](docs/architecture.drawio)
-
-## Host
-
-- VM lifecycle, disks, image import/upload and VNC/serial consoles.
-- ZFS pools, snapshots and clones.
-- Bridges, VLANs and management networking.
-- Local users and role-based access.
-- Scheduled snapshots and NFS backups.
-- OS upgrades, reboot and shutdown.
-
-## Manager
-
-- Fleet inventory, host groups and consoles.
-- VM templates and placement.
-- Cold migration and experimental live migration.
-- Scheduled replication and manual failover.
-- Organizations, scoped access, local users and OIDC.
-- Encrypted configuration backups.
-
-Automatic failover is disabled by default.
 
 ## Requirements
 
