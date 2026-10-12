@@ -148,12 +148,12 @@ func (s *Server) renderUsers(w http.ResponseWriter, r *http.Request, notice stri
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 	}
-	s.render(w, r, "users.html", "layout", map[string]any{"Nav": "users", "Users": rows, "Groups": groups, "Roles": auth.Roles, "Scopes": s.scopeNames(r), "Notice": notice, "Error": errText(err)})
+	s.render(w, r, "users.html", "layout", map[string]any{"Nav": "users", "Users": rows, "Groups": groups, "Roles": s.roleNames(r), "Scopes": s.scopeNames(r), "Notice": notice, "Error": errText(err)})
 }
 
 func (s *Server) addUser(w http.ResponseWriter, r *http.Request) {
 	name, role := r.FormValue("name"), auth.Role(r.FormValue("role"))
-	if !validName.MatchString(name) || !role.Valid() {
+	if !validName.MatchString(name) || !s.users(r).ValidRole(r.Context(), role) {
 		s.renderUsers(w, r, "", errors.New("invalid username or role"))
 		return
 	}
@@ -174,7 +174,7 @@ func (s *Server) addUser(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) setRole(w http.ResponseWriter, r *http.Request) {
 	name, role := r.PathValue("name"), auth.Role(r.FormValue("role"))
-	if !role.Valid() {
+	if !s.users(r).ValidRole(r.Context(), role) {
 		s.renderUsers(w, r, "", errors.New("invalid role"))
 		return
 	}

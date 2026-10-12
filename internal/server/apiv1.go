@@ -82,29 +82,29 @@ type v1Task struct {
 
 func (s *Server) apiV1Routes() {
 	for pattern, r := range map[string]struct {
-		role auth.Role
+		role auth.Privilege
 		h    http.HandlerFunc
 	}{
-		"GET /api/v1/openapi.json":                                              {auth.ReadOnly, s.v1Spec},
-		"GET /api/v1/hosts":                                                     {auth.ReadOnly, s.v1Hosts},
-		"GET /api/v1/vms":                                                       {auth.ReadOnly, s.v1VMs},
-		"GET /api/v1/tasks":                                                     {auth.ReadOnly, s.v1Tasks},
-		"POST /api/v1/hosts/{node}/vms":                                         {auth.Operator, s.v1CreateVM},
-		"GET /api/v1/hosts/{node}/vms/{name}":                                   {auth.ReadOnly, s.v1VM},
-		"DELETE /api/v1/hosts/{node}/vms/{name}":                                {auth.Admin, s.v1VMCall("delete")},
-		"POST /api/v1/hosts/{node}/vms/{name}/power":                            {auth.Operator, s.v1Power},
-		"POST /api/v1/hosts/{node}/vms/{name}/migrate":                          {auth.Admin, s.v1Migrate},
-		"GET /api/v1/hosts/{node}/vms/{name}/snapshots":                         {auth.ReadOnly, s.v1Snapshots},
-		"POST /api/v1/hosts/{node}/vms/{name}/snapshots":                        {auth.Operator, s.v1VMCall("snapshots")},
-		"POST /api/v1/hosts/{node}/vms/{name}/snapshots/{snap}/restore":         {auth.Operator, s.v1SnapshotOp("restore")},
-		"DELETE /api/v1/hosts/{node}/vms/{name}/snapshots/{snap}":               {auth.Operator, s.v1SnapshotOp("delete")},
-		"POST /api/v1/hosts/{node}/vms/{name}/backups":                          {auth.Operator, s.v1Backup},
-		"GET /api/v1/hosts/{node}/vms/{name}/backups":                           {auth.ReadOnly, s.v1Backup},
-		"DELETE /api/v1/hosts/{node}/vms/{name}/backups/{id}":                   {auth.Operator, s.v1Backup},
-		"GET /api/v1/hosts/{node}/vms/{name}/backups/{id}/disks/{disk}/changes": {auth.Operator, s.v1Backup},
-		"GET /api/v1/hosts/{node}/vms/{name}/backups/{id}/disks/{disk}/data":    {auth.Operator, s.v1Backup},
+		"GET /api/v1/openapi.json":                                              {auth.VMView, s.v1Spec},
+		"GET /api/v1/hosts":                                                     {auth.HostView, s.v1Hosts},
+		"GET /api/v1/vms":                                                       {auth.VMView, s.v1VMs},
+		"GET /api/v1/tasks":                                                     {auth.VMView, s.v1Tasks},
+		"POST /api/v1/hosts/{node}/vms":                                         {auth.VMProvision, s.v1CreateVM},
+		"GET /api/v1/hosts/{node}/vms/{name}":                                   {auth.VMView, s.v1VM},
+		"DELETE /api/v1/hosts/{node}/vms/{name}":                                {auth.VMDelete, s.v1VMCall("delete")},
+		"POST /api/v1/hosts/{node}/vms/{name}/power":                            {auth.VMPower, s.v1Power},
+		"POST /api/v1/hosts/{node}/vms/{name}/migrate":                          {auth.VMMigrate, s.v1Migrate},
+		"GET /api/v1/hosts/{node}/vms/{name}/snapshots":                         {auth.VMView, s.v1Snapshots},
+		"POST /api/v1/hosts/{node}/vms/{name}/snapshots":                        {auth.VMSnapshot, s.v1VMCall("snapshots")},
+		"POST /api/v1/hosts/{node}/vms/{name}/snapshots/{snap}/restore":         {auth.VMSnapshot, s.v1SnapshotOp("restore")},
+		"DELETE /api/v1/hosts/{node}/vms/{name}/snapshots/{snap}":               {auth.VMSnapshot, s.v1SnapshotOp("delete")},
+		"POST /api/v1/hosts/{node}/vms/{name}/backups":                          {auth.VMBackup, s.v1Backup},
+		"GET /api/v1/hosts/{node}/vms/{name}/backups":                           {auth.VMView, s.v1Backup},
+		"DELETE /api/v1/hosts/{node}/vms/{name}/backups/{id}":                   {auth.VMBackup, s.v1Backup},
+		"GET /api/v1/hosts/{node}/vms/{name}/backups/{id}/disks/{disk}/changes": {auth.VMBackup, s.v1Backup},
+		"GET /api/v1/hosts/{node}/vms/{name}/backups/{id}/disks/{disk}/data":    {auth.VMBackup, s.v1Backup},
 	} {
-		s.mux.HandleFunc(pattern, s.require(r.role, r.h))
+		s.mux.HandleFunc(pattern, s.need(r.role, r.h))
 	}
 }
 

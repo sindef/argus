@@ -25,7 +25,38 @@
 </table>
 </div>
 </section>
+<section class="pane" id="s-roles" data-icon="shield-check">
+  <header><h2>Roles</h2><div class="actions"><button class="btn primary" data-dialog="edit-role" data-fill='{"old":"","name":"","privileges":[]}'>{{template "icon" "plus"}}Add role</button></div></header>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>Privileges</th><th></th></tr></thead>
+  <tbody>
+  <tr><td>admin</td><td class="muted">Everything</td><td></td></tr>
+  <tr><td>operator</td><td class="muted">View, power, consoles, hardware, provisioning, snapshots, backups, images</td><td></td></tr>
+  <tr><td>read-only</td><td class="muted">View VMs and hosts</td><td></td></tr>
+  {{range .CustomRoles}}<tr class="clickable" data-dialog="edit-role" data-fill='{{.Fill}}'>
+    <td>{{template "icon" "shield-check"}}{{.Name}}</td><td>{{range $i, $p := .Privileges}}{{if $i}}, {{end}}{{$p}}{{end}}</td>
+    <td class="row-actions"><div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
+      <div class="menu-list" hidden hx-target="#flash">
+        <button data-dialog="edit-role" data-fill='{{.Fill}}'>{{template "icon" "pencil"}}Edit…</button>
+        <hr><button class="danger" hx-post="/user-roles/delete" hx-vals='{"name":"{{.Name}}"}' hx-confirm="Delete role {{.Name}}?">{{template "icon" "trash-2"}}Delete</button>
+      </div></div></td></tr>{{end}}
+  </tbody>
+</table>
 </div>
+</section>
+</div>
+<dialog id="edit-role" class="card">
+  <form hx-post="/user-roles/save" hx-target="#role-error" class="form">
+    <h2>Role</h2>
+    <p id="role-error" class="error form-error"></p>
+    <input type="hidden" name="old">
+    <label>Name <input name="name" required maxlength="64"></label>
+    <div class="field">Privileges</div>
+    <div class="table-wrap picks"><table><tbody>{{range .Privileges}}<tr><td><label class="check"><input type="checkbox" name="privileges" value="{{.P}}"> {{.Label}}</label></td></tr>{{end}}</tbody></table></div>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Save</button></div>
+  </form>
+</dialog>
 <dialog id="edit-group" class="card">
   <form hx-post="/user-groups/save" hx-target="#group-error" class="form">
     <h2>Group</h2>
@@ -35,7 +66,7 @@
       <label>Name <input name="name" required maxlength="64"></label>
       <label>Role <select name="role">{{range .Roles}}<option value="{{.}}">{{.}}</option>{{end}}</select></label>
     </div>
-    <label>Scope <span class="help" title="Comma separated datacenters or datacenter/cluster. Empty means the whole organization.">?</span><input name="scopes" list="scope-names" placeholder="All"></label>
+    <label>Scope <span class="help" title="Comma separated: datacenter, datacenter/cluster, host:NAME or vm:HOST/VM. Empty means the whole organization.">?</span><input name="scopes" list="scope-names" placeholder="All"></label>
     <label>SSO / directory groups <span class="help" title="One per line: group names from the identity provider's groups claim, or directory groups by name (CN) or full DN.">?</span><textarea name="sso" rows="2" placeholder="argus-admins"></textarea></label>
     <div class="field">Members</div>
     {{with .Users}}<div class="table-wrap picks"><table><tbody>{{range .}}<tr><td><label class="check"><input type="checkbox" name="members" value="{{.Name}}"> {{.Name}}</label></td><td class="muted">{{.Role}}</td></tr>{{end}}</tbody></table></div>{{else}}<p class="muted">No local users.</p>{{end}}

@@ -347,18 +347,7 @@ func (s *Server) jobs(r *http.Request) []manager.Job {
 	return slices.DeleteFunc(js, func(j manager.Job) bool { return !hosts[j.From] || (j.To != "" && !hosts[j.To]) })
 }
 
-func (s *Server) inventory(r *http.Request) []manager.NodeState {
-	all := s.manager.Inventory(session(r).Org)
-	return slices.DeleteFunc(all, func(st manager.NodeState) bool { return !inScope(session(r).Scopes, st.Node) })
-}
-
-func (s *Server) nodeIn(r *http.Request, name string) (manager.Node, error) {
-	n, err := s.manager.NodeIn(r.Context(), session(r).Org, name)
-	if err == nil && !inScope(session(r).Scopes, n) {
-		return manager.Node{}, fmt.Errorf("node %s not found", name)
-	}
-	return n, err
-}
+func errNodeNotFound(name string) error { return fmt.Errorf("node %s not found", name) }
 
 var vmTabs = []string{"summary", "hardware", "snapshots", "backups", "logs"}
 
@@ -423,15 +412,15 @@ func (s *Server) managerVMAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := manager.APIPath("/api/vms/%s/%s/", ns, name)
+	if !s.can(r, actionPrivilege(act), n, name) {
+		flash(w, r, errors.New("you do not have permission for this action"))
+		return
+	}
 	var body any
 	switch {
 	case kube.ValidAction(act):
 		path += act
 	case act == "delete":
-		if !session(r).Role.Can(auth.Admin) {
-			flash(w, r, errors.New("only admins can delete VMs"))
-			return
-		}
 		path += "delete"
 	case act == "snapshot":
 		path += "snapshots"

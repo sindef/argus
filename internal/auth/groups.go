@@ -101,7 +101,7 @@ func (s *Store) SaveGroup(ctx context.Context, old string, g Group) error {
 	if !validGroup.MatchString(g.Name) {
 		return errors.New("group name must be letters, digits, spaces, dots, dashes or underscores")
 	}
-	if !g.Role.Valid() {
+	if !s.ValidRole(ctx, g.Role) {
 		return errors.New("invalid role")
 	}
 	us, err := s.Users(ctx)
@@ -188,10 +188,11 @@ func (s *Store) Access(ctx context.Context, u User) (Role, []string) {
 		return u.Role, u.Scopes
 	}
 	gs, _ := s.Groups(ctx)
-	grants := []grant{{u.Role, u.Scopes}}
+	custom, _ := s.Roles(ctx)
+	grants := []grant{{tier(u.Role, custom), u.Scopes}}
 	for _, g := range gs {
 		if slices.Contains(g.Members, u.Name) {
-			grants = append(grants, grant{g.Role, g.Scopes})
+			grants = append(grants, grant{tier(g.Role, custom), g.Scopes})
 		}
 	}
 	role, scopes, _ := combine(grants)
@@ -205,7 +206,9 @@ func (s *Store) SSOAccess(ctx context.Context, claimed []string) (Role, []string
 	}
 	var grants []grant
 	var matched []string
+	custom, _ := s.Roles(ctx)
 	for _, g := range gs {
+		g.Role = tier(g.Role, custom)
 		if slices.ContainsFunc(g.SSO, func(n string) bool {
 			return slices.ContainsFunc(claimed, func(c string) bool { return strings.EqualFold(c, n) })
 		}) {

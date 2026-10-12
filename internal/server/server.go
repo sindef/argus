@@ -128,61 +128,63 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("GET /user-groups", s.requireOrg(auth.Admin, s.groupsPage))
 		s.mux.HandleFunc("POST /user-groups/save", s.requireOrg(auth.Admin, s.saveGroup))
 		s.mux.HandleFunc("POST /user-groups/delete", s.requireOrg(auth.Admin, s.deleteGroup))
+		s.mux.HandleFunc("POST /user-roles/save", s.requireOrg(auth.Admin, s.saveRole))
+		s.mux.HandleFunc("POST /user-roles/delete", s.requireOrg(auth.Admin, s.deleteRole))
 		s.mux.HandleFunc("POST /sso/start", s.ssoStart)
 		s.mux.HandleFunc("GET /sso/callback", s.ssoCallback)
-		s.mux.HandleFunc("GET /{$}", s.require(auth.ReadOnly, s.managerHome))
-		s.mux.HandleFunc("GET /datacenters/{dc}", s.require(auth.ReadOnly, s.managerHome))
-		s.mux.HandleFunc("GET /datacenters/{dc}/clusters/{cluster}", s.require(auth.ReadOnly, s.managerHome))
-		s.mux.HandleFunc("GET /vms", s.require(auth.ReadOnly, s.managerVMs))
-		s.mux.HandleFunc("GET /nav/tree", s.require(auth.ReadOnly, s.managerTree))
-		s.mux.HandleFunc("GET /nodes/{node}/vms/{ns}/{name}", s.require(auth.ReadOnly, s.managerVM))
-		s.mux.HandleFunc("GET /nodes/{node}/vms/{ns}/{name}/metrics", s.require(auth.ReadOnly, s.managerVMMetrics))
-		s.mux.HandleFunc("GET /metrics", s.require(auth.ReadOnly, s.managerFleetMetrics))
-		s.mux.HandleFunc("GET /nodes/{node}/vms/{ns}/{name}/console", s.require(auth.Operator, s.managerConsole))
-		s.mux.HandleFunc("GET /nodes/{node}/vms/{ns}/{name}/ws/{kind}", s.require(auth.Operator, s.managerConsoleWS))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/migrate", s.require(auth.Admin, s.managerMigrate))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/protect", s.require(auth.Admin, s.managerProtect))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/unprotect", s.require(auth.Admin, s.managerUnprotect))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/disks/{disk}/delete", s.require(auth.Operator, s.managerRemoveDisk))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/disks/move", s.require(auth.Operator, s.managerMoveDisk))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/tags", s.require(auth.Operator, s.managerSetTags))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/snapshots/{snap}/{op}", s.require(auth.Operator, s.managerSnapshotOp))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/backups/{op}", s.require(auth.Operator, s.managerBackupOp))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/{action}", s.require(auth.Operator, s.managerVMAction))
-		s.mux.HandleFunc("GET /events", s.require(auth.ReadOnly, s.managerEvents))
-		s.mux.HandleFunc("POST /jobs/{id}/resolve", s.require(auth.Admin, s.managerResolve))
-		s.mux.HandleFunc("GET /storage", s.require(auth.ReadOnly, s.managerStorage))
-		s.mux.HandleFunc("GET /networks", s.require(auth.ReadOnly, s.managerNetworks))
-		s.mux.HandleFunc("POST /networks", s.requireOrg(auth.Admin, s.managerAddNetwork))
-		s.mux.HandleFunc("POST /networks/{name}/{op}", s.requireOrg(auth.Admin, s.managerNetworkOp))
-		s.mux.HandleFunc("GET /volumes", s.require(auth.ReadOnly, s.managerVolumes))
-		s.mux.HandleFunc("POST /volumes", s.require(auth.Operator, s.managerVolumeOp))
-		s.mux.HandleFunc("POST /hosts/{node}/volumes/{op}", s.require(auth.Operator, s.managerVolumeOp))
-		s.mux.HandleFunc("GET /hosts", s.require(auth.ReadOnly, s.managerHosts))
+		s.mux.HandleFunc("GET /{$}", s.need(auth.VMView, s.managerHome))
+		s.mux.HandleFunc("GET /datacenters/{dc}", s.need(auth.VMView, s.managerHome))
+		s.mux.HandleFunc("GET /datacenters/{dc}/clusters/{cluster}", s.need(auth.VMView, s.managerHome))
+		s.mux.HandleFunc("GET /vms", s.need(auth.VMView, s.managerVMs))
+		s.mux.HandleFunc("GET /nav/tree", s.need(auth.VMView, s.managerTree))
+		s.mux.HandleFunc("GET /nodes/{node}/vms/{ns}/{name}", s.need(auth.VMView, s.managerVM))
+		s.mux.HandleFunc("GET /nodes/{node}/vms/{ns}/{name}/metrics", s.need(auth.VMView, s.managerVMMetrics))
+		s.mux.HandleFunc("GET /metrics", s.need(auth.VMView, s.managerFleetMetrics))
+		s.mux.HandleFunc("GET /nodes/{node}/vms/{ns}/{name}/console", s.need(auth.VMConsole, s.managerConsole))
+		s.mux.HandleFunc("GET /nodes/{node}/vms/{ns}/{name}/ws/{kind}", s.need(auth.VMConsole, s.managerConsoleWS))
+		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/migrate", s.need(auth.VMMigrate, s.managerMigrate))
+		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/protect", s.need(auth.VMMigrate, s.managerProtect))
+		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/unprotect", s.need(auth.VMMigrate, s.managerUnprotect))
+		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/disks/{disk}/delete", s.need(auth.VMConfig, s.managerRemoveDisk))
+		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/disks/move", s.need(auth.VMConfig, s.managerMoveDisk))
+		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/tags", s.need(auth.VMConfig, s.managerSetTags))
+		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/snapshots/{snap}/{op}", s.need(auth.VMSnapshot, s.managerSnapshotOp))
+		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/backups/{op}", s.need(auth.VMBackup, s.managerBackupOp))
+		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/{action}", s.need(auth.VMView, s.managerVMAction))
+		s.mux.HandleFunc("GET /events", s.need(auth.VMView, s.managerEvents))
+		s.mux.HandleFunc("POST /jobs/{id}/resolve", s.need(auth.Administer, s.managerResolve))
+		s.mux.HandleFunc("GET /storage", s.need(auth.VMView, s.managerStorage))
+		s.mux.HandleFunc("GET /networks", s.need(auth.VMView, s.managerNetworks))
+		s.mux.HandleFunc("POST /networks", s.need(auth.NetworkConfig, s.managerAddNetwork))
+		s.mux.HandleFunc("POST /networks/{name}/{op}", s.need(auth.NetworkConfig, s.managerNetworkOp))
+		s.mux.HandleFunc("GET /volumes", s.need(auth.VMView, s.managerVolumes))
+		s.mux.HandleFunc("POST /volumes", s.need(auth.VMConfig, s.managerVolumeOp))
+		s.mux.HandleFunc("POST /hosts/{node}/volumes/{op}", s.need(auth.VMConfig, s.managerVolumeOp))
+		s.mux.HandleFunc("GET /hosts", s.need(auth.HostView, s.managerHosts))
 		s.mux.HandleFunc("POST /hosts", s.requireOrg(auth.Admin, s.managerAddNode))
-		s.mux.HandleFunc("GET /profile", s.requireOrg(auth.Admin, s.profilePage))
-		s.mux.HandleFunc("POST /profile", s.requireOrg(auth.Admin, s.profileSave))
-		s.mux.HandleFunc("POST /profile/apply", s.requireOrg(auth.Admin, s.profileApply))
-		s.mux.HandleFunc("GET /groups/modal/{op}", s.requireOrg(auth.Admin, s.groupModal))
-		s.mux.HandleFunc("POST /groups/{op}", s.requireOrg(auth.Admin, s.groupAction))
+		s.mux.HandleFunc("GET /profile", s.need(auth.Administer, s.profilePage))
+		s.mux.HandleFunc("POST /profile", s.need(auth.Administer, s.profileSave))
+		s.mux.HandleFunc("POST /profile/apply", s.need(auth.Administer, s.profileApply))
+		s.mux.HandleFunc("GET /groups/modal/{op}", s.need(auth.Administer, s.groupModal))
+		s.mux.HandleFunc("POST /groups/{op}", s.need(auth.Administer, s.groupAction))
 		s.mux.HandleFunc("POST /hosts/{node}/delete", s.requireOrg(auth.Admin, s.managerRemoveNode))
 		s.mux.HandleFunc("POST /hosts/{node}/access", s.requireOrg(auth.Admin, s.managerNodeAccess))
 		s.mux.HandleFunc("POST /hosts/{node}/rotate-token", s.requireOrg(auth.Admin, s.managerRotateToken))
-		s.mux.HandleFunc("GET /network/hosts", s.requireOrg(auth.Admin, s.managerHostNets))
-		s.mux.HandleFunc("GET /vm-new", s.require(auth.Operator, s.managerNewVM))
+		s.mux.HandleFunc("GET /network/hosts", s.need(auth.HostConfig, s.managerHostNets))
+		s.mux.HandleFunc("GET /vm-new", s.need(auth.VMProvision, s.managerNewVM))
 		s.apiV1Routes()
-		s.mux.HandleFunc("POST /drs/apply", s.require(auth.Admin, s.drsApply))
-		s.mux.HandleFunc("POST /drs/rules/{op}", s.requireOrg(auth.Admin, s.drsRule))
+		s.mux.HandleFunc("POST /drs/apply", s.need(auth.Administer, s.drsApply))
+		s.mux.HandleFunc("POST /drs/rules/{op}", s.need(auth.Administer, s.drsRule))
 		s.mux.HandleFunc("GET /account/tokens", s.require(auth.ReadOnly, s.accountTokens))
 		s.mux.HandleFunc("POST /account/tokens", s.require(auth.ReadOnly, s.createAccountToken))
 		s.mux.HandleFunc("POST /account/tokens/{name}/delete", s.require(auth.ReadOnly, s.deleteAccountToken))
-		s.mux.HandleFunc("GET /images", s.require(auth.ReadOnly, s.managerImages))
-		s.mux.HandleFunc("GET /vm-copy", s.require(auth.Operator, s.vmCopyModal))
-		s.mux.HandleFunc("POST /vm-copy", s.requireOrg(auth.Operator, s.vmCopy))
-		s.mux.HandleFunc("POST /templates/delete", s.requireOrg(auth.Operator, s.deleteLibraryTemplate))
+		s.mux.HandleFunc("GET /images", s.need(auth.VMView, s.managerImages))
+		s.mux.HandleFunc("GET /vm-copy", s.need(auth.VMProvision, s.vmCopyModal))
+		s.mux.HandleFunc("POST /vm-copy", s.need(auth.VMProvision, s.vmCopy))
+		s.mux.HandleFunc("POST /templates/delete", s.need(auth.ImageConfig, s.deleteLibraryTemplate))
 		s.mux.HandleFunc("GET /template-data/{org}/{name}/{file}", s.serveTemplateData)
-		s.mux.HandleFunc("POST /images/{op}", s.requireOrg(auth.Operator, s.managerImageOp))
-		s.mux.HandleFunc("POST /network/hosts/bridge", s.requireOrg(auth.Admin, s.managerBridgeRollout))
+		s.mux.HandleFunc("POST /images/{op}", s.need(auth.ImageConfig, s.managerImageOp))
+		s.mux.HandleFunc("POST /network/hosts/bridge", s.need(auth.HostConfig, s.managerBridgeRollout))
 		s.mux.HandleFunc("GET /settings", s.requireOrg(auth.Admin, s.managerSettings))
 		s.mux.HandleFunc("POST /settings/sso", s.requireOrg(auth.Admin, s.managerSSO))
 		s.mux.HandleFunc("POST /settings/ldap", s.requireOrg(auth.Admin, s.managerLDAP))
@@ -191,12 +193,12 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("POST /settings/orgs/{id}/rename", s.requireOrg(auth.Admin, s.managerRenameOrg))
 		s.mux.HandleFunc("POST /settings/backup", s.requireOrg(auth.Admin, s.managerBackup))
 		s.mux.HandleFunc("POST /settings/ha", s.requireOrg(auth.Admin, s.managerHASettings))
-		s.mux.HandleFunc("POST /ha/failover", s.require(auth.Admin, s.managerFailover))
+		s.mux.HandleFunc("POST /ha/failover", s.need(auth.Administer, s.managerFailover))
 		s.mux.HandleFunc("POST /settings/migration", s.requireOrg(auth.Admin, s.managerMigrationSettings))
 	}
 	for _, hr := range hostRoutes {
 		h := hr.h
-		s.hostRoute(hr.pattern, hr.role, func(w http.ResponseWriter, r *http.Request) { h(s, w, r) })
+		s.hostRoute(hr, func(w http.ResponseWriter, r *http.Request) { h(s, w, r) })
 	}
 	if s.manager != nil {
 		return s, nil
@@ -355,42 +357,43 @@ func sameOrigin(r *http.Request) bool {
 type hostRouteDef struct {
 	pattern string
 	role    auth.Role
+	priv    auth.Privilege
 	h       func(*Server, http.ResponseWriter, *http.Request)
 }
 
 var hostRoutes = []hostRouteDef{
-	{"GET /dashboard", auth.ReadOnly, (*Server).dashboard},
-	{"GET /dashboard/stats", auth.ReadOnly, (*Server).dashboardStats},
-	{"GET /disks", auth.Admin, (*Server).disksPage},
-	{"GET /disks/{name}", auth.Admin, (*Server).diskModal},
-	{"POST /disks/{name}/{action}", auth.Admin, (*Server).diskAction},
-	{"GET /network/host", auth.Admin, (*Server).hostNetworkPage},
-	{"GET /network/host/iface/{name}", auth.Admin, (*Server).ifaceModal},
-	{"POST /network/host/{op}", auth.Admin, (*Server).hostNetworkAction},
-	{"GET /pools", auth.Admin, (*Server).poolsPage},
-	{"GET /pools/new", auth.Admin, (*Server).poolModal},
-	{"GET /pools/{name}/add", auth.Admin, (*Server).poolModal},
-	{"POST /pools", auth.Admin, (*Server).createPool},
-	{"POST /pools/{name}/{op}", auth.Admin, (*Server).poolAction},
-	{"GET /vms/new", auth.Operator, (*Server).newVM},
-	{"POST /vms", auth.Operator, (*Server).createVM},
-	{"GET /vms/import", auth.Operator, (*Server).importModal},
-	{"POST /vms/import/{source}", auth.Operator, (*Server).importVM},
-	{"POST /vms/import/vcenter-vms", auth.Operator, (*Server).vcenterVMsOptions},
-	{"GET /vms/{ns}/{name}/hardware", auth.Operator, (*Server).hardwareModal},
-	{"POST /vms/{ns}/{name}/hardware/{op}", auth.Operator, (*Server).hardwareAction},
-	{"POST /vms/{ns}/{name}/disks/{disk}/download", auth.Operator, (*Server).downloadLink},
-	{"GET /vms/{ns}/{name}/disks/{disk}/download", auth.Operator, (*Server).downloadDisk},
-	{"GET /vms/{ns}/{name}/export.ovf", auth.Operator, (*Server).exportOVF},
+	{"GET /dashboard", auth.ReadOnly, auth.HostView, (*Server).dashboard},
+	{"GET /dashboard/stats", auth.ReadOnly, auth.HostView, (*Server).dashboardStats},
+	{"GET /disks", auth.Admin, auth.HostConfig, (*Server).disksPage},
+	{"GET /disks/{name}", auth.Admin, auth.HostConfig, (*Server).diskModal},
+	{"POST /disks/{name}/{action}", auth.Admin, auth.HostConfig, (*Server).diskAction},
+	{"GET /network/host", auth.Admin, auth.HostConfig, (*Server).hostNetworkPage},
+	{"GET /network/host/iface/{name}", auth.Admin, auth.HostConfig, (*Server).ifaceModal},
+	{"POST /network/host/{op}", auth.Admin, auth.HostConfig, (*Server).hostNetworkAction},
+	{"GET /pools", auth.Admin, auth.HostConfig, (*Server).poolsPage},
+	{"GET /pools/new", auth.Admin, auth.HostConfig, (*Server).poolModal},
+	{"GET /pools/{name}/add", auth.Admin, auth.HostConfig, (*Server).poolModal},
+	{"POST /pools", auth.Admin, auth.HostConfig, (*Server).createPool},
+	{"POST /pools/{name}/{op}", auth.Admin, auth.HostConfig, (*Server).poolAction},
+	{"GET /vms/new", auth.Operator, auth.VMProvision, (*Server).newVM},
+	{"POST /vms", auth.Operator, auth.VMProvision, (*Server).createVM},
+	{"GET /vms/import", auth.Operator, auth.VMProvision, (*Server).importModal},
+	{"POST /vms/import/{source}", auth.Operator, auth.VMProvision, (*Server).importVM},
+	{"POST /vms/import/vcenter-vms", auth.Operator, auth.VMProvision, (*Server).vcenterVMsOptions},
+	{"GET /vms/{ns}/{name}/hardware", auth.Operator, auth.VMConfig, (*Server).hardwareModal},
+	{"POST /vms/{ns}/{name}/hardware/{op}", auth.Operator, auth.VMConfig, (*Server).hardwareAction},
+	{"POST /vms/{ns}/{name}/disks/{disk}/download", auth.Operator, auth.VMBackup, (*Server).downloadLink},
+	{"GET /vms/{ns}/{name}/disks/{disk}/download", auth.Operator, auth.VMBackup, (*Server).downloadDisk},
+	{"GET /vms/{ns}/{name}/export.ovf", auth.Operator, auth.VMBackup, (*Server).exportOVF},
 }
 
-func (s *Server) hostRoute(pattern string, min auth.Role, h http.HandlerFunc) {
+func (s *Server) hostRoute(hr hostRouteDef, h http.HandlerFunc) {
 	if s.manager == nil {
-		s.mux.HandleFunc(pattern, s.require(min, h))
+		s.mux.HandleFunc(hr.pattern, s.require(hr.role, h))
 		return
 	}
-	method, path, _ := strings.Cut(pattern, " ")
-	s.mux.HandleFunc(method+" /hosts/{node}"+path, s.require(min, func(w http.ResponseWriter, r *http.Request) {
+	method, path, _ := strings.Cut(hr.pattern, " ")
+	s.mux.HandleFunc(method+" /hosts/{node}"+path, s.need(hr.priv, func(w http.ResponseWriter, r *http.Request) {
 		n, err := s.orgNode(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)

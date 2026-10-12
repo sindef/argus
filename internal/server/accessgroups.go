@@ -59,7 +59,7 @@ func (s *Server) updateUser(w http.ResponseWriter, r *http.Request) {
 	store, name := s.users(r), r.PathValue("name")
 	role := auth.Role(r.FormValue("role"))
 	err := error(nil)
-	if !role.Valid() {
+	if !s.users(r).ValidRole(r.Context(), role) {
 		err = errors.New("invalid role")
 	}
 	us, _ := store.Users(r.Context())
@@ -99,7 +99,17 @@ func (s *Server) groupsPage(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, groupRow{g, fill(map[string]any{"old": g.Name, "name": g.Name, "role": g.Role, "scopes": strings.Join(g.Scopes, ", "), "members": append([]string{}, g.Members...), "sso": strings.Join(g.SSO, "\n")})})
 	}
 	local := slices.DeleteFunc(us, func(u auth.User) bool { return u.SSO })
-	s.render(w, r, "groups.html", "layout", map[string]any{"Nav": "user-groups", "Groups": rows, "Users": local, "Roles": auth.Roles, "Scopes": s.scopeNames(r), "Error": errText(err)})
+	custom, _ := s.users(r).Roles(r.Context())
+	var roleRows []map[string]any
+	for _, c := range custom {
+		ps := make([]string, len(c.Privileges))
+		for i, p := range c.Privileges {
+			ps[i] = string(p)
+		}
+		roleRows = append(roleRows, map[string]any{"Name": c.Name, "Privileges": c.Privileges, "Fill": fill(map[string]any{"old": c.Name, "name": c.Name, "privileges": ps})})
+	}
+	s.render(w, r, "groups.html", "layout", map[string]any{"Nav": "user-groups", "Groups": rows, "Users": local, "Roles": s.roleNames(r), "CustomRoles": roleRows,
+		"Privileges": auth.PrivilegeLabels, "Scopes": s.scopeNames(r), "Error": errText(err)})
 }
 
 func (s *Server) saveGroup(w http.ResponseWriter, r *http.Request) {
@@ -145,6 +155,44 @@ func (s *Server) scopeNames(r *http.Request) []string {
 				scopes = append(scopes, g.Datacenter+"/"+c)
 			}
 		}
+		for _, st := range s.manager.Inventory(session(r).Org) {
+			scopes = append(scopes, "host:"+st.Node.Name)
+			for _, v := range st.VMs {
+				scopes = append(scopes, "vm:"+st.Node.Name+"/"+v.Name)
+			}
+		}
 	}
 	return scopes
+}
+
+func (s *Server) roleNames(r *http.Request) []auth.Role {
+	out := slices.Clone(auth.Roles)
+	custom, _ := s.users(r).Roles(r.Context())
+	for _, c := range custom {
+		out = append(out, auth.Role(c.Name))
+	}
+	return out
+}
+
+func (s *Server) saveRole(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	role := auth.CustomRole{Name: strings.TrimSpace(r.FormValue("name"))}
+	for _, p := range r.Form["privileges"] {
+		role.Privileges = append(role.Privileges, auth.Privilege(p))
+	}
+	if err := s.users(r).SaveRole(r.Context(), r.FormValue("old"), role); err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: saved role %s %v", session(r).User, role.Name, role.Privileges)
+	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) deleteRole(w http.ResponseWriter, r *http.Request) {
+	if err := s.users(r).DeleteRole(r.Context(), r.FormValue("name")); err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: deleted role %s", session(r).User, r.FormValue("name"))
+	w.Header().Set("HX-Refresh", "true")
 }
