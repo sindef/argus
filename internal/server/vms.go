@@ -55,7 +55,17 @@ func (s *Server) vmData(r *http.Request) map[string]any {
 	for _, v := range r.Form["sel"] {
 		sel[v] = true
 	}
+	running, cores := 0, int64(0)
+	for _, v := range vms {
+		if v.Running {
+			running++
+			cores += v.Cores
+		}
+	}
 	return map[string]any{
+		"Total":        len(vms),
+		"Running":      running,
+		"Cores":        cores,
 		"VMs":          filterVMs(vms, r.FormValue("q")),
 		"Selected":     sel,
 		"PowerActions": powerActions,
@@ -67,6 +77,7 @@ func (s *Server) vmData(r *http.Request) map[string]any {
 func (s *Server) vms(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	data := s.vmData(r)
+	data["Nav"] = "vms"
 	if ns, name := r.PathValue("ns"), r.PathValue("name"); name != "" {
 		data["Open"] = kube.VM{Namespace: ns, Name: name}
 	}

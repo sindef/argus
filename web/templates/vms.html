@@ -29,7 +29,20 @@
     {{template "icon" "search"}}<input name="q" placeholder="Search VMs…" value="{{.Query}}">
   </form>
 </div>
+{{if .Total}}
+<div class="stats">
+  <div class="stat">{{template "icon" "monitor"}}<div><div class="label">Virtual machines</div><div class="value">{{.Total}}</div></div></div>
+  <div class="stat">{{template "icon" "play"}}<div><div class="label">Running</div><div class="value">{{.Running}}</div><div class="detail">{{sub .Total .Running}} stopped</div></div></div>
+  <div class="stat">{{template "icon" "cpu"}}<div><div class="label">vCPUs in use</div><div class="value">{{.Cores}}</div></div></div>
+</div>
 <div id="vms" hx-get="/vms?q={{.Query}}" hx-trigger="every 5s" hx-include="[name=sel]:checked">{{template "table" .}}</div>
+{{else}}
+<div class="card empty">
+  {{template "icon" "monitor"}}
+  <h2>No virtual machines</h2>
+  {{if .CanOperate}}<div class="actions"><button class="btn" hx-get="/vms/import" hx-target="#modal">{{template "icon" "download"}}Import</button><button class="btn primary" hx-get="/vms/new" hx-target="#modal">{{template "icon" "plus"}}Create VM</button></div>{{end}}
+</div>
+{{end}}
 {{with .Open}}<div hx-get="/vms/{{.Namespace}}/{{.Name}}/drawer" hx-target="#drawer" hx-trigger="load" hx-on::after-request="document.querySelector('.content').classList.add('with-drawer')"></div>{{end}}
 {{end}}
 

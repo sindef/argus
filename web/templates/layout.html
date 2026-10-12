@@ -79,7 +79,7 @@
 {{define "node-nav"}}
 <a class="nav-link{{if eq .Nav "dashboard"}} active{{end}}" href="/dashboard">{{template "icon" "gauge"}}Dashboard</a>
 <div class="nav-section" id="vms">
-  <button class="nav-head">{{template "icon" "monitor"}}Virtual Machines<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-down"/></svg></button>
+  <a class="nav-head{{if eq .Nav "vms"}} active{{end}}" href="/">{{template "icon" "monitor"}}Virtual Machines<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-down"/></svg></a>
   <div class="nav-items" hx-get="/nav/vms" hx-trigger="load, every 10s" hx-swap="innerHTML"></div>
 </div>
 <div class="nav-section" id="storage">

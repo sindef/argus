@@ -20,7 +20,8 @@
     else if (e.target.closest("button, a")) closeMenus();
 
     const head = e.target.closest(".nav-head");
-    if (head) {
+    if (head && (head.tagName === "BUTTON" || e.target.closest(".chev"))) {
+      e.preventDefault();
       const sec = head.parentElement;
       sec.classList.toggle("closed");
       store.set("nav:" + sec.id, sec.classList.contains("closed") ? "closed" : "open");
