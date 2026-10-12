@@ -38,7 +38,6 @@ type BackupPolicy struct {
 
 func parsePolicy(s string) (BackupPolicy, bool) {
 	var p BackupPolicy
-	legacy := map[string]int{}
 	for _, f := range strings.Fields(s) {
 		k, v, _ := strings.Cut(f, "=")
 		n, _ := strconv.Atoi(v)
@@ -53,14 +52,6 @@ func parsePolicy(s string) (BackupPolicy, bool) {
 			p.BackupKeep = n
 		case "target":
 			p.Target = v
-		case "every", "keep", "offsite":
-			legacy[k] = n
-		}
-	}
-	if legacy["every"] > 0 {
-		p.SnapEvery, p.SnapKeep = legacy["every"], legacy["keep"]
-		if legacy["offsite"] == 1 {
-			p.BackupEvery, p.BackupKeep, p.Target = legacy["every"], legacy["keep"], "nfs"
 		}
 	}
 	return p, p.SnapEvery > 0 || p.BackupEvery > 0
@@ -251,7 +242,11 @@ func (s *Server) startBackup(ns, name string, p BackupPolicy) bool {
 		if err != nil {
 			log.Printf("backup %s: %v", key, err)
 		}
-		s.setLastCopy(key+"@"+p.Target, time.Now())
+		done := time.Now()
+		if err != nil {
+			done = done.Add(15*time.Minute - time.Duration(p.BackupEvery)*time.Hour)
+		}
+		s.setLastCopy(key+"@"+p.Target, done)
 		s.backups.finish(key, err)
 	}()
 	return true

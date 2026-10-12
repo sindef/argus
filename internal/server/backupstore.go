@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -17,6 +18,8 @@ import (
 )
 
 const targetsKey = "argus-backup-targets"
+
+var stampRE = regexp.MustCompile(`^[0-9]{8}-[0-9]{6}$`)
 
 type BackupTarget struct {
 	Name      string `json:"name"`
@@ -173,7 +176,7 @@ func (s s3Store) List(ctx context.Context) ([]hostd.Backup, error) {
 	byRel := map[string]*hostd.Backup{}
 	for _, o := range objs {
 		parts := strings.Split(strings.TrimPrefix(o.Key, s.prefix), "/")
-		if len(parts) != 3 {
+		if len(parts) != 3 || !validObject.MatchString(parts[0]) || !stampRE.MatchString(parts[1]) {
 			continue
 		}
 		rel := parts[0] + "/" + parts[1]
