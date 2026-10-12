@@ -18,13 +18,13 @@ func (c *Manager) CopyImage(org, image string, src Node, targets []Node) error {
 	}
 	return c.startTask(&Job{Org: org, Kind: "Copy image " + image, From: src.Name, To: strings.Join(names, ", ")}, "image:"+image, 12*time.Hour, func(ctx context.Context, j *Job) error {
 		var ex kube.Export
-		if err := src.do(ctx, http.MethodPost, "/api/images/"+image+"/export", map[string]string{"baseURL": src.URL}, &ex); err != nil {
+		if err := src.do(ctx, http.MethodPost, APIPath("/api/images/%s/export", image), map[string]string{"baseURL": src.URL}, &ex); err != nil {
 			return err
 		}
 		defer func() {
 			cctx, cancel := cleanupCtx()
 			defer cancel()
-			src.do(cctx, http.MethodPost, "/api/images/"+image+"/unexport", nil, nil)
+			src.do(cctx, http.MethodPost, APIPath("/api/images/%s/unexport", image), nil, nil)
 		}()
 		size, _ := ex.Spec["size"].(string)
 		for _, t := range targets {
@@ -69,7 +69,7 @@ func (c *Manager) importTo(ctx context.Context, j *Job, t Node, image string, re
 		c.update(j, "Copying to "+t.Name+" "+imgs[i].Progress, false, false)
 		return imgs[i].Phase == "Succeeded", nil
 	})
-	t.do(ctx, http.MethodPost, "/api/images/"+image+"/imported", nil, nil)
+	t.do(ctx, http.MethodPost, APIPath("/api/images/%s/imported", image), nil, nil)
 	if err != nil {
 		return fmt.Errorf("%s: %w", t.Name, err)
 	}

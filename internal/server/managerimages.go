@@ -103,7 +103,7 @@ func (s *Server) managerImageOp(w http.ResponseWriter, r *http.Request) {
 			}
 			for _, i := range imgs {
 				if i.Name == name {
-					return n.Call(ctx, http.MethodPost, "/api/images/"+name+"/delete", nil, nil)
+					return n.Call(ctx, http.MethodPost, manager.APIPath("/api/images/%s/delete", name), nil, nil)
 				}
 			}
 			return nil

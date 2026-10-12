@@ -89,13 +89,13 @@ func (s *Server) saveToLibrary(org string, src manager.Node, ns, vm, name string
 		}()
 		progress("Exporting")
 		var ex kube.Export
-		if err := src.Call(ctx, http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/snapshot-export", ns, vm), map[string]string{"baseURL": src.URL}, &ex); err != nil {
+		if err := src.Call(ctx, http.MethodPost, manager.APIPath("/api/vms/%s/%s/snapshot-export", ns, vm), map[string]string{"baseURL": src.URL}, &ex); err != nil {
 			return err
 		}
 		defer func() {
 			cctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
-			src.Call(cctx, http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/unexport", ns, vm), nil, nil)
+			src.Call(cctx, http.MethodPost, manager.APIPath("/api/vms/%s/%s/unexport", ns, vm), nil, nil)
 		}()
 		t := libTemplate{Name: name, SourceVM: vm, SourceHost: src.Name, Arch: st.Arch(), Created: time.Now(), Spec: ex.Spec}
 		for _, d := range ex.Disks {
@@ -159,6 +159,10 @@ func (s *Server) deployFromLibrary(r *http.Request, name string, dst manager.Nod
 
 func (s *Server) serveTemplateData(w http.ResponseWriter, r *http.Request) {
 	org, name, file := r.PathValue("org"), r.PathValue("name"), r.PathValue("file")
+	if !validSegments(r) {
+		http.Error(w, "invalid path", http.StatusBadRequest)
+		return
+	}
 	s.regAuth.mu.Lock()
 	g, ok := s.regAuth.pulls[secretKey(strings.TrimSpace(r.Header.Get("x-kubevirt-export-token")))]
 	s.regAuth.mu.Unlock()

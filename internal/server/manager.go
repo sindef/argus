@@ -350,7 +350,7 @@ func (s *Server) managerVM(w http.ResponseWriter, r *http.Request) {
 	}
 	ns, name := r.PathValue("ns"), r.PathValue("name")
 	var vm kube.VM
-	if err := n.Call(r.Context(), http.MethodGet, fmt.Sprintf("/api/vms/%s/%s", ns, name), nil, &vm); err != nil {
+	if err := n.Call(r.Context(), http.MethodGet, manager.APIPath("/api/vms/%s/%s", ns, name), nil, &vm); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
@@ -371,11 +371,11 @@ func (s *Server) managerVM(w http.ResponseWriter, r *http.Request) {
 	switch tab {
 	case "summary", "logs":
 		var evs []kube.Event
-		err = n.Call(r.Context(), http.MethodGet, fmt.Sprintf("/api/vms/%s/%s/events", ns, name), nil, &evs)
+		err = n.Call(r.Context(), http.MethodGet, manager.APIPath("/api/vms/%s/%s/events", ns, name), nil, &evs)
 		data["Events"] = evs
 	case "snapshots":
 		var snaps []kube.Snapshot
-		err = n.Call(r.Context(), http.MethodGet, fmt.Sprintf("/api/vms/%s/%s/snapshots", ns, name), nil, &snaps)
+		err = n.Call(r.Context(), http.MethodGet, manager.APIPath("/api/vms/%s/%s/snapshots", ns, name), nil, &snaps)
 		data["Snapshots"] = snaps
 	case "hardware":
 		var st storageInfo
@@ -384,7 +384,7 @@ func (s *Server) managerVM(w http.ResponseWriter, r *http.Request) {
 		}
 	case "backups":
 		var b VMBackups
-		err = n.Call(r.Context(), http.MethodGet, fmt.Sprintf("/api/vms/%s/%s/backups", ns, name), nil, &b)
+		err = n.Call(r.Context(), http.MethodGet, manager.APIPath("/api/vms/%s/%s/backups", ns, name), nil, &b)
 		data["Backups"] = map[string]any{"B": b, "P": fmt.Sprintf("/nodes/%s/vms/%s/%s", n.Name, ns, name), "Name": name, "CanOperate": data["CanOperate"]}
 	}
 	data["Error"] = errText(err)
@@ -402,7 +402,7 @@ func (s *Server) managerVMAction(w http.ResponseWriter, r *http.Request) {
 		flash(w, r, fmt.Errorf("%s has a migration in progress", name))
 		return
 	}
-	path := fmt.Sprintf("/api/vms/%s/%s/", ns, name)
+	path := manager.APIPath("/api/vms/%s/%s/", ns, name)
 	var body any
 	switch {
 	case kube.ValidAction(act):
@@ -438,7 +438,7 @@ func (s *Server) managerVMAction(w http.ResponseWriter, r *http.Request) {
 func (s *Server) managerSnapshotOp(w http.ResponseWriter, r *http.Request) {
 	n, err := s.orgNode(r)
 	if err == nil {
-		err = n.Call(r.Context(), http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/snapshots/%s/%s", r.PathValue("ns"), r.PathValue("name"), r.PathValue("snap"), r.PathValue("op")), nil, nil)
+		err = n.Call(r.Context(), http.MethodPost, manager.APIPath("/api/vms/%s/%s/snapshots/%s/%s", r.PathValue("ns"), r.PathValue("name"), r.PathValue("snap"), r.PathValue("op")), nil, nil)
 	}
 	if err != nil {
 		flash(w, r, err)
@@ -485,7 +485,7 @@ func (s *Server) managerMigrate(w http.ResponseWriter, r *http.Request) {
 	}
 	var vm kube.VM
 	if err == nil {
-		err = src.Call(r.Context(), http.MethodGet, fmt.Sprintf("/api/vms/%s/%s", r.PathValue("ns"), r.PathValue("name")), nil, &vm)
+		err = src.Call(r.Context(), http.MethodGet, manager.APIPath("/api/vms/%s/%s", r.PathValue("ns"), r.PathValue("name")), nil, &vm)
 	}
 	if err == nil {
 		if vm.Running {
@@ -887,7 +887,7 @@ func (s *Server) managerBackupOp(w http.ResponseWriter, r *http.Request) {
 		for k := range r.Form {
 			req[k] = r.FormValue(k)
 		}
-		err = n.Call(r.Context(), http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/backups/%s", r.PathValue("ns"), r.PathValue("name"), r.PathValue("op")), req, nil)
+		err = n.Call(r.Context(), http.MethodPost, manager.APIPath("/api/vms/%s/%s/backups/%s", r.PathValue("ns"), r.PathValue("name"), r.PathValue("op")), req, nil)
 	}
 	if err != nil {
 		flash(w, r, err)
@@ -900,7 +900,7 @@ func (s *Server) managerBackupOp(w http.ResponseWriter, r *http.Request) {
 func (s *Server) managerMoveDisk(w http.ResponseWriter, r *http.Request) {
 	n, err := s.orgNode(r)
 	if err == nil {
-		err = n.Call(r.Context(), http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/disks/move", r.PathValue("ns"), r.PathValue("name")), map[string]string{"disk": r.FormValue("disk"), "pool": r.FormValue("pool")}, nil)
+		err = n.Call(r.Context(), http.MethodPost, manager.APIPath("/api/vms/%s/%s/disks/move", r.PathValue("ns"), r.PathValue("name")), map[string]string{"disk": r.FormValue("disk"), "pool": r.FormValue("pool")}, nil)
 	}
 	if err != nil {
 		flash(w, r, err)
@@ -913,7 +913,7 @@ func (s *Server) managerMoveDisk(w http.ResponseWriter, r *http.Request) {
 func (s *Server) managerSetTags(w http.ResponseWriter, r *http.Request) {
 	n, err := s.orgNode(r)
 	if err == nil {
-		err = n.Call(r.Context(), http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/tags", r.PathValue("ns"), r.PathValue("name")), map[string]string{"tags": r.FormValue("tags")}, nil)
+		err = n.Call(r.Context(), http.MethodPost, manager.APIPath("/api/vms/%s/%s/tags", r.PathValue("ns"), r.PathValue("name")), map[string]string{"tags": r.FormValue("tags")}, nil)
 	}
 	if err != nil {
 		flash(w, r, err)

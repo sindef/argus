@@ -246,7 +246,7 @@ func (n Node) client() *http.Client {
 	}
 	pool := x509.NewCertPool()
 	pool.AppendCertsFromPEM([]byte(n.CA))
-	c := &http.Client{Timeout: 10 * time.Minute, Transport: &http.Transport{
+	c := &http.Client{Timeout: 10 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }, Transport: &http.Transport{
 		TLSClientConfig:     trustPinnedOrPublic(pool, n.URL),
 		MaxIdleConnsPerHost: 4,
 		IdleConnTimeout:     90 * time.Second,
@@ -324,7 +324,7 @@ func (n Node) VMs(ctx context.Context) ([]kube.VM, error) {
 }
 
 func (n Node) Action(ctx context.Context, ns, vm, action string) error {
-	return n.do(ctx, http.MethodPost, fmt.Sprintf("/api/vms/%s/%s/%s", ns, vm, action), nil, nil)
+	return n.do(ctx, http.MethodPost, APIPath("/api/vms/%s/%s/%s", ns, vm, action), nil, nil)
 }
 
 func (c *Manager) preflight(ctx context.Context, src, dst Node, ns, vm string) error {
@@ -429,11 +429,19 @@ func (c *Manager) Migrate(src, dst Node, ns, vm string) error {
 	})
 }
 
+func APIPath(format string, args ...string) string {
+	esc := make([]any, len(args))
+	for i, a := range args {
+		esc[i] = url.PathEscape(a)
+	}
+	return fmt.Sprintf(format, esc...)
+}
+
 func vmPathIn(ns, vm, action string) string {
 	if action == "" {
-		return fmt.Sprintf("/api/vms/%s/%s", ns, vm)
+		return APIPath("/api/vms/%s/%s", ns, vm)
 	}
-	return fmt.Sprintf("/api/vms/%s/%s/%s", ns, vm, action)
+	return APIPath("/api/vms/%s/%s/", ns, vm) + action
 }
 
 func cleanupCtx() (context.Context, context.CancelFunc) {
@@ -527,7 +535,7 @@ func (n Node) DialConsole(ctx context.Context, ns, vm, kind string) (*websocket.
 	pool := x509.NewCertPool()
 	pool.AppendCertsFromPEM([]byte(n.CA))
 	d := websocket.Dialer{TLSClientConfig: trustPinnedOrPublic(pool, n.URL), Subprotocols: []string{"binary"}}
-	u := strings.Replace(n.URL, "https://", "wss://", 1) + fmt.Sprintf("/api/vms/%s/%s/ws/%s", ns, vm, kind)
+	u := strings.Replace(n.URL, "https://", "wss://", 1) + APIPath("/api/vms/%s/%s/ws/%s", ns, vm, kind)
 	conn, resp, err := d.DialContext(ctx, u, http.Header{"Authorization": {"Bearer " + n.Token}})
 	if err != nil && resp != nil {
 		return nil, fmt.Errorf("%s: console: %s", n.Name, resp.Status)

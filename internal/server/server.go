@@ -456,8 +456,25 @@ func (s *Server) requireOrg(min auth.Role, h http.HandlerFunc) http.HandlerFunc 
 	})
 }
 
+var safeSegment = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$`)
+
+var segmentParams = []string{"ns", "name", "op", "node", "id", "action", "disk", "snap", "kind", "file", "volume", "source", "export", "vm", "stamp", "org"}
+
+func validSegments(r *http.Request) bool {
+	for _, k := range segmentParams {
+		if v := r.PathValue(k); v != "" && !safeSegment.MatchString(v) {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Server) require(min auth.Role, h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !validSegments(r) {
+			http.Error(w, "invalid path", http.StatusBadRequest)
+			return
+		}
 		if tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
 			t, valid := s.auth.CheckToken(r.Context(), tok)
 			if !valid || !strings.HasPrefix(r.URL.Path, "/api/") {

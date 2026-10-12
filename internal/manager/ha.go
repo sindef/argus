@@ -72,7 +72,7 @@ func (c *Manager) updateHA(ctx context.Context, fn func([]Protected) ([]Protecte
 }
 
 func vmPath(vm, suffix string) string {
-	return fmt.Sprintf("/api/vms/%s/%s/%s", kube.Namespace, vm, suffix)
+	return APIPath("/api/vms/%s/%s/", kube.Namespace, vm) + suffix
 }
 
 func (c *Manager) Protect(ctx context.Context, owner, vm, replica string, interval int) error {
