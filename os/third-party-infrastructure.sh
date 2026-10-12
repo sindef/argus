@@ -42,6 +42,7 @@ while IFS="$(printf '\t')" read -r name version checksum url; do
     case "$name" in
         k3s|kairos|containerd) targets='./cmd/...' ;;
         plugins) targets='./plugins/...' ;;
+        cosign) targets='./cmd/cosign' ;;
         *) targets='./...' ;;
     esac
     go list -deps -f '{{if .Module}}{{if .Module.Replace}}{{.Module.Replace.Path}} {{.Module.Replace.Version}}{{else}}{{.Module.Path}} {{.Module.Version}}{{end}}{{end}}' "$targets" > /linked-modules

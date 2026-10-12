@@ -20,6 +20,9 @@
       <input name="image" placeholder="registry/argus-os:tag" aria-label="Image" required>
       <button class="btn primary" type="submit">Update and reboot</button>
     </form>
+    {{with .Settings}}<form hx-post="/host/settings" hx-trigger="change" hx-target="#flash" class="form"><input type="hidden" name="unsigned_set" value="1">
+      <label class="check"><input type="checkbox" name="unsigned"{{if .Unsigned}} checked{{end}}> Allow unsigned images <span class="help" title="Development only. Normally an update must be signed by the Argus release workflow.">?</span></label>
+    </form>{{end}}
   </section>
   {{end}}
   {{with .Settings}}

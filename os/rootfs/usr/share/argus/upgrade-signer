@@ -1,0 +1,2 @@
+^https://github\.com/sindef/argus/\.github/workflows/release\.yml@refs/tags/v[0-9]
+https://token.actions.githubusercontent.com

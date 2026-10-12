@@ -9,3 +9,4 @@ containerd	v2.2.7-k3s1	d4d7dabb4b8f3baa89d0b33e8204b094d47e736c96c7d1e34b79444ed
 libseccomp-runc	v2.6.0	0889a8da98e37f86019c90789fd4ff7eda6e1ceb9ef07d4c51c67aeb50a77860	https://codeload.github.com/seccomp/libseccomp/tar.gz/refs/tags/v2.6.0
 go-k3s	go1.26.7	a4d7ce0c5239c415360b93b7c76b41482ad920d2c42fd38d24c18308d2d49e05	https://codeload.github.com/golang/go/tar.gz/refs/tags/go1.26.7
 go-kairos	go1.26.8	160193b1cc9e34bd21a606ba27d0f5ada8f731d8fa4224ac1f4fb877ef606ff3	https://codeload.github.com/golang/go/tar.gz/refs/tags/go1.26.8
+cosign	v3.1.3	ab8fcb8e0b4c0b8d01aefa37790cdd5ad099366b2efb8636b7a0250915b93362	https://codeload.github.com/sigstore/cosign/tar.gz/refs/tags/v3.1.3

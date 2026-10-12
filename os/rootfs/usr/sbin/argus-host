@@ -36,11 +36,23 @@ case "$action" in
                 exit 1
                 ;;
         esac
-        status "Updating to $arg"
+        status "Verifying $arg"
         rm -f "$req"
         idle || exit 1
-        if kairos-agent upgrade --source "oci:$arg" > "$dir/upgrade.log" 2>&1; then
-            status "Rebooting into $arg"
+        ref=$arg
+        if [ ! -e /usr/local/argus/allow-unsigned-updates ]; then
+            { read -r identity; read -r issuer; } < /usr/share/argus/upgrade-signer
+            if ! HOME=$dir cosign verify --certificate-identity-regexp "$identity" --certificate-oidc-issuer "$issuer" "$arg" > "$dir/verify.json" 2> "$dir/upgrade.log"; then
+                status "Update failed: $arg is not signed by the Argus release workflow"
+                exit 1
+            fi
+            digest=$(sed -n 's/.*"docker-manifest-digest":"\(sha256:[0-9a-f]\{64\}\)".*/\1/p' "$dir/verify.json" | head -n 1)
+            [ -n "$digest" ] || { status "Update failed: no verified digest"; exit 1; }
+            ref="$(printf '%s' "$arg" | sed -E 's#@.*$##; s#:[^/:]+$##')@$digest"
+        fi
+        status "Updating to $ref"
+        if kairos-agent upgrade --source "oci:$ref" >> "$dir/upgrade.log" 2>&1; then
+            status "Rebooting into $ref"
             idle && systemctl reboot
         else
             status "Update failed, see log"

@@ -16,20 +16,23 @@ const (
 	resolvedConf  = "/etc/systemd/resolved.conf.d/argus.conf"
 	timesyncdConf = "/etc/systemd/timesyncd.conf.d/argus.conf"
 	syslogConf    = "/usr/local/argus/rsyslog.d/remote.conf"
+	unsignedFile  = "/usr/local/argus/allow-unsigned-updates"
 )
 
 type Settings struct {
-	DNS    []string `json:"dns"`
-	NTP    []string `json:"ntp"`
-	Syslog string   `json:"syslog"`
-	Backup string   `json:"backup"`
+	DNS      []string `json:"dns"`
+	NTP      []string `json:"ntp"`
+	Syslog   string   `json:"syslog"`
+	Backup   string   `json:"backup"`
+	Unsigned bool     `json:"unsignedUpdates"`
 }
 
 type SettingsUpdate struct {
-	DNS    *[]string `json:"dns,omitempty"`
-	NTP    *[]string `json:"ntp,omitempty"`
-	Syslog *string   `json:"syslog,omitempty"`
-	Backup *string   `json:"backup,omitempty"`
+	DNS      *[]string `json:"dns,omitempty"`
+	NTP      *[]string `json:"ntp,omitempty"`
+	Syslog   *string   `json:"syslog,omitempty"`
+	Backup   *string   `json:"backup,omitempty"`
+	Unsigned *bool     `json:"unsignedUpdates,omitempty"`
 }
 
 var (
@@ -49,7 +52,8 @@ func confValues(path, key string) []string {
 }
 
 func readSettings() Settings {
-	st := Settings{DNS: confValues(resolvedConf, "DNS"), NTP: confValues(timesyncdConf, "NTP"), Backup: backupTarget()}
+	_, err := os.Stat(unsignedFile)
+	st := Settings{DNS: confValues(resolvedConf, "DNS"), NTP: confValues(timesyncdConf, "NTP"), Backup: backupTarget(), Unsigned: err == nil}
 	b, _ := os.ReadFile(syslogConf)
 	if m := syslogLine.FindStringSubmatch(strings.TrimSpace(string(b))); m != nil {
 		proto := "udp"
@@ -106,6 +110,15 @@ func applySettings(ctx context.Context, u SettingsUpdate) error {
 			return err
 		}
 		if _, err := run(ctx, "systemctl", "restart", "systemd-timesyncd"); err != nil {
+			return err
+		}
+	}
+	if u.Unsigned != nil {
+		body := ""
+		if *u.Unsigned {
+			body = "1\n"
+		}
+		if err := writeConf(unsignedFile, body); err != nil {
 			return err
 		}
 	}

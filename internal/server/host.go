@@ -282,6 +282,10 @@ func (s *Server) hostSettingsForm(w http.ResponseWriter, r *http.Request) {
 		dns, ntp, syslog := fields(r.FormValue("dns")), fields(r.FormValue("ntp")), strings.TrimSpace(r.FormValue("syslog"))
 		u.DNS, u.NTP, u.Syslog = &dns, &ntp, &syslog
 	}
+	if _, ok := r.Form["unsigned_set"]; ok {
+		unsigned := r.FormValue("unsigned") != ""
+		u.Unsigned = &unsigned
+	}
 	if _, ok := r.Form["backup"]; ok {
 		backup := strings.TrimSpace(r.FormValue("backup"))
 		u.Backup = &backup
