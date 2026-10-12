@@ -525,10 +525,14 @@ func (s *Server) hardwareAction(w http.ResponseWriter, r *http.Request) {
 	switch op {
 	case "save":
 		var cores, mem int
+		var cps int
 		if err = intField(r, "cores", 1, 64, &cores); err == nil {
 			err = intField(r, "memory", 128, 262144, &mem)
 		}
-		req.Hardware.Cores, req.Hardware.MemoryMiB = int64(cores), int64(mem)
+		if err == nil {
+			err = intField(r, "cores_per_socket", 1, 64, &cps)
+		}
+		req.Hardware.Cores, req.Hardware.MemoryMiB, req.Hardware.CoresPerSocket = int64(cores), int64(mem), int64(cps)
 	case "resize":
 		var size int
 		err = intField(r, "size", 1, 65536, &size)

@@ -209,6 +209,7 @@
 <form hx-post="{{$p}}/save" hx-target="#hw-error" class="form">
   <div class="row">
     <label>vCPUs <input name="cores" type="number" min="1" max="64" value="{{.Cores}}" required></label>
+    <label>Cores per socket <span class="help" title="vCPUs must divide evenly. Fewer cores per socket means more sockets; some guest licences limit sockets.">?</span><input name="cores_per_socket" type="number" min="1" max="64" value="{{.CoresPerSocket}}" required></label>
     <label>Memory (MiB) <input name="memory" type="number" min="128" max="262144" step="128" value="{{.MemoryMiB}}" required></label>
     <label>Firmware <select name="firmware">
       {{$fw := .Firmware}}{{range $.Firmwares}}<option value="{{.}}"{{if eq . $fw}} selected{{end}}>{{if eq . "bios"}}BIOS{{else if eq . "uefi"}}UEFI{{else}}UEFI with Secure Boot{{end}}</option>{{end}}

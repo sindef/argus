@@ -346,7 +346,7 @@ func (c *Client) Templates(ctx context.Context) ([]Template, error) {
 	var out []Template
 	for _, v := range list.Items {
 		t := Template{Name: v.GetName()}
-		t.Cores, _, _ = unstructured.NestedInt64(v.Object, "spec", "template", "spec", "domain", "cpu", "cores")
+		t.Cores, _ = vcpus(v.Object)
 		if m, ok, _ := unstructured.NestedString(v.Object, "spec", "template", "spec", "domain", "memory", "guest"); ok {
 			if q, err := resource.ParseQuantity(m); err == nil {
 				t.MemoryMiB = q.Value() >> 20
@@ -433,13 +433,14 @@ func (c *Client) DeleteDataVolume(ctx context.Context, ns, name string) error {
 var pvcGVR = schema.GroupVersionResource{Version: "v1", Resource: "persistentvolumeclaims"}
 
 type Hardware struct {
-	Cores     int64
-	MemoryMiB int64
-	Firmware  string
-	TPM       bool
-	CDROM     string
-	Disks     []HardwareDisk
-	NICs      []NIC
+	Cores          int64
+	CoresPerSocket int64
+	MemoryMiB      int64
+	Firmware       string
+	TPM            bool
+	CDROM          string
+	Disks          []HardwareDisk
+	NICs           []NIC
 }
 
 type HardwareDisk struct {
@@ -455,7 +456,7 @@ func (c *Client) Hardware(ctx context.Context, ns, name string) (Hardware, error
 	}
 	o := vm.Object
 	hw := Hardware{Firmware: Firmwares()[0]}
-	hw.Cores, _, _ = unstructured.NestedInt64(o, "spec", "template", "spec", "domain", "cpu", "cores")
+	hw.Cores, hw.CoresPerSocket = vcpus(o)
 	if m, ok, _ := unstructured.NestedString(o, "spec", "template", "spec", "domain", "memory", "guest"); ok {
 		if q, err := resource.ParseQuantity(m); err == nil {
 			hw.MemoryMiB = q.Value() >> 20
@@ -499,7 +500,16 @@ func (c *Client) Hardware(ctx context.Context, ns, name string) (Hardware, error
 func (c *Client) SetHardware(ctx context.Context, ns, name string, hw Hardware) error {
 	return c.editVM(ctx, ns, name, func(o obj, _ bool) error {
 		dom := []string{"spec", "template", "spec", "domain"}
-		unstructured.SetNestedField(o, hw.Cores, append(dom, "cpu", "cores")...)
+		cps := hw.CoresPerSocket
+		if cps <= 0 {
+			cps = hw.Cores
+		}
+		if hw.Cores%cps != 0 {
+			return fmt.Errorf("%d vCPUs cannot be split into sockets of %d cores", hw.Cores, cps)
+		}
+		unstructured.SetNestedField(o, hw.Cores/cps, append(dom, "cpu", "sockets")...)
+		unstructured.SetNestedField(o, cps, append(dom, "cpu", "cores")...)
+		unstructured.RemoveNestedField(o, append(dom, "cpu", "threads")...)
 		unstructured.SetNestedField(o, fmt.Sprintf("%dMi", hw.MemoryMiB), append(dom, "memory", "guest")...)
 		unstructured.RemoveNestedField(o, append(dom, "firmware", "bootloader")...)
 		unstructured.RemoveNestedField(o, append(dom, "features", "smm")...)
@@ -699,4 +709,12 @@ func (c *Client) CreateImportedVM(ctx context.Context, v ImportedVM) ([]string, 
 	}}
 	_, err := c.dyn.Resource(vmGVR).Namespace(Namespace).Create(ctx, vm, metav1.CreateOptions{})
 	return dvs, err
+}
+
+func vcpus(vm obj) (total, perSocket int64) {
+	n := func(f string) int64 {
+		v, _, _ := unstructured.NestedInt64(vm, "spec", "template", "spec", "domain", "cpu", f)
+		return max(v, 1)
+	}
+	return n("sockets") * n("cores") * n("threads"), n("cores") * n("threads")
 }

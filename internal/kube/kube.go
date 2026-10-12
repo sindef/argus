@@ -359,7 +359,7 @@ func toVM(v, vmi *unstructured.Unstructured) VM {
 			vm.PendingRestart = vm.Running
 		}
 	}
-	vm.Cores, _, _ = unstructured.NestedInt64(o, "spec", "template", "spec", "domain", "cpu", "cores")
+	vm.Cores, _ = vcpus(o)
 	if vm.Memory, _, _ = unstructured.NestedString(o, "spec", "template", "spec", "domain", "memory", "guest"); vm.Memory == "" {
 		vm.Memory, _, _ = unstructured.NestedString(o, "spec", "template", "spec", "domain", "resources", "requests", "memory")
 	}
