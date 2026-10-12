@@ -17,6 +17,7 @@ import (
 	"argus/internal/hostd"
 	"argus/internal/kube"
 	"argus/internal/manager"
+	"argus/internal/vsphere"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
@@ -83,6 +84,7 @@ type hostOps interface {
 	Hardware(ctx context.Context, ns, name string) (kube.Hardware, error)
 	HardwareOp(ctx context.Context, ns, name, op string, req hwOpReq) error
 	Import(ctx context.Context, source, contentType string, body io.Reader) (string, error)
+	VCenterVMs(ctx context.Context, fields map[string]string) ([]vsphere.VM, error)
 	DownloadDisk(w http.ResponseWriter, r *http.Request, ns, name, disk string)
 }
 
@@ -320,12 +322,20 @@ func (l localOps) Import(ctx context.Context, source, contentType string, body i
 		return "", err
 	}
 	defer form.RemoveAll()
-	return l.s.importESXi(ctx, func(k string) string {
+	f := func(k string) string {
 		if v := form.Value[k]; len(v) > 0 {
 			return v[0]
 		}
 		return ""
-	})
+	}
+	if source == "vcenter" {
+		return l.s.importVCenter(ctx, f)
+	}
+	return l.s.importESXi(ctx, f)
+}
+
+func (l localOps) VCenterVMs(ctx context.Context, fields map[string]string) ([]vsphere.VM, error) {
+	return l.s.vcenterVMs(ctx, func(k string) string { return fields[k] })
 }
 
 func (l localOps) DownloadDisk(w http.ResponseWriter, r *http.Request, ns, name, disk string) {
@@ -411,6 +421,11 @@ func (o remoteOps) Import(ctx context.Context, source, contentType string, body 
 	defer resp.Body.Close()
 	var out struct{ Name string }
 	return out.Name, decodeJSON(resp.Body, &out)
+}
+
+func (o remoteOps) VCenterVMs(ctx context.Context, fields map[string]string) ([]vsphere.VM, error) {
+	var out []vsphere.VM
+	return out, o.n.Call(ctx, http.MethodPost, "/api/vms/import/vcenter-vms", fields, &out)
 }
 
 func (o remoteOps) DownloadDisk(w http.ResponseWriter, r *http.Request, ns, name, disk string) {
@@ -510,6 +525,10 @@ func (s *Server) hostAPIRoutes() {
 				name, err := l.Import(r.Context(), r.PathValue("source"), r.Header.Get("Content-Type"), r.Body)
 				return map[string]string{"name": name}, err
 			})
+		},
+		"POST /api/vms/import/vcenter-vms": func(w http.ResponseWriter, r *http.Request) {
+			var fields map[string]string
+			s.apiOp(w, r, &fields, func() (any, error) { return l.VCenterVMs(r.Context(), fields) })
 		},
 		"GET /api/vms/{ns}/{name}/disks/{disk}/download": func(w http.ResponseWriter, r *http.Request) {
 			s.streamDisk(w, r, r.PathValue("ns"), r.PathValue("name"), r.PathValue("disk"))

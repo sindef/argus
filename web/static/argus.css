@@ -274,7 +274,7 @@ h1 .dot { font-size: 14px; font-weight: 400; }
 .addr-head { display: flex; align-items: center; gap: 12px; }
 .vm-form:not(:has(input[name=ipmode][value=static]:checked)) .guest-static { display: none; }
 .library-form:has(input[name=via][value=file]:checked) .via-url, .library-form:has(input[name=via][value=url]:checked) .via-file,
-.import-modal:has(input[name=isrc][value=ova]:checked) .import-esxi, .import-modal:has(input[name=isrc][value=esxi]:checked) .import-ova { display: none; }
+.import-modal:not(:has(input[name=isrc][value=ova]:checked)) .import-ova, .import-modal:not(:has(input[name=isrc][value=esxi]:checked)) .import-esxi, .import-modal:not(:has(input[name=isrc][value=vcenter]:checked)) .import-vcenter { display: none; }
 .addr-head .field { width: 48px; }
 .form > .field:has(> .help) { flex-direction: row; align-items: center; gap: 4px; }
 .bell { position: relative; }

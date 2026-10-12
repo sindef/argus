@@ -58,12 +58,26 @@
 
 {{define "import-modal"}}
 <div class="import-modal">
-  <div class="modal-head"><h2>Import VM{{if .Base}} to {{.NodeName}}{{end}}</h2><div class="seg"><label><input type="radio" name="isrc" value="ova" checked> OVA file</label><label><input type="radio" name="isrc" value="esxi"> ESXi host</label></div><button class="icon-btn" type="button" data-close-dialog aria-label="Close">{{template "icon" "x"}}</button></div>
+  <div class="modal-head"><h2>Import VM{{if .Base}} to {{.NodeName}}{{end}}</h2><div class="seg"><label><input type="radio" name="isrc" value="ova" checked> OVA file</label><label><input type="radio" name="isrc" value="esxi"> ESXi host</label><label><input type="radio" name="isrc" value="vcenter"> vCenter</label></div><button class="icon-btn" type="button" data-close-dialog aria-label="Close">{{template "icon" "x"}}</button></div>
   <p id="import-vm-error" class="error form-error"></p>
   {{if ne .Arch "amd64"}}<p class="arch-warn">This host is {{.Arch}}. VMware VMs are almost always x86-64 and will only start here if the guest is built for {{.Arch}}.</p>{{end}}
   <form class="form import-ova" hx-post="{{.Base}}/vms/import/ova" hx-encoding="multipart/form-data" hx-target="#import-vm-error" hx-disabled-elt="find button[type=submit]">
     {{template "import-common" .}}
     <label>OVA file <input name="ova" type="file" accept=".ova" required></label>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Import</button></div>
+  </form>
+  <form class="form import-vcenter" hx-post="{{.Base}}/vms/import/vcenter" hx-encoding="multipart/form-data" hx-target="#import-vm-error" hx-disabled-elt="find button[type=submit]">
+    {{template "import-common" .}}
+    <div class="row">
+      <label>vCenter <input name="host" placeholder="vcenter.example" required></label>
+      <label>User <input name="user" placeholder="administrator@vsphere.local" required autocomplete="off"></label>
+      <label>Password <input name="password" type="password" required autocomplete="new-password"></label>
+    </div>
+    <label>Certificate fingerprint (SHA-256) <span class="help" title="Compare with vCenter's certificate before sending credentials. Leave empty to be shown the fingerprint it presents.">?</span><input name="fingerprint" class="mono" placeholder="e.g. 3f:9a:…"></label>
+    <div class="row">
+      <label>VM <span class="help" title="Running VMs are copied from a temporary snapshot, which is removed afterwards.">?</span><select name="vm" id="vc-vms" required><option value="">Find VMs first</option></select></label>
+      <div class="actions"><button class="btn" type="button" hx-post="{{.Base}}/vms/import/vcenter-vms" hx-target="#vc-vms">{{template "icon" "search"}}Find VMs</button></div>
+    </div>
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Import</button></div>
   </form>
   <form class="form import-esxi" hx-post="{{.Base}}/vms/import/esxi" hx-encoding="multipart/form-data" hx-target="#import-vm-error" hx-disabled-elt="find button[type=submit]">
@@ -82,6 +96,8 @@
   </form>
 </div>
 {{end}}
+
+{{define "vcenter-vms"}}{{range .VMs}}<option value="{{.Ref}}">{{.Name}}{{if eq .Power "poweredOn"}} (running){{end}}</option>{{else}}<option value="" disabled>No VMs found</option>{{end}}{{end}}
 
 {{define "import-common"}}
 <div class="row">
