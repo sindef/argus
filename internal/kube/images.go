@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -365,4 +366,25 @@ func (c *Client) DeleteTokenSource(ctx context.Context, name string) {
 	for _, gvr := range []schema.GroupVersionResource{secGVR, cmGVR} {
 		c.dyn.Resource(gvr).Namespace(Namespace).Delete(ctx, name, metav1.DeleteOptions{})
 	}
+}
+
+func (c *Client) CleanupInterrupted(ctx context.Context) []string {
+	var out []string
+	if list, err := c.dyn.Resource(vmExportGVR).Namespace(Namespace).List(ctx, metav1.ListOptions{}); err == nil {
+		for _, e := range list.Items {
+			if vm, ok := strings.CutPrefix(e.GetName(), "argus-backup-"); ok {
+				c.DeleteBackupExport(ctx, Namespace, vm)
+				out = append(out, e.GetName())
+			}
+		}
+	}
+	if list, err := c.dyn.Resource(cmGVR).Namespace(Namespace).List(ctx, metav1.ListOptions{}); err == nil {
+		for _, s := range list.Items {
+			if strings.HasPrefix(s.GetName(), "argus-esxi-") {
+				c.DeleteTokenSource(ctx, s.GetName())
+				out = append(out, s.GetName())
+			}
+		}
+	}
+	return out
 }

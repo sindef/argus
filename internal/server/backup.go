@@ -143,6 +143,11 @@ func (b *backupState) status(key string) string {
 }
 
 func (s *Server) backupLoop() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	if left := s.kube.CleanupInterrupted(ctx); len(left) > 0 {
+		log.Printf("removed leftovers of interrupted operations: %v", left)
+	}
+	cancel()
 	s.resumeRestores()
 	for range time.Tick(time.Minute) {
 		recovering("backups", s.backupTick)
