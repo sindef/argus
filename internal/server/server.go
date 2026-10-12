@@ -561,7 +561,16 @@ func redirect(w http.ResponseWriter, r *http.Request, to string) {
 
 func flash(w http.ResponseWriter, r *http.Request, err error) {
 	log.Printf("%s: %s %s: %v", session(r).User, r.Method, r.URL.Path, err)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusUnprocessableEntity)
 	w.Write([]byte(template.HTMLEscapeString(err.Error())))
+}
+
+func failed(w http.ResponseWriter, r *http.Request, err error) {
+	if err != nil && r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+	}
 }
 
 func errText(err error) string {

@@ -81,19 +81,17 @@ func (s *Server) audited(w http.ResponseWriter, r *http.Request, user string, h 
 }
 
 func auditResult(aw *auditWriter, h http.Header) (bool, string) {
-	body := strings.TrimSpace(aw.body.String())
-	text := body != "" && utf8.ValidString(body) && !strings.ContainsAny(body[:1], "<{[") && h.Get("Content-Disposition") == ""
-	ok := aw.status < 400 && (aw.status >= 300 || !text || h.Get("HX-Refresh") != "" || h.Get("HX-Redirect") != "")
-	switch {
-	case ok:
+	if aw.status < 400 {
 		return true, ""
-	case text:
-		if r := []rune(body); len(r) > 200 {
-			body = string(r[:200]) + "…"
-		}
-		return false, body
 	}
-	return false, fmt.Sprintf("HTTP %d", aw.status)
+	body := strings.TrimSpace(aw.body.String())
+	if body == "" || !utf8.ValidString(body) || strings.HasPrefix(body, "<") || h.Get("Content-Disposition") != "" {
+		return false, fmt.Sprintf("HTTP %d", aw.status)
+	}
+	if r := []rune(body); len(r) > 200 {
+		body = string(r[:200]) + "…"
+	}
+	return false, body
 }
 
 func (s *Server) auditLoop() {

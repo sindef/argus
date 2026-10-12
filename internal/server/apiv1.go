@@ -287,6 +287,7 @@ func (s *Server) renderAccountTokens(w http.ResponseWriter, r *http.Request, not
 	if err == nil {
 		err = terr
 	}
+	failed(w, r, err)
 	s.render(w, r, "tokens.html", "layout", map[string]any{"Tokens": ts, "Notice": notice, "Error": errText(err)})
 }
 

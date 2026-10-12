@@ -6,7 +6,7 @@
 <title>{{if .Manager}}Argus Manager{{else}}Argus{{end}}</title>
 <link rel="icon" href="/static/logo.svg">
 <link rel="stylesheet" href="/static/argus.css">
-<meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"includeIndicatorStyles":false}'>
+<meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"includeIndicatorStyles":false,"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"422","swap":true,"error":false},{"code":"[45]..","swap":false,"error":true},{"code":"...","swap":false}]}'>
 <script src="/static/vendor/htmx/htmx.min.js"></script>
 <script src="/static/argus.js"></script>
 {{block "scripts" .}}{{end}}

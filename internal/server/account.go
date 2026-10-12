@@ -137,6 +137,7 @@ func (s *Server) usersPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderUsers(w http.ResponseWriter, r *http.Request, notice string, err error) {
+	failed(w, r, err)
 	rows, groups, lerr := s.userRows(r)
 	if err == nil {
 		err = lerr

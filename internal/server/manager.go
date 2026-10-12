@@ -562,6 +562,7 @@ func (s *Server) managerHosts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderHosts(w http.ResponseWriter, r *http.Request, err error) {
+	failed(w, r, err)
 	data := s.managerData(r)
 	data["Nav"] = "hosts"
 	if err != nil {
@@ -642,6 +643,7 @@ func (s *Server) managerSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, notice string, err error) {
+	failed(w, r, err)
 	org, oerr := s.manager.Org(r.Context(), session(r).Org)
 	if err == nil {
 		err = oerr

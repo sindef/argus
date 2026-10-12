@@ -181,6 +181,7 @@ func (s *Server) mfaAction(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err != nil {
+		failed(w, r, err)
 		s.render(w, r, "password.html", "layout", s.passwordData(r, err.Error()))
 		return
 	}

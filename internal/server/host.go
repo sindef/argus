@@ -155,6 +155,7 @@ func tail(s string, n int) string {
 }
 
 func (s *Server) renderHost(w http.ResponseWriter, r *http.Request, notice string, err error) {
+	failed(w, r, err)
 	tokens, terr := s.auth.Tokens(r.Context())
 	if err == nil {
 		err = terr
