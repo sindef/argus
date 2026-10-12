@@ -237,7 +237,7 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 	}
 }
 
-var groupTabs = []string{"summary", "hosts", "vms", "networks"}
+var groupTabs = []string{"summary", "hosts", "vms", "networks", "drs"}
 
 func (s *Server) managerHome(w http.ResponseWriter, r *http.Request) {
 	data := s.managerData(r)
@@ -266,6 +266,24 @@ func (s *Server) managerHome(w http.ResponseWriter, r *http.Request) {
 				return d == dc && (cl == "" || c == "" || c == cl)
 			})
 		})
+	}
+	if tab == "drs" && cl != "" {
+		org := session(r).Org
+		data["ClusterSettings"], _ = s.manager.ClusterSettings(r.Context(), org, dc, cl)
+		data["Recommendations"], data["RuleKinds"] = s.manager.Recommendations(org, dc, cl), manager.RuleKinds
+		var vms, hosts []string
+		for _, st := range s.inventory(r) {
+			if st.Node.Datacenter == dc && st.Node.Cluster == cl {
+				hosts = append(hosts, st.Node.Name)
+				for _, v := range st.VMs {
+					if !v.Template {
+						vms = append(vms, v.Name)
+					}
+				}
+			}
+		}
+		slices.Sort(vms)
+		data["ClusterVMs"], data["ClusterHosts"] = vms, hosts
 	}
 	s.render(w, r, "manager.html", "layout", data)
 }

@@ -155,6 +155,11 @@ func (c *Manager) Start() {
 			recovering("replication", c.replicate)
 		}
 	}()
+	go func() {
+		for range time.Tick(drsEvery) {
+			recovering("drs", func() { c.drsTick(context.Background()) })
+		}
+	}()
 }
 
 func (c *Manager) LastSeen(node string) time.Time {

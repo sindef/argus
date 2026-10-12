@@ -167,6 +167,8 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("GET /network/hosts", s.requireOrg(auth.Admin, s.managerHostNets))
 		s.mux.HandleFunc("GET /vm-new", s.require(auth.Operator, s.managerNewVM))
 		s.apiV1Routes()
+		s.mux.HandleFunc("POST /drs/apply", s.require(auth.Admin, s.drsApply))
+		s.mux.HandleFunc("POST /drs/rules/{op}", s.requireOrg(auth.Admin, s.drsRule))
 		s.mux.HandleFunc("GET /account/tokens", s.require(auth.ReadOnly, s.accountTokens))
 		s.mux.HandleFunc("POST /account/tokens", s.require(auth.ReadOnly, s.createAccountToken))
 		s.mux.HandleFunc("POST /account/tokens/{name}/delete", s.require(auth.ReadOnly, s.deleteAccountToken))

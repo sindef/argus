@@ -58,6 +58,7 @@ type Manager struct {
 	haMu     sync.Mutex
 	inv      inventory
 	tel      *telemetry
+	drs      []Recommendation
 }
 
 func New(store auth.Secrets, metricsPath string) *Manager {

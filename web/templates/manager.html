@@ -12,6 +12,7 @@
   <a href="{{.Page}}?tab=hosts"{{if eq .Tab "hosts"}} class="active"{{end}}>{{template "icon" "server"}}Hosts</a>
   <a href="{{.Page}}?tab=vms"{{if eq .Tab "vms"}} class="active"{{end}}>{{template "icon" "monitor"}}Virtual machines</a>
   <a href="{{.Page}}?tab=networks"{{if eq .Tab "networks"}} class="active"{{end}}>{{template "icon" "network"}}Networks</a>
+  {{if .Cluster}}<a href="{{.Page}}?tab=drs"{{if eq .Tab "drs"}} class="active"{{end}}>{{template "icon" "scale"}}Load balancing</a>{{end}}
 </nav>
 <div class="panes-body">
 {{if eq .Tab "hosts"}}
@@ -34,6 +35,39 @@
     </tr>{{end}}</tbody>
   </table></div>
 </div>
+{{else if eq .Tab "drs"}}
+<div class="card">
+  <div class="card-head"><h2>Recommendations</h2><span class="right muted">{{if eq .ClusterSettings.DRS "auto"}}Automatic{{else if eq .ClusterSettings.DRS "manual"}}Manual{{else}}Off{{end}}{{if .OrgAdmin}} · <a href="#" hx-get="/groups/modal/cluster-settings?dc={{.DC}}&cluster={{.Cluster}}" hx-target="#modal">Change</a>{{end}}</span></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>VM</th><th>From</th><th>To</th><th>Reason</th><th></th></tr></thead>
+    <tbody>{{range .Recommendations}}<tr><td>{{.VM}}</td><td>{{.From}}</td><td>{{.To}}</td><td class="muted">{{.Reason}}</td>
+      <td class="row-actions">{{if $.IsAdmin}}<button class="btn" hx-post="/drs/apply" hx-vals='{"id":"{{.ID}}"}' hx-target="#flash">Apply</button>{{end}}</td></tr>
+    {{else}}<tr><td colspan="5" class="muted">{{if .ClusterSettings.DRS}}No moves recommended.{{else}}Load balancing is off for this cluster.{{end}}</td></tr>{{end}}</tbody>
+  </table></div>
+</div>
+<div class="card">
+  <div class="card-head"><h2>Rules</h2>{{if .OrgAdmin}}<button class="btn right" data-dialog="add-rule">{{template "icon" "plus"}}Add rule</button>{{end}}</div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Name</th><th>Type</th><th>VMs</th><th>Hosts</th><th></th></tr></thead>
+    <tbody>{{range .ClusterSettings.Rules}}<tr><td>{{.Name}}</td><td>{{index $.RuleKinds .Kind}}</td><td>{{join .VMs ", "}}</td><td>{{with .Hosts}}{{join . ", "}}{{else}}<span class="muted">—</span>{{end}}</td>
+      <td class="row-actions">{{if $.OrgAdmin}}<button class="link danger" hx-post="/drs/rules/delete" hx-vals='{"dc":"{{$.DC}}","cluster":"{{$.Cluster}}","name":"{{.Name}}"}' hx-target="#flash" hx-confirm="Delete rule {{.Name}}?">Delete</button>{{end}}</td></tr>
+    {{else}}<tr><td colspan="5" class="muted">No rules.</td></tr>{{end}}</tbody>
+  </table></div>
+</div>
+{{if .OrgAdmin}}<dialog id="add-rule" class="card">
+  <form hx-post="/drs/rules/add" hx-target="#rule-error" class="form">
+    <h2>Add rule</h2>
+    <p id="rule-error" class="error form-error"></p>
+    <input type="hidden" name="dc" value="{{.DC}}"><input type="hidden" name="cluster" value="{{.Cluster}}">
+    <div class="row">
+      <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
+      <label>Type <select name="kind">{{range $k, $v := .RuleKinds}}<option value="{{$k}}">{{$v}}</option>{{end}}</select></label>
+    </div>
+    <fieldset><legend>VMs</legend><div class="checks">{{range .ClusterVMs}}<label class="check"><input type="checkbox" name="vms" value="{{.}}"> {{.}}</label>{{end}}</div></fieldset>
+    <fieldset><legend>Hosts <span class="help" title="Only for Run on hosts: the VMs may only run on these hosts.">?</span></legend><div class="checks">{{range .ClusterHosts}}<label class="check"><input type="checkbox" name="hosts" value="{{.}}"> {{.}}</label>{{end}}</div></fieldset>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Add</button></div>
+  </form>
+</dialog>{{end}}
 {{else if eq .Tab "networks"}}
 <div class="card">
   <div class="card-head"><h2>Networks</h2><a class="right" href="/networks">Manage networks</a></div>
@@ -178,6 +212,10 @@
   <input type="hidden" name="dc" value="{{.DC}}"><input type="hidden" name="cluster" value="{{.Cluster}}">
   <label>CPU baseline <span class="help" title="CPU model presented to VMs so they can live-migrate between any hosts in the cluster. Only models every host supports are listed. Applies to each VM at its next power-on.">?</span>
     <select name="cpu_model"><option value="">Host model (none)</option>{{$cur := .Settings.CPUModel}}{{range .CPUModels}}<option{{if eq . $cur}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+  <div class="row">
+    <label>Load balancing <select name="drs">{{$d := .Settings.DRS}}<option value=""{{if eq $d ""}} selected{{end}}>Off</option><option value="manual"{{if eq $d "manual"}} selected{{end}}>Manual (recommend)</option><option value="auto"{{if eq $d "auto"}} selected{{end}}>Automatic</option></select></label>
+    <label>Threshold <span class="help" title="1 moves VMs only for large imbalances; 5 balances aggressively.">?</span><select name="threshold">{{$t := .Settings.Threshold}}{{range .Thresholds}}<option{{if eq . $t}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+  </div>
   {{else if eq .Op "move-host"}}
   <input type="hidden" name="host" value="{{.Host}}">
   <div class="row">

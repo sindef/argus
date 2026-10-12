@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 
 	"argus/internal/manager"
@@ -53,7 +54,11 @@ func (s *Server) groupModal(w http.ResponseWriter, r *http.Request) {
 		data["Title"] = title + ": " + r.FormValue("cluster")
 	case "cluster-settings":
 		data["Title"] = title + ": " + r.FormValue("cluster")
-		data["Settings"], _ = s.manager.ClusterSettings(r.Context(), session(r).Org, r.FormValue("dc"), r.FormValue("cluster"))
+		st, _ := s.manager.ClusterSettings(r.Context(), session(r).Org, r.FormValue("dc"), r.FormValue("cluster"))
+		if st.Threshold == 0 {
+			st.Threshold = 3
+		}
+		data["Settings"], data["Thresholds"] = st, []int{1, 2, 3, 4, 5}
 		data["CPUModels"] = s.manager.CommonCPUModels(session(r).Org, r.FormValue("dc"), r.FormValue("cluster"))
 	}
 	s.render(w, r, "manager.html", "group-modal", data)
@@ -150,9 +155,64 @@ func (s *Server) saveClusterSettings(r *http.Request, dc, cl string) error {
 	if err != nil {
 		return err
 	}
-	st.CPUModel = r.FormValue("cpu_model")
+	st.CPUModel, st.DRS = r.FormValue("cpu_model"), r.FormValue("drs")
+	if st.DRS != "" && st.DRS != "manual" && st.DRS != "auto" {
+		return errors.New("invalid load balancing mode")
+	}
+	if st.Threshold, err = strconv.Atoi(r.FormValue("threshold")); err != nil || st.Threshold < 1 || st.Threshold > 5 {
+		return errors.New("threshold must be 1-5")
+	}
 	if st.CPUModel != "" && !slices.Contains(s.manager.CommonCPUModels(org, dc, cl), st.CPUModel) {
 		return fmt.Errorf("not every host in %s can run %s", cl, st.CPUModel)
 	}
 	return s.manager.SetClusterSettings(r.Context(), org, dc, cl, st)
+}
+
+func (s *Server) drsApply(w http.ResponseWriter, r *http.Request) {
+	if err := s.manager.ApplyRecommendation(r.Context(), session(r).Org, r.FormValue("id")); err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: applied DRS recommendation %s", session(r).User, r.FormValue("id"))
+	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) drsRule(w http.ResponseWriter, r *http.Request) {
+	if op := r.PathValue("op"); op != "add" && op != "delete" {
+		http.NotFound(w, r)
+		return
+	}
+	r.ParseForm()
+	org, dc, cl, name := session(r).Org, r.FormValue("dc"), r.FormValue("cluster"), r.FormValue("name")
+	st, err := s.manager.ClusterSettings(r.Context(), org, dc, cl)
+	if err == nil {
+		st.Rules = slices.DeleteFunc(st.Rules, func(x manager.Rule) bool { return x.Name == name })
+		if r.PathValue("op") == "add" {
+			rule := manager.Rule{Name: name, Kind: r.FormValue("kind"), VMs: r.Form["vms"]}
+			if rule.Kind == "hosts" {
+				rule.Hosts = r.Form["hosts"]
+			}
+			_, kind := manager.RuleKinds[rule.Kind]
+			switch {
+			case !validObject.MatchString(name):
+				err = errors.New("invalid rule name")
+			case !kind:
+				err = errors.New("unknown rule type")
+			case len(rule.VMs) < 1 || rule.Kind != "hosts" && len(rule.VMs) < 2:
+				err = errors.New("select the VMs the rule covers")
+			case rule.Kind == "hosts" && len(rule.Hosts) == 0:
+				err = errors.New("select at least one host")
+			}
+			st.Rules = append(st.Rules, rule)
+		}
+	}
+	if err == nil {
+		err = s.manager.SetClusterSettings(r.Context(), org, dc, cl, st)
+	}
+	if err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: DRS rule %s %s in %s/%s", session(r).User, r.PathValue("op"), name, dc, cl)
+	w.Header().Set("HX-Refresh", "true")
 }

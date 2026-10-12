@@ -21,7 +21,10 @@ type Group struct {
 }
 
 type ClusterSettings struct {
-	CPUModel string `json:"cpuModel,omitempty"`
+	CPUModel  string `json:"cpuModel,omitempty"`
+	DRS       string `json:"drs,omitempty"`
+	Threshold int    `json:"threshold,omitempty"`
+	Rules     []Rule `json:"rules,omitempty"`
 }
 
 type Profile struct {
