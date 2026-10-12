@@ -648,6 +648,24 @@ func (s *Server) managerSSO(w http.ResponseWriter, r *http.Request) {
 	s.renderSettings(w, r, "Single sign-on saved.", nil)
 }
 
+func (s *Server) managerRenameOrg(w http.ResponseWriter, r *http.Request) {
+	org, err := s.manager.Org(r.Context(), r.PathValue("id"))
+	name := strings.TrimSpace(r.FormValue("name"))
+	if err == nil && (!superAdmin(r) || name == "") {
+		err = errors.New("enter a name")
+	}
+	if err == nil {
+		org.Name = name
+		err = s.manager.SaveOrg(r.Context(), org)
+	}
+	if err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: renamed organization %s to %s", session(r).User, org.ID, name)
+	w.Header().Set("HX-Refresh", "true")
+}
+
 func (s *Server) managerAddOrg(w http.ResponseWriter, r *http.Request) {
 	if !superAdmin(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)

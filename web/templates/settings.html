@@ -43,8 +43,12 @@
     <header><h2>Organizations</h2><div class="actions"><button class="btn" data-dialog="add-org">{{template "icon" "plus"}}Add organization</button></div></header>
     <div class="table-wrap"><table>
       <thead><tr><th>Name</th><th>ID</th><th>SSO</th><th></th></tr></thead>
-      <tbody>{{range .Orgs}}<tr><td>{{.Name}}</td><td class="mono">{{.ID}}</td><td>{{if .SSO}}On{{else}}<span class="muted">Off</span>{{end}}</td>
-        <td class="row-actions">{{if ne .ID "default"}}<form method="post" action="/settings/orgs/{{.ID}}/delete" data-confirm="Delete {{.Name}}?"><button type="submit" class="link danger">Delete</button></form>{{end}}</td></tr>{{end}}</tbody>
+      <tbody>{{range .Orgs}}<tr class="clickable" data-dialog="rename-org" data-fill='{"action":"/settings/orgs/{{.ID}}/rename","name":"{{.Name}}"}'><td>{{.Name}}</td><td class="mono">{{.ID}}</td><td>{{if .SSO}}On{{else}}<span class="muted">Off</span>{{end}}</td>
+        <td class="row-actions"><div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
+          <div class="menu-list" hidden>
+            <button data-dialog="rename-org" data-fill='{"action":"/settings/orgs/{{.ID}}/rename","name":"{{.Name}}"}'>{{template "icon" "pencil"}}Rename…</button>
+            {{if ne .ID "default"}}<hr><form method="post" action="/settings/orgs/{{.ID}}/delete" data-confirm="Delete {{.Name}}?"><button type="submit" class="danger">{{template "icon" "trash-2"}}Delete</button></form>{{end}}
+          </div></div></td></tr>{{end}}</tbody>
     </table></div>
   </section>
   <section class="pane" id="s-backup" data-icon="download">
@@ -57,6 +61,14 @@
   {{end}}
 </div>
 {{if .Super}}
+<dialog id="rename-org" class="card">
+  <form hx-post="" hx-target="#rename-org-error" class="form">
+    <h2>Rename organization</h2>
+    <p id="rename-org-error" class="error form-error"></p>
+    <label>Name <input name="name" required></label>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Save</button></div>
+  </form>
+</dialog>
 <dialog id="add-org" class="card">
   <form method="post" action="/settings/orgs" class="form">
     <h2>Add organization</h2>
