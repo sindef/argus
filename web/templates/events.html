@@ -13,6 +13,37 @@
   </table></div>
 </div>
 {{end}}
+{{if .AlarmMetrics}}
+<div class="card spaced">
+  <div class="card-head"><h2>Alarm definitions</h2>{{if .EditAlarms}}<button class="btn right" data-dialog="alarm-rule">{{template "icon" "plus"}}Define alarm</button>{{end}}</div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Name</th><th>Metric</th><th>Warning</th><th>Critical</th><th>For</th><th>Applies to</th><th></th></tr></thead>
+    <tbody>{{range .AlarmRules}}{{$r := .}}<tr><td>{{.Name}}</td><td>{{range $.AlarmMetrics}}{{if eq .ID $r.Metric}}{{.Label}}{{end}}{{end}}</td><td>{{if .Warn}}{{.Warn}}{{else}}—{{end}}</td><td>{{if .Critical}}{{.Critical}}{{else}}—{{end}}</td><td>{{.Minutes}} min</td><td>{{or .Scope "All"}}{{with .Tag}} · tag {{.}}{{end}}</td>
+      <td class="row-actions">{{if $.EditAlarms}}<button class="link" data-dialog="alarm-rule" data-fill='{"old":"{{.Name}}","name":"{{.Name}}","metric":"{{.Metric}}","warn":"{{.Warn}}","critical":"{{.Critical}}","minutes":"{{.Minutes}}","scope":"{{.Scope}}","tag":"{{.Tag}}"}'>Edit</button><button class="link danger" hx-post="/alarm-rules/delete" hx-vals='{"old":"{{.Name}}"}' hx-target="#flash" hx-confirm="Delete alarm {{.Name}}?">Delete</button>{{end}}</td></tr>
+    {{else}}<tr><td colspan="7" class="muted">Built-in alarms only.</td></tr>{{end}}</tbody>
+  </table></div>
+</div>
+{{if .EditAlarms}}<dialog id="alarm-rule" class="card">
+  <form class="form" hx-post="/alarm-rules/save" hx-target="#flash">
+    <h2>Alarm</h2>
+    <input type="hidden" name="old">
+    <div class="row">
+      <label>Name <input name="name" required maxlength="64"></label>
+      <label>Metric <select name="metric">{{range .AlarmMetrics}}<option value="{{.ID}}">{{.Label}} ({{.Unit}})</option>{{end}}</select></label>
+    </div>
+    <div class="row">
+      <label>Warning at <input name="warn" type="number" step="any" min="0" class="num"></label>
+      <label>Critical at <input name="critical" type="number" step="any" min="0" class="num"></label>
+      <label>For (minutes) <span class="help" title="The value must stay at or above the threshold this long. Host samples are every 5 minutes, VM samples every minute.">?</span><input name="minutes" type="number" min="0" max="1440" value="5" class="num"></label>
+    </div>
+    <div class="row">
+      <label>Scope <span class="help" title="Datacenter, datacenter/cluster or host:NAME. Empty means all hosts.">?</span><input name="scope" placeholder="All"></label>
+      <label>VM tag <span class="help" title="VM metrics only: limit to VMs with this tag.">?</span><input name="tag"></label>
+    </div>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Save</button></div>
+  </form>
+</dialog>{{end}}
+{{end}}
 {{with .Jobs}}
 <div class="card">
   <div class="card-head"><h2>Tasks</h2></div>

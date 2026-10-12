@@ -294,6 +294,9 @@ func (s *Server) fleetAlarms(ctx context.Context) []Alarm {
 		}(n)
 	}
 	wg.Wait()
+	for _, h := range s.manager.EvaluateAlarmRules(ctx) {
+		out = append(out, Alarm{Key: h.Key, Severity: h.Severity, Host: h.Host, Object: h.Object, Message: h.Message})
+	}
 	auto := s.manager.HASettings(ctx).Automatic
 	if ps, err := s.manager.Protected(ctx); err == nil {
 		for _, p := range ps {

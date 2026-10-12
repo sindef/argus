@@ -154,6 +154,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/schedule/{op}", s.need(auth.VMPower, s.managerScheduleOp))
 		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/{action}", s.need(auth.VMView, s.managerVMAction))
 		s.mux.HandleFunc("GET /events", s.need(auth.VMView, s.managerEvents))
+		s.mux.HandleFunc("POST /alarm-rules/{op}", s.need(auth.Administer, s.managerAlarmRule))
 		s.mux.HandleFunc("POST /jobs/{id}/resolve", s.need(auth.Administer, s.managerResolve))
 		s.mux.HandleFunc("GET /storage", s.need(auth.VMView, s.managerStorage))
 		s.mux.HandleFunc("GET /networks", s.need(auth.VMView, s.managerNetworks))

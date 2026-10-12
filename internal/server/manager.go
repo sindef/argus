@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -920,7 +921,25 @@ func (s *Server) managerEvents(w http.ResponseWriter, r *http.Request) {
 	if len(evs) > 200 {
 		evs = evs[:200]
 	}
-	s.render(w, r, "events.html", "layout", map[string]any{"Events": evs, "Error": errs, "Nav": "events", "Jobs": s.jobs(r)})
+	rules, err := s.manager.AlarmRules(r.Context(), session(r).Org)
+	if err != nil && errs == "" {
+		errs = err.Error()
+	}
+	pm, _ := r.Context().Value(permKey{}).(perms)
+	s.render(w, r, "events.html", "layout", map[string]any{"Events": evs, "Error": errs, "Nav": "events", "Jobs": s.jobs(r),
+		"AlarmRules": rules, "AlarmMetrics": manager.AlarmMetrics, "EditAlarms": auth.AllowsAnywhere(pm.grants, auth.Administer)})
+}
+
+func (s *Server) managerAlarmRule(w http.ResponseWriter, r *http.Request) {
+	num := func(k string) float64 { v, _ := strconv.ParseFloat(r.FormValue(k), 64); return v }
+	rule := manager.AlarmRule{Name: strings.TrimSpace(r.FormValue("name")), Metric: r.FormValue("metric"), Warn: num("warn"), Critical: num("critical"),
+		Minutes: int(num("minutes")), Scope: strings.TrimSpace(r.FormValue("scope")), Tag: strings.TrimSpace(r.FormValue("tag"))}
+	if err := s.manager.SaveAlarmRule(r.Context(), session(r).Org, r.FormValue("old"), rule, r.PathValue("op") == "delete"); err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: alarm %s %s", session(r).User, r.PathValue("op"), rule.Name)
+	w.Header().Set("HX-Refresh", "true")
 }
 
 func (s *Server) managerResolve(w http.ResponseWriter, r *http.Request) {
