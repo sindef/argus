@@ -67,6 +67,7 @@
       const d = document.getElementById(dlg.dataset.dialog);
       if (dlg.dataset.fill) for (const [k, v] of Object.entries(JSON.parse(dlg.dataset.fill))) {
         if (k === "action") { const f = d.querySelector("form"); f.setAttribute("hx-post", v); htmx.process(f); }
+        else if (Array.isArray(v)) d.querySelectorAll(`[name="${k}"]`).forEach((el) => { el.checked = v.includes(el.value); });
         else d.querySelector(`[name="${k}"]`).value = v;
       }
       d.querySelectorAll("form").forEach(archCheck);

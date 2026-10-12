@@ -123,24 +123,14 @@ func (s *Server) usersPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderUsers(w http.ResponseWriter, r *http.Request, notice string, err error) {
-	us, lerr := s.users(r).Users(r.Context())
+	rows, groups, lerr := s.userRows(r)
 	if err == nil {
 		err = lerr
 	}
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 	}
-	var scopes []string
-	if s.manager != nil {
-		gs, _ := s.manager.Groups(r.Context(), session(r).Org)
-		for _, g := range gs {
-			scopes = append(scopes, g.Datacenter)
-			for _, c := range g.Clusters {
-				scopes = append(scopes, g.Datacenter+"/"+c)
-			}
-		}
-	}
-	s.render(w, r, "users.html", "layout", map[string]any{"Nav": "users", "Users": us, "Roles": auth.Roles, "Scopes": scopes, "Notice": notice, "Error": errText(err)})
+	s.render(w, r, "users.html", "layout", map[string]any{"Nav": "users", "Users": rows, "Groups": groups, "Roles": auth.Roles, "Scopes": s.scopeNames(r), "Notice": notice, "Error": errText(err)})
 }
 
 func (s *Server) addUser(w http.ResponseWriter, r *http.Request) {

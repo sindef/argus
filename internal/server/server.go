@@ -85,7 +85,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	}
 	s.version = readEnv(o.ReleaseFile)["KAIROS_VERSION"]
 	s.sso.m = map[string]ssoFlow{}
-	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html", "hostnet.html", "dashboard.html", "remote.html", "hostnets.html", "profile.html", "manager-images.html", "audit.html"} {
+	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html", "hostnet.html", "dashboard.html", "remote.html", "hostnets.html", "profile.html", "manager-images.html", "audit.html", "groups.html"} {
 		t, err := template.New(p).Funcs(funcs).ParseFS(web.FS, "templates/layout.html", "templates/manager-nav.html", "templates/"+p)
 		if err != nil {
 			return nil, err
@@ -111,6 +111,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /users", s.requireOrg(auth.Admin, s.addUser))
 	s.mux.HandleFunc("POST /users/{name}/role", s.requireOrg(auth.Admin, s.setRole))
 	s.mux.HandleFunc("POST /users/scopes", s.requireOrg(auth.Admin, s.setScopes))
+	s.mux.HandleFunc("POST /users/{name}/update", s.requireOrg(auth.Admin, s.updateUser))
 	s.mux.HandleFunc("POST /users/{name}/reset", s.requireOrg(auth.Admin, s.resetPassword))
 	s.mux.HandleFunc("POST /users/{name}/delete", s.requireOrg(auth.Admin, s.deleteUser))
 	if s.manager != nil {
@@ -120,6 +121,9 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		if err != nil {
 			return nil, err
 		}
+		s.mux.HandleFunc("GET /user-groups", s.requireOrg(auth.Admin, s.groupsPage))
+		s.mux.HandleFunc("POST /user-groups/save", s.requireOrg(auth.Admin, s.saveGroup))
+		s.mux.HandleFunc("POST /user-groups/delete", s.requireOrg(auth.Admin, s.deleteGroup))
 		s.mux.HandleFunc("POST /sso/start", s.ssoStart)
 		s.mux.HandleFunc("GET /sso/callback", s.ssoCallback)
 		s.mux.HandleFunc("GET /{$}", s.require(auth.ReadOnly, s.managerHome))

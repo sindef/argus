@@ -10,26 +10,23 @@
   <header><h2>Users</h2><div class="actions"><button class="btn primary" data-dialog="add-user">{{template "icon" "plus"}}Add user</button></div></header>
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Name</th><th>Role</th>{{if $.Manager}}<th>Scope <span class="help" title="Datacenters or clusters the user can see and act on. Empty means the whole organization.">?</span></th>{{end}}<th></th></tr></thead>
+  <thead><tr><th>Name</th><th>Source</th><th>Role</th>{{if $.Manager}}<th>Groups</th><th>Scope</th>{{end}}<th></th></tr></thead>
   <tbody>
   {{range .Users}}
-  <tr>
-    <td>{{template "icon" "user"}}{{.Name}}{{if .MustChange}} <span class="muted">(password change pending)</span>{{end}}{{if .SSO}} <span class="badge">SSO</span>{{end}}</td>
-    <td>
-      {{if .SSO}}<span title="Mapped from the identity provider's groups at each sign-in">{{.Role}}</span>{{else}}
-      <form method="post" action="/users/{{.Name}}/role">
-        <select name="role" onchange="this.form.submit()">
-          {{$r := .Role}}{{range $.Roles}}<option value="{{.}}"{{if eq . $r}} selected{{end}}>{{.}}</option>{{end}}
-        </select>
-      </form>{{end}}
-    </td>
-    {{if $.Manager}}<td>{{range $i, $s := .Scopes}}{{if $i}}, {{end}}{{$s}}{{else}}<span class="muted">All</span>{{end}}{{if not .SSO}} <button class="link" data-dialog="user-scope" data-fill='{"name":"{{.Name}}","scopes":"{{join .Scopes ", "}}"}'>Edit</button>{{end}}</td>{{end}}
-    <td class="row-actions">
-      {{if ne .Name $.Session.User}}
-      {{if not .SSO}}<form method="post" action="/users/{{.Name}}/reset"><button type="submit" class="link">Reset password</button></form>{{end}}
-      <form method="post" action="/users/{{.Name}}/delete" data-confirm="Delete {{.Name}}?"><button type="submit" class="link danger">Delete</button></form>
-      {{end}}
-    </td>
+  <tr class="clickable" data-dialog="{{if .SSO}}sso-user{{else}}edit-user{{end}}" data-fill='{{.Fill}}'>
+    <td>{{template "icon" "user"}}{{.Name}}{{if .MustChange}} <span class="muted">(password change pending)</span>{{end}}</td>
+    <td>{{if .SSO}}<span class="badge">SSO</span>{{else}}Local{{end}}</td>
+    <td>{{.Access}}{{if and (not .SSO) (ne .Access (print .Role))}} <span class="muted" title="Raised by group membership">via group</span>{{end}}</td>
+    {{if $.Manager}}<td>{{range $i, $g := .In}}{{if $i}}, {{end}}{{$g}}{{else}}<span class="muted">—</span>{{end}}</td>
+    <td>{{range $i, $s := .Scope}}{{if $i}}, {{end}}{{$s}}{{else}}<span class="muted">All</span>{{end}}</td>{{end}}
+    <td class="row-actions"><div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
+      <div class="menu-list" hidden>
+        <button data-dialog="{{if .SSO}}sso-user{{else}}edit-user{{end}}" data-fill='{{.Fill}}'>{{template "icon" "pencil"}}{{if .SSO}}Details{{else}}Edit…{{end}}</button>
+        {{if ne .Name $.Session.User}}
+        {{if not .SSO}}<form method="post" action="/users/{{.Name}}/reset" data-confirm="Reset the password for {{.Name}}?"><button type="submit">{{template "icon" "key-round"}}Reset password</button></form>{{end}}
+        <hr><form method="post" action="/users/{{.Name}}/delete" data-confirm="Delete {{.Name}}?"><button type="submit" class="danger">{{template "icon" "trash-2"}}Delete</button></form>
+        {{end}}
+      </div></div></td>
   </tr>
   {{end}}
   </tbody>
@@ -48,16 +45,31 @@
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Add user</button></div>
   </form>
 </dialog>
-{{if .Manager}}
-<datalist id="scope-names">{{range .Scopes}}<option>{{.}}</option>{{end}}</datalist>
-<dialog id="user-scope" class="card">
-  <form hx-post="/users/scopes" hx-target="#scope-error" class="form">
-    <h2>User scope</h2>
-    <p id="scope-error" class="error form-error"></p>
-    <input type="hidden" name="name">
-    <label>Scope <span class="help" title="Comma separated. Empty means the whole organization.">?</span><input name="scopes" list="scope-names" placeholder="All"></label>
+<dialog id="edit-user" class="card">
+  <form hx-post="" hx-target="#user-error" class="form">
+    <h2>Edit user</h2>
+    <p id="user-error" class="error form-error"></p>
+    <div class="row">
+      <label>Username <input name="name" readonly></label>
+      <label>Role <span class="help" title="Group membership can raise this; the highest role applies.">?</span><select name="role">{{range .Roles}}<option value="{{.}}">{{.}}</option>{{end}}</select></label>
+    </div>
+    {{if .Manager}}
+    <label>Scope <span class="help" title="Comma separated datacenters or datacenter/cluster. Empty means the whole organization.">?</span><input name="scopes" list="scope-names" placeholder="All"></label>
+    <div class="field">Groups</div>
+    {{with .Groups}}<div class="table-wrap picks"><table><tbody>{{range .}}<tr><td><label class="check"><input type="checkbox" name="groups" value="{{.Name}}"> {{.Name}}</label></td><td class="muted">{{.Role}}</td></tr>{{end}}</tbody></table></div>{{else}}<p class="muted">No groups yet.</p>{{end}}
+    {{end}}
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Save</button></div>
   </form>
 </dialog>
-{{end}}
+<dialog id="sso-user" class="card">
+  <div class="form">
+    <h2>Single sign-on user</h2>
+    <label>Username <input name="name" readonly></label>
+    <div class="row"><label>Role <input name="access" readonly></label><label>Scope <input name="scopes" readonly placeholder="All"></label></div>
+    <label>From groups <input name="via" readonly></label>
+    <p class="muted">Access comes from the identity provider's groups at each sign-in.</p>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Close</button></div>
+  </div>
+</dialog>
+{{if .Manager}}<datalist id="scope-names">{{range .Scopes}}<option>{{.}}</option>{{end}}</datalist>{{end}}
 {{end}}
