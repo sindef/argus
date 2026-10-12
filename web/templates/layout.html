@@ -202,8 +202,8 @@
 <div class="table-wrap">
 <table>
   <thead><tr><th>Name</th>{{if .Manager}}<th>Host</th>{{end}}<th>Type</th><th>Size</th><th>Used by</th><th>Snapshots</th><th>Status</th><th></th></tr></thead>
-  <tbody>{{range .Volumes}}{{$base := "/volumes"}}{{if .Host}}{{$base = printf "/hosts/%s/volumes" .Host}}{{end}}
-  <tr data-context>
+  <tbody>{{range .Volumes}}{{$base := "/volumes"}}{{if .Host}}{{$base = printf "/hosts/%s/volumes" .Host}}{{end}}{{$f := printf `{"action":"%s/resize","name":"%s","size":"%d","kind":"%s","usedby":"%s","snaps":"%d","phase":"%s"}` $base .Name .SizeGiB (or (and .Image "Image") (and .Owner "VM disk") "Volume") (or .UsedBy .Owner "—") (len .Snapshots) .Phase}}
+  <tr data-context class="clickable" data-dialog="volume-edit" data-fill='{{$f}}'>
     <td>{{template "icon" "hard-drive"}}{{.Name}}</td>
     {{if $.Manager}}<td>{{.Host}}</td>{{end}}
     <td>{{if .Image}}Image{{else if .Owner}}VM disk{{else}}Volume{{end}}</td>
@@ -220,6 +220,7 @@
             <select name="vm">{{range $vms}}<option>{{.}}</option>{{end}}</select>
             <button class="btn sm" type="submit">{{template "icon" "cable"}}Attach</button>
           </form><hr>{{end}}{{end}}
+          <button data-dialog="volume-edit" data-fill='{{$f}}'>{{template "icon" "pencil"}}Details and resize…</button>
           <button hx-post="{{$base}}/snapshot" hx-vals='{"name":"{{.Name}}"}'>{{template "icon" "camera"}}Snapshot</button>
           {{range .Snapshots}}<button hx-post="{{$base}}/delete-snapshot" hx-vals='{"name":"{{.}}"}' hx-confirm="Delete snapshot {{.}}?">{{template "icon" "x"}}Delete {{.}}</button>{{end}}
           <hr>
@@ -231,6 +232,19 @@
   {{else}}<tr><td colspan="8" class="muted">No volumes.</td></tr>{{end}}</tbody>
 </table>
 </div>
+{{end}}
+
+{{define "volume-edit"}}
+<dialog id="volume-edit" class="card">
+  <form hx-post="" hx-target="#volume-edit-error" class="form">
+    <h2>Volume</h2>
+    <p id="volume-edit-error" class="error form-error"></p>
+    <div class="row"><label>Name <input name="name" readonly></label><label>Type <input name="kind" readonly></label></div>
+    <div class="row"><label>Used by <input name="usedby" readonly></label><label>Snapshots <input name="snaps" readonly></label><label>Status <input name="phase" readonly></label></div>
+    <label>Size (GiB) <span class="help" title="Volumes can only grow. Resize VM disks from the VM's hardware settings.">?</span><input name="size" type="number" min="1" max="4096"{{if not .CanOperate}} readonly{{end}}></label>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Close</button>{{if .CanOperate}}<button class="btn primary" type="submit">Resize</button>{{end}}</div>
+  </form>
+</dialog>
 {{end}}
 
 {{define "volume-dialog"}}

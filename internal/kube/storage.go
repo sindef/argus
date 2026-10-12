@@ -2,15 +2,19 @@ package kube
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"slices"
 	"sort"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 const volumeLabel = "argus.io/volume"
@@ -48,6 +52,27 @@ type Volume struct {
 }
 
 func (v Volume) Standalone() bool { return !v.Image && v.Owner == "" }
+
+func (v Volume) SizeGiB() int64 { return (v.Size + 1<<30 - 1) >> 30 }
+
+func (c *Client) ResizeVolume(ctx context.Context, name string, sizeGiB int) error {
+	vols, err := c.Volumes(ctx)
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(vols, func(v Volume) bool { return v.Name == name })
+	switch {
+	case i < 0:
+		return fmt.Errorf("volume %s not found", name)
+	case !vols[i].Standalone():
+		return errors.New("resize VM disks from the VM's hardware settings")
+	case int64(sizeGiB) <= vols[i].SizeGiB():
+		return fmt.Errorf("volumes can only grow; %s is %d GiB", name, vols[i].SizeGiB())
+	}
+	patch, _ := json.Marshal(obj{"spec": obj{"resources": obj{"requests": obj{"storage": fmt.Sprintf("%dGi", sizeGiB)}}}})
+	_, err = c.dyn.Resource(pvcGVR).Namespace(Namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	return err
+}
 
 func quantity(s string) int64 {
 	q, err := resource.ParseQuantity(s)

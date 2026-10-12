@@ -55,6 +55,8 @@ func (s *Server) volumeOp(ctx context.Context, op string, q volumeReq) error {
 		return s.kube.CreateVolume(ctx, q.Name, q.Size, q.URL, class)
 	case "delete":
 		return s.kube.DeleteVolume(ctx, q.Name)
+	case "resize":
+		return s.kube.ResizeVolume(ctx, q.Name, q.Size)
 	case "snapshot":
 		return s.kube.SnapshotVolume(ctx, q.Name)
 	case "attach":
