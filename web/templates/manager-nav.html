@@ -48,6 +48,7 @@
   {{else if eq $v.Status "Paused"}}
   <button hx-post="{{.Page}}/unpause">{{template "icon" "play"}}Resume</button>
   {{else if $v.Template}}
+  <button hx-get="/vm-copy?mode=deploy&host={{$v.Host}}&ns={{$v.Namespace}}&vm={{$v.Name}}" hx-target="#modal">{{template "icon" "plus"}}Deploy VM…</button>
   <button hx-post="{{.Page}}/untemplate">{{template "icon" "monitor"}}Convert to VM</button>
   {{else}}
   <button hx-post="{{.Page}}/start">{{template "icon" "play"}}Power on</button>
@@ -55,7 +56,8 @@
   {{end}}
   <hr>
   {{if .IsAdmin}}<a href="{{.Page}}#migrate">{{template "icon" "arrow-right-left"}}Migrate</a>{{end}}
-  <button hx-post="{{.Page}}/clone" data-prompt="Clone" data-prompt-placeholder="Name for the clone">{{template "icon" "copy"}}Clone</button>
+  <button hx-get="/vm-copy?mode=clone&host={{$v.Host}}&ns={{$v.Namespace}}&vm={{$v.Name}}" hx-target="#modal">{{template "icon" "copy"}}Clone…</button>
+  <button hx-get="/vm-copy?mode=template&host={{$v.Host}}&ns={{$v.Namespace}}&vm={{$v.Name}}" hx-target="#modal">{{template "icon" "layers"}}Create template…</button>
   <button hx-post="{{.Page}}/snapshot">{{template "icon" "camera"}}Snapshot</button>
   <button hx-post="{{.Page}}/rename" data-prompt="Rename" data-prompt-placeholder="Display name" data-prompt-value="{{$v.DisplayName}}" data-prompt-optional>{{template "icon" "pencil"}}Rename</button>
   <button data-dialog="vm-tags" data-fill='{"action":"{{.Page}}/tags","tags":"{{join $v.Tags ", "}}"}'>{{template "icon" "tag"}}Tags…</button>

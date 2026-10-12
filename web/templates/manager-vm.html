@@ -19,7 +19,7 @@
     {{end}}
     <button class="btn" hx-post="{{$p}}/snapshot">{{template "icon" "camera"}}Snapshot</button>
     {{if $.IsAdmin}}<button class="btn" data-dialog="migrate">{{template "icon" "arrow-right-left"}}Migrate</button>{{end}}
-    <button class="btn" hx-post="{{$p}}/clone" data-prompt="Clone" data-prompt-placeholder="Name for the clone">{{template "icon" "copy"}}Clone</button>
+    <button class="btn" hx-get="/vm-copy?mode=clone&host={{$.Node.Name}}&ns={{.Namespace}}&vm={{.Name}}" hx-target="#modal">{{template "icon" "copy"}}Clone</button>
     {{if .Running}}<a class="btn" href="{{$p}}/console">{{template "icon" "terminal"}}Open Console</a>{{end}}
     <div class="menu">
       <button class="btn" data-menu aria-label="More">{{template "icon" "ellipsis"}}</button>

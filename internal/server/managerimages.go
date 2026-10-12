@@ -56,7 +56,7 @@ func (s *Server) managerImages(w http.ResponseWriter, r *http.Request) {
 		errs = strings.TrimSpace(errs + " " + err.Error())
 	}
 	s.render(w, r, "manager-images.html", "layout", map[string]any{"Nav": "images", "Rows": out, "HostNames": hosts, "CanOperate": session(r).Role.Can(auth.Operator), "Error": errs,
-		"Library": s.library(session(r).Org), "HostArch": arch, "Sources": sources, "Address": s.registryAddress(r.Context()), "Org": session(r).Org, "Super": superAdmin(r)})
+		"Library": s.library(session(r).Org), "HostArch": arch, "Templates": s.libraryTemplates(session(r).Org), "HostTemplates": s.hostTemplates(r), "Sources": sources, "Address": s.registryAddress(r.Context()), "Org": session(r).Org, "Super": superAdmin(r)})
 }
 
 func (s *Server) managerImageOp(w http.ResponseWriter, r *http.Request) {

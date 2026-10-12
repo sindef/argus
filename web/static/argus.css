@@ -324,3 +324,4 @@ dd.wrap { word-break: break-all; }
 a.nav-head.active { background: var(--accent-bg); }
 .card.empty .actions { display: flex; gap: 8px; }
 input[readonly] { color: var(--muted); }
+.vm-copy:has(select[name=target] option[value=manager]:checked) .pool-field { display: none; }

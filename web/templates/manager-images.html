@@ -33,6 +33,34 @@
 </table>
 </div>
 </section>
+<section class="pane" id="s-templates" data-icon="layers">
+  <header><h2>Templates</h2></header>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>Stored on</th><th>Architecture</th><th>vCPUs</th><th>Memory</th><th>Size</th><th></th></tr></thead>
+  <tbody>
+  {{range .Templates}}<tr{{if $.CanOperate}} class="clickable" hx-get="/vm-copy?mode=deploy-library&vm={{.Name}}" hx-target="#modal" hx-trigger="click[!event.target.closest('.menu')]"{{end}}>
+    <td>{{template "icon" "layers"}}{{.Name}}</td><td>Argus Manager</td><td>{{.Arch}}</td><td class="muted">—</td><td class="muted">—</td><td>{{bytes .Bytes}}</td>
+    <td class="row-actions">{{if $.CanOperate}}<div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
+      <div class="menu-list" hidden hx-target="#flash">
+        <button hx-get="/vm-copy?mode=deploy-library&vm={{.Name}}" hx-target="#modal">{{template "icon" "plus"}}Deploy VM…</button>
+        <hr><button class="danger" hx-post="/templates/delete" hx-vals='{"name":"{{.Name}}"}' hx-confirm="Delete template {{.Name}}?">{{template "icon" "trash-2"}}Delete</button>
+      </div></div>{{end}}</td>
+  </tr>{{end}}
+  {{range .HostTemplates}}<tr{{if $.CanOperate}} class="clickable" hx-get="/vm-copy?mode=deploy&host={{.Host}}&ns={{.Namespace}}&vm={{.Name}}" hx-target="#modal" hx-trigger="click[!event.target.closest('.menu')]"{{end}}>
+    <td>{{template "icon" "layers"}}{{.Label}}</td><td>{{.Host}}</td><td>{{index $.HostArch .Host}}</td><td>{{.Cores}}</td><td>{{size .Memory}}</td><td>{{bytes .StorageBytes}}</td>
+    <td class="row-actions">{{if $.CanOperate}}<div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
+      <div class="menu-list" hidden hx-target="#flash">
+        <button hx-get="/vm-copy?mode=deploy&host={{.Host}}&ns={{.Namespace}}&vm={{.Name}}" hx-target="#modal">{{template "icon" "plus"}}Deploy VM…</button>
+        <button hx-get="/vm-copy?mode=template&host={{.Host}}&ns={{.Namespace}}&vm={{.Name}}" hx-target="#modal">{{template "icon" "copy"}}Copy template…</button>
+        <hr><button class="danger" hx-post="/nodes/{{.Host}}/vms/{{.Namespace}}/{{.Name}}/delete" hx-confirm="Delete template {{.Label}} and its disks?">{{template "icon" "trash-2"}}Delete</button>
+      </div></div>{{end}}</td>
+  </tr>{{end}}
+  {{if and (not .Templates) (not .HostTemplates)}}<tr><td colspan="7" class="muted">No templates. Create one from a VM's menu.</td></tr>{{end}}
+  </tbody>
+</table>
+</div>
+</section>
 <section class="pane" id="s-sources" data-icon="database">
   <header><h2>Image sources</h2>{{if .CanOperate}}<div class="actions"><button class="btn" data-dialog="import-image">{{template "icon" "download"}}Import to hosts</button><button class="btn primary" data-dialog="add-source">{{template "icon" "plus"}}Add source</button></div>{{end}}</header>
 <div class="table-wrap">
@@ -163,3 +191,20 @@ document.getElementById("library-form")?.addEventListener("htmx:xhr:progress", (
 {{end}}
 
 {{define "host-picks"}}<div class="table-wrap picks"><table><tbody>{{range .HostNames}}{{$a := index $.HostArch .}}<tr><td><label class="check"><input type="checkbox" name="hosts" value="{{.}}" data-arch="{{$a}}"> {{.}}{{if ne $a "amd64"}} <span class="muted">· {{$a}}</span>{{end}}</label></td></tr>{{end}}</tbody></table></div>{{end}}
+
+{{define "vm-copy"}}
+<div class="modal-head"><h2>{{if eq .Mode "template"}}Create template from {{.VM}}{{else if eq .Mode "clone"}}Clone {{.VM}}{{else}}Deploy VM from {{.VM}}{{end}}</h2><button class="icon-btn" type="button" data-close-dialog aria-label="Close">{{template "icon" "x"}}</button></div>
+<p id="copy-vm-error" class="error form-error"></p>
+<form hx-post="/vm-copy" hx-target="#copy-vm-error" hx-disabled-elt="find button[type=submit]" class="form vm-copy">
+  <input type="hidden" name="mode" value="{{.Mode}}"><input type="hidden" name="host" value="{{.Host}}"><input type="hidden" name="ns" value="{{.NS}}"><input type="hidden" name="vm" value="{{.VM}}">
+  <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required{{if eq .Mode "clone"}} value="{{.VM}}-clone"{{end}}></label>
+  <div class="row">
+    <label>{{if eq .Mode "template"}}Store on{{else}}Host{{end}} <select name="target">
+      {{if eq .Mode "template"}}<option value="manager">Argus Manager</option>{{end}}
+      {{range .Hosts}}{{if eq .Status "Healthy"}}<option value="{{.Node.Name}}"{{if and (eq .Node.Name $.Host) (ne $.Mode "template")}} selected{{end}}>{{.Node.Name}}{{if ne .Arch "amd64"}} · {{.Arch}}{{end}}</option>{{end}}{{end}}
+    </select></label>
+    <label class="pool-field">Pool <span class="help" title="Storage pool on the target host. Leave empty to keep the source's pools.">?</span><input name="pool" placeholder="Same as source"></label>
+  </div>
+  <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">{{if eq .Mode "template"}}Create template{{else if eq .Mode "clone"}}Clone{{else}}Deploy{{end}}</button></div>
+</form>
+{{end}}

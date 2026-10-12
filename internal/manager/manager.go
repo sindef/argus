@@ -440,12 +440,64 @@ func cleanupCtx() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), 2*time.Minute)
 }
 
+func (c *Manager) importAndWait(ctx context.Context, j *Job, dst Node, name, pool string, template bool, ex kube.Export) error {
+	c.update(j, "Importing", false, false)
+	if err := dst.do(ctx, http.MethodPost, "/api/import", map[string]any{"name": name, "operation": j.ID, "export": ex, "pool": pool, "template": template}, nil); err != nil {
+		return err
+	}
+	rollback := func(cause error) error {
+		cctx, cancel := cleanupCtx()
+		defer cancel()
+		err := dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, name, "abort"), map[string]string{"operation": j.ID}, nil)
+		dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, name, "imported"), nil, nil)
+		if err != nil {
+			return fmt.Errorf("%w; target cleanup failed: %v", cause, err)
+		}
+		return cause
+	}
+	if err := c.waitDisks(ctx, j, dst, name); err != nil {
+		return rollback(err)
+	}
+	c.update(j, "Cleaning up", false, false)
+	return dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, name, "imported"), nil, nil)
+}
+
+func (c *Manager) waitDisks(ctx context.Context, j *Job, dst Node, name string) error {
+	for {
+		var disks []kube.DiskStatus
+		if err := dst.do(ctx, http.MethodGet, vmPathIn(kube.Namespace, name, "disks"), nil, &disks); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			c.update(j, "Copying (waiting for "+dst.Name+")", false, false)
+		} else {
+			done, progress := len(disks) > 0, []string{}
+			for _, d := range disks {
+				if d.Phase == "Failed" {
+					return fmt.Errorf("disk %s failed to copy", d.Name)
+				}
+				if d.Phase != "Succeeded" {
+					done = false
+				}
+				progress = append(progress, d.Name+" "+d.Progress)
+			}
+			if done {
+				return nil
+			}
+			c.update(j, "Copying "+strings.Join(progress, ", "), false, false)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(5 * time.Second):
+		}
+	}
+}
+
 func (c *Manager) migrate(ctx context.Context, j *Job, src, dst Node, ns, vm string) error {
 	if err := c.preflight(ctx, src, dst, ns, vm); err != nil {
 		return err
 	}
-	op := map[string]string{"operation": j.ID}
-
 	c.update(j, "Exporting", false, false)
 	var ex kube.Export
 	if err := src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "export"), map[string]string{"baseURL": src.URL}, &ex); err != nil {
@@ -459,54 +511,10 @@ func (c *Manager) migrate(ctx context.Context, j *Job, src, dst Node, ns, vm str
 		}
 	}
 
-	c.update(j, "Importing", false, false)
-	if err := dst.do(ctx, http.MethodPost, "/api/import", map[string]any{"name": vm, "operation": j.ID, "export": ex}, nil); err != nil {
+	if err := c.importAndWait(ctx, j, dst, vm, "", false, ex); err != nil {
 		unexport()
 		return err
 	}
-	rollback := func(cause error) error {
-		cctx, cancel := cleanupCtx()
-		defer cancel()
-		err := dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, vm, "abort"), op, nil)
-		dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, vm, "imported"), nil, nil)
-		unexport()
-		if err != nil {
-			return fmt.Errorf("%w; target cleanup failed: %v", cause, err)
-		}
-		return cause
-	}
-	for {
-		var disks []kube.DiskStatus
-		if err := dst.do(ctx, http.MethodGet, vmPathIn(kube.Namespace, vm, "disks"), nil, &disks); err != nil {
-			if ctx.Err() != nil {
-				return rollback(ctx.Err())
-			}
-			c.update(j, "Copying (target unreachable, retrying)", false, false)
-		} else {
-			done, progress := true, []string{}
-			for _, d := range disks {
-				if d.Phase == "Failed" {
-					return rollback(fmt.Errorf("disk %s failed to copy", d.Name))
-				}
-				if d.Phase != "Succeeded" {
-					done = false
-				}
-				progress = append(progress, d.Name+" "+d.Progress)
-			}
-			if done {
-				break
-			}
-			c.update(j, "Copying "+strings.Join(progress, ", "), false, false)
-		}
-		select {
-		case <-ctx.Done():
-			return rollback(ctx.Err())
-		case <-time.After(5 * time.Second):
-		}
-	}
-
-	c.update(j, "Cleaning up", false, false)
-	dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, vm, "imported"), nil, nil)
 	unexport()
 	return src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "delete"), nil, nil)
 }
