@@ -103,6 +103,22 @@ func NewServer() *Server {
 		reply(w, ch, err)
 	})
 	s.mux.HandleFunc("GET /zfs/read", zfsRead)
+	s.mux.HandleFunc("GET /zfs/volumes", func(w http.ResponseWriter, r *http.Request) {
+		vols, err := ZVols(r.Context(), r.URL.Query()["ds"])
+		reply(w, vols, err)
+	})
+	s.mux.HandleFunc("POST /zfs/provisioning", s.locked(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Dataset string
+			Thick   bool
+		}
+		err := decode(r, &req)
+		if err == nil {
+			err = SetThick(r.Context(), req.Dataset, req.Thick)
+		}
+		log.Printf("provisioning %s thick=%v: %v", req.Dataset, req.Thick, err)
+		reply(w, nil, err)
+	}))
 	s.mux.HandleFunc("POST /zfs/release", s.locked(func(w http.ResponseWriter, r *http.Request) {
 		var req struct{ Dataset string }
 		err := decode(r, &req)

@@ -482,9 +482,12 @@ type HostDevice struct {
 }
 
 type HardwareDisk struct {
-	Name    string
-	PVC     string
-	SizeGiB int64
+	Name      string
+	PVC       string
+	SizeGiB   int64
+	Dataset   string
+	Allocated int64
+	Thick     bool
 }
 
 func (c *Client) Hardware(ctx context.Context, ns, name string) (Hardware, error) {
@@ -529,6 +532,12 @@ func (c *Client) Hardware(ctx context.Context, ns, name string) (Hardware, error
 			if v, ok, _ := unstructured.NestedString(p.Object, "spec", "resources", "requests", "storage"); ok {
 				if q, err := resource.ParseQuantity(v); err == nil {
 					d.SizeGiB = q.Value() >> 30
+				}
+			}
+			if pv, _, _ := unstructured.NestedString(p.Object, "spec", "volumeName"); pv != "" {
+				if zv, err := c.dyn.Resource(zfsVolumeGVR).Namespace(zfsNamespace).Get(ctx, pv, metav1.GetOptions{}); err == nil {
+					pool, _, _ := unstructured.NestedString(zv.Object, "spec", "poolName")
+					d.Dataset = pool + "/" + pv
 				}
 			}
 		}

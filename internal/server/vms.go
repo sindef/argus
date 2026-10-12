@@ -537,7 +537,7 @@ func (s *Server) hardwareModal(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) hardwareAction(w http.ResponseWriter, r *http.Request) {
 	ns, name, op := r.PathValue("ns"), r.PathValue("name"), r.PathValue("op")
-	req := hwOpReq{Hardware: kube.Hardware{Firmware: r.FormValue("firmware"), TPM: r.FormValue("tpm") != "", Monitor: r.FormValue("monitor") != "", CDROM: r.FormValue("cdrom"), CPUReserve: strings.TrimSpace(r.FormValue("cpu_reserve")), CPULimit: strings.TrimSpace(r.FormValue("cpu_limit"))}, Network: r.FormValue("network"), NIC: r.FormValue("nic"), Disk: r.FormValue("disk"), Device: r.FormValue("device")}
+	req := hwOpReq{Hardware: kube.Hardware{Firmware: r.FormValue("firmware"), TPM: r.FormValue("tpm") != "", Monitor: r.FormValue("monitor") != "", CDROM: r.FormValue("cdrom"), CPUReserve: strings.TrimSpace(r.FormValue("cpu_reserve")), CPULimit: strings.TrimSpace(r.FormValue("cpu_limit"))}, Network: r.FormValue("network"), NIC: r.FormValue("nic"), Disk: r.FormValue("disk"), Device: r.FormValue("device"), Thick: r.FormValue("thick") == "true"}
 	var err error
 	switch op {
 	case "save":

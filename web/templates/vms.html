@@ -242,6 +242,7 @@
   <button class="btn" type="submit">{{template "icon" "plus"}}Add device</button>
 </form>{{end}}{{end}}
 <div class="field spaced">Disks</div>
-<div class="table-wrap"><table><tbody>{{range .Disks}}<tr><td>{{.Name}}</td><td>{{.SizeGiB}} GiB</td>
+<div class="table-wrap"><table><tbody>{{range .Disks}}<tr><td>{{.Name}}</td><td>{{.SizeGiB}} GiB{{if .Dataset}} <span class="muted" title="Space the disk uses in the pool. Guests that trim or discard free space reduce it.">{{bytes .Allocated}} used</span>{{end}}</td>
+  <td>{{if .Dataset}}<select name="thick" hx-post="{{$p}}/provision" hx-vals='{"disk":"{{.Name}}"}' hx-target="#hw-error" aria-label="Provisioning"><option value="false">Thin</option><option value="true"{{if .Thick}} selected{{end}}>Thick</option></select> <span class="help" title="Thick reserves the full size in the pool now, so the disk can never run out of space. Thin allocates as the guest writes.">?</span>{{end}}</td>
   <td class="row-actions"><form hx-post="{{$p}}/resize" hx-target="#hw-error" class="inline"><input type="hidden" name="disk" value="{{.Name}}"><input name="size" type="number" min="{{add64 .SizeGiB 1}}" value="{{add64 .SizeGiB 10}}" class="num" aria-label="New size in GiB"><button class="btn sm" type="submit">Grow</button></form></td></tr>{{end}}</tbody></table></div>
 {{end}}{{end}}

@@ -91,6 +91,15 @@ func (c *Client) ZFSRead(ctx context.Context, ds, snap string, h http.Header) (*
 	return resp, nil
 }
 
+func (c *Client) ZVols(ctx context.Context, datasets []string) (map[string]ZVol, error) {
+	var out map[string]ZVol
+	return out, c.do(ctx, http.MethodGet, "/zfs/volumes?"+url.Values{"ds": datasets}.Encode(), nil, &out)
+}
+
+func (c *Client) SetThick(ctx context.Context, dataset string, thick bool) error {
+	return c.do(ctx, http.MethodPost, "/zfs/provisioning", map[string]any{"dataset": dataset, "thick": thick}, nil)
+}
+
 func (c *Client) ReleaseVolume(ctx context.Context, dataset string) error {
 	return c.do(ctx, http.MethodPost, "/zfs/release", map[string]string{"dataset": dataset}, nil)
 }

@@ -43,7 +43,7 @@ rules:
     verbs: [list]
   - apiGroups: [zfs.openebs.io]
     resources: [zfsvolumes]
-    verbs: [list, delete]
+    verbs: [get, list, delete]
   - apiGroups: [""]
     resources: [persistentvolumes]
     verbs: [list]

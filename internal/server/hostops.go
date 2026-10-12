@@ -71,6 +71,7 @@ type hwOpReq struct {
 	Disk     string        `json:"disk"`
 	SizeGiB  int64         `json:"sizeGiB"`
 	Device   string        `json:"device"`
+	Thick    bool          `json:"thick"`
 }
 
 type hostOps interface {
@@ -305,6 +306,17 @@ func (l localOps) Hardware(ctx context.Context, ns, name string) (kube.Hardware,
 	if err != nil || l.s.hostd == nil {
 		return hw, err
 	}
+	var datasets []string
+	for _, d := range hw.Disks {
+		if d.Dataset != "" {
+			datasets = append(datasets, d.Dataset)
+		}
+	}
+	if zv, err := l.s.hostd.ZVols(ctx, datasets); err == nil {
+		for i, d := range hw.Disks {
+			hw.Disks[i].Allocated, hw.Disks[i].Thick = zv[d.Dataset].Allocated, zv[d.Dataset].Thick
+		}
+	}
 	if devs, err := l.s.hostd.Devices(ctx); err == nil {
 		labels := deviceLabels(devs)
 		for i, c := range hw.DeviceChoices {
@@ -371,6 +383,19 @@ func (l localOps) HardwareOp(ctx context.Context, ns, name, op string, req hwOpR
 		return k.RemoveNIC(ctx, ns, name, req.NIC)
 	case "resize":
 		return k.ResizeDisk(ctx, ns, name, req.Disk, req.SizeGiB)
+	case "provision":
+		if l.s.hostd == nil {
+			return errNoHostd
+		}
+		hw, err := k.Hardware(ctx, ns, name)
+		if err != nil {
+			return err
+		}
+		i := slices.IndexFunc(hw.Disks, func(d kube.HardwareDisk) bool { return d.Name == req.Disk })
+		if i < 0 || hw.Disks[i].Dataset == "" {
+			return fmt.Errorf("disk %s not found on a ZFS pool", req.Disk)
+		}
+		return l.s.hostd.SetThick(ctx, hw.Disks[i].Dataset, req.Thick)
 	case "device-add":
 		return k.AddHostDevice(ctx, ns, name, req.Device)
 	case "device-remove":
