@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -30,7 +31,12 @@ type Protected struct {
 	Interval  int       `json:"interval"`
 	LastSync  time.Time `json:"lastSync"`
 	LastError string    `json:"lastError"`
+	Priority  string    `json:"priority,omitempty"`
 }
+
+var priorityRank = map[string]int{"high": 0, "": 1, "medium": 1, "low": 2}
+
+const priorityWait = 5 * time.Minute
 
 func (c *Manager) Protected(ctx context.Context) ([]Protected, error) {
 	ps, _, err := c.loadHA(ctx)
@@ -60,7 +66,10 @@ func vmPath(vm, suffix string) string {
 	return APIPath("/api/vms/%s/%s/", kube.Namespace, vm) + suffix
 }
 
-func (c *Manager) Protect(ctx context.Context, owner, vm, replica string, interval int) error {
+func (c *Manager) Protect(ctx context.Context, owner, vm, replica string, interval int, priority string) error {
+	if _, ok := priorityRank[priority]; !ok {
+		return errors.New("priority must be high, medium or low")
+	}
 	if owner == replica {
 		return errors.New("replica must be on another node")
 	}
@@ -79,12 +88,15 @@ func (c *Manager) Protect(ctx context.Context, owner, vm, replica string, interv
 		return errors.New("interval must be at least 5 minutes")
 	}
 	err = c.updateHA(ctx, func(ps []Protected) ([]Protected, error) {
+		if err := c.admit(ps, owner, vm, replica); err != nil {
+			return nil, err
+		}
 		for _, p := range ps {
 			if p.VM == vm && (p.Owner == owner || p.Replica == owner || p.Owner == replica || p.Replica == replica) {
 				return nil, fmt.Errorf("%s is already protected", vm)
 			}
 		}
-		return append(ps, Protected{VM: vm, Owner: owner, Replica: replica, Interval: interval}), nil
+		return append(ps, Protected{VM: vm, Owner: owner, Replica: replica, Interval: interval, Priority: priority}), nil
 	})
 	if err != nil {
 		return err
@@ -253,6 +265,7 @@ func (c *Manager) promote(ctx context.Context, p Protected, status string) error
 	}
 	log.Printf("ha: %s %s from %s to %s", p.VM, strings.ToLower(status), owner.Name, replica.Name)
 	c.mu.Lock()
+	c.promoted[p.VM] = time.Now()
 	c.jobs = append(c.jobs, &Job{Org: owner.Org, VM: p.VM, From: owner.Name, To: replica.Name, Started: time.Now(), Status: status, Done: true})
 	c.mu.Unlock()
 	c.saveJobs()
@@ -267,8 +280,9 @@ func (c *Manager) failover(ctx context.Context) {
 	if err != nil {
 		return
 	}
+	sort.SliceStable(ps, func(i, j int) bool { return priorityRank[ps[i].Priority] < priorityRank[ps[j].Priority] })
 	for _, p := range ps {
-		if !c.down(p.Owner) || c.down(p.Replica) || p.LastSync.IsZero() {
+		if !c.down(p.Owner) || c.down(p.Replica) || p.LastSync.IsZero() || c.waitingOnHigher(ps, p) {
 			continue
 		}
 		owner, err1 := c.Node(ctx, p.Owner)
@@ -408,4 +422,49 @@ func recovering(name string, fn func()) {
 		}
 	}()
 	fn()
+}
+
+func (c *Manager) admit(ps []Protected, owner, vm, replica string) error {
+	rs, ok := c.NodeState(replica)
+	if !ok || !rs.Reachable() {
+		return fmt.Errorf("%s is not reachable", replica)
+	}
+	ost, _ := c.NodeState(owner)
+	mem := map[string]int64{}
+	for _, st := range []NodeState{ost, rs} {
+		for _, v := range st.VMs {
+			mem[st.Node.Name+"/"+v.Name] = memBytes(v.Memory)
+		}
+	}
+	var running int64
+	for _, v := range rs.VMs {
+		if v.Running {
+			running += memBytes(v.Memory)
+		}
+	}
+	incoming := mem[owner+"/"+vm]
+	for _, p := range ps {
+		if p.Owner == owner && p.Replica == replica {
+			incoming += mem[owner+"/"+p.VM]
+		}
+	}
+	if need, have := running+incoming, rs.Info.MemoryBytes*9/10; have > 0 && need > have {
+		return fmt.Errorf("admission control: if %s fails, %s needs %.1f GiB for its VMs but can give %.1f GiB", owner, replica, float64(need)/(1<<30), float64(have)/(1<<30))
+	}
+	return nil
+}
+
+func (c *Manager) waitingOnHigher(ps []Protected, p Protected) bool {
+	for _, q := range ps {
+		c.mu.Lock()
+		at, promoted := c.promoted[q.VM]
+		c.mu.Unlock()
+		if q.Replica != p.Owner || priorityRank[q.Priority] >= priorityRank[p.Priority] || !promoted || time.Since(at) > priorityWait {
+			continue
+		}
+		if st, ok := c.NodeState(q.Owner); ok && !slices.ContainsFunc(st.VMs, func(v kube.VM) bool { return v.Name == q.VM && v.Running }) {
+			return true
+		}
+	}
+	return false
 }

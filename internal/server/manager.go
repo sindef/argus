@@ -534,7 +534,7 @@ func (s *Server) managerProtect(w http.ResponseWriter, r *http.Request) {
 		_, err = s.nodeIn(r, r.FormValue("replica"))
 	}
 	if err == nil {
-		err = s.manager.Protect(r.Context(), r.PathValue("node"), r.PathValue("name"), r.FormValue("replica"), interval)
+		err = s.manager.Protect(r.Context(), r.PathValue("node"), r.PathValue("name"), r.FormValue("replica"), interval, r.FormValue("priority"))
 	}
 	if err != nil {
 		flash(w, r, err)

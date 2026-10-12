@@ -52,7 +52,7 @@
       <dt>Memory</dt><dd>{{size .Memory}}</dd>
       <dt>Storage</dt><dd>{{bytes .StorageBytes}} (thin)</dd>
       <dt>Uptime</dt><dd>{{if .Running}}{{since .Started}}{{else}}<span class="muted">—</span>{{end}}</dd>
-      <dt>HA</dt><dd>{{with $.HA}}<span class="dot {{if .LastError}}Failed{{else if .LastSync.IsZero}}Pending{{else}}Protected{{end}}" title="{{.LastError}}">Replica on {{.Replica}}{{if not .LastSync.IsZero}}, synced {{since .LastSync}} ago{{end}}</span>{{else}}<span class="muted">Off</span>{{end}}</dd>
+      <dt>HA</dt><dd>{{with $.HA}}<span class="dot {{if .LastError}}Failed{{else if .LastSync.IsZero}}Pending{{else}}Protected{{end}}" title="{{.LastError}}">Replica on {{.Replica}}{{if not .LastSync.IsZero}}, synced {{since .LastSync}} ago{{end}}{{with .Priority}}, {{.}} priority{{end}}</span>{{else}}<span class="muted">Off</span>{{end}}</dd>
     </dl>
     {{if $.IsAdmin}}
     <div class="spaced">
@@ -129,7 +129,10 @@
       <select name="replica" required>{{range $.Hosts}}{{if ne .Node.Name $.Node.Name}}<option value="{{.Node.Name}}" data-arch="{{.Arch}}">{{.Node.Name}}{{with .Node.Cluster}} ({{.}}){{end}}{{if ne .Arch $.Arch}} · {{.Arch}}{{end}}</option>{{end}}{{end}}</select>
     </label>
     <p class="arch-warn" hidden>This host has a different CPU architecture. A failover there will only start if the guest supports it.</p>
-    <label>Replication interval (minutes) <input name="interval" type="number" min="5" max="1440" value="15" class="num"></label>
+    <div class="row">
+      <label>Replication interval (minutes) <input name="interval" type="number" min="5" max="1440" value="15" class="num"></label>
+      <label>Restart priority <span class="help" title="After a host failure, higher-priority VMs start first; lower ones wait until they are running (up to 5 minutes).">?</span><select name="priority"><option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option></select></label>
+    </div>
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Protect</button></div>
   </form>
 </dialog>

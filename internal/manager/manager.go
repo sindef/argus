@@ -58,10 +58,11 @@ type Manager struct {
 	inv      inventory
 	tel      *telemetry
 	drs      []Recommendation
+	promoted map[string]time.Time
 }
 
 func New(store auth.Secrets, metricsPath string) *Manager {
-	return &Manager{store: store, lastSeen: map[string]time.Time{}, busy: map[string]bool{}, syncing: map[string]bool{}, started: time.Now(), inv: inventory{nodes: map[string]NodeState{}}, tel: newTelemetry(metricsPath)}
+	return &Manager{store: store, lastSeen: map[string]time.Time{}, busy: map[string]bool{}, syncing: map[string]bool{}, promoted: map[string]time.Time{}, started: time.Now(), inv: inventory{nodes: map[string]NodeState{}}, tel: newTelemetry(metricsPath)}
 }
 
 func (c *Manager) Nodes(ctx context.Context) ([]Node, error) {
