@@ -14,6 +14,7 @@ import (
 	"argus/internal/auth"
 	"argus/internal/hostd"
 	"argus/internal/kube"
+	"argus/internal/manager"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
@@ -219,10 +220,7 @@ func (s *Server) hostNetworkAction(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("HX-Refresh", "true")
 }
 
-type HostNetInfo struct {
-	Net       hostd.HostNet `json:"net"`
-	Migration string        `json:"migration"`
-}
+type HostNetInfo = manager.HostNetwork
 
 func (s *Server) apiHostNetwork(w http.ResponseWriter, r *http.Request) {
 	hn, err := s.hostNet(r)

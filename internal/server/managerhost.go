@@ -10,7 +10,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"argus/internal/hostd"
@@ -33,46 +32,29 @@ type freePort struct {
 	Hosts []string
 }
 
-func (s *Server) fleetHostNets(ctx context.Context, org string) []hostNetRow {
-	var (
-		mu   sync.Mutex
-		rows []hostNetRow
-	)
-	nodes, _ := s.manager.NodesFor(ctx, org)
-	var wg sync.WaitGroup
-	for _, n := range nodes {
-		wg.Add(1)
-		go func(n manager.Node) {
-			defer wg.Done()
-			cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-			defer cancel()
-			row := hostNetRow{Node: n}
-			if err := n.Call(cctx, http.MethodGet, "/api/host/network", nil, &row.Info); err != nil {
-				row.Error = err.Error()
+func (s *Server) fleetHostNets(org string) []hostNetRow {
+	var rows []hostNetRow
+	for _, st := range s.manager.Inventory(org) {
+		row := hostNetRow{Node: st.Node, Info: st.HostNet, Error: st.Error}
+		for _, i := range row.Info.Net.Ifaces {
+			if i.Kind == "bridge" {
+				row.Bridges = append(row.Bridges, i)
 			}
-			for _, i := range row.Info.Net.Ifaces {
-				if i.Kind == "bridge" {
-					row.Bridges = append(row.Bridges, i)
-				}
-				if i.Master == "" && (!row.Info.Net.Restricted || slices.Contains(row.Info.Net.Management, i.Name)) {
-					row.Mgmt = append(row.Mgmt, i.Name)
-				}
-				if i.Kind == "ether" && i.Master == "" && len(i.Addresses) == 0 && !i.Mgmt && !i.Access {
-					row.Free = append(row.Free, i.Name)
-				}
+			if i.Master == "" && (!row.Info.Net.Restricted || slices.Contains(row.Info.Net.Management, i.Name)) {
+				row.Mgmt = append(row.Mgmt, i.Name)
 			}
-			mu.Lock()
-			rows = append(rows, row)
-			mu.Unlock()
-		}(n)
+			if i.Kind == "ether" && i.Master == "" && len(i.Addresses) == 0 && !i.Mgmt && !i.Access {
+				row.Free = append(row.Free, i.Name)
+			}
+		}
+		rows = append(rows, row)
 	}
-	wg.Wait()
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Node.Name < rows[j].Node.Name })
 	return rows
 }
 
 func (s *Server) managerHostNets(w http.ResponseWriter, r *http.Request) {
-	rows := s.fleetHostNets(r.Context(), session(r).Org)
+	rows := s.fleetHostNets(session(r).Org)
 	pre := map[string]bool{}
 	if dc := r.FormValue("dc"); dc != "" {
 		for _, row := range rows {
@@ -117,6 +99,7 @@ func (s *Server) managerBridgeRollout(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		log.Printf("%s: bridge %s rolled out to %s", session(r).User, spec.Name, name)
+		s.manager.Refresh(name)
 		out = append(out, name+": "+spec.Name+" created and confirmed")
 	}
 }

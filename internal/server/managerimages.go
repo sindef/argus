@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"sync"
 
 	"argus/internal/auth"
 	"argus/internal/kube"
@@ -22,29 +21,23 @@ type imageRow struct {
 
 func (s *Server) managerImages(w http.ResponseWriter, r *http.Request) {
 	states := s.inventory(r)
-	var mu sync.Mutex
 	rows := map[string]*imageRow{}
 	var hosts []string
 	arch := map[string]string{}
 	for _, st := range states {
 		arch[st.Node.Name] = st.Arch()
-	}
-	errs := fanOut(r.Context(), states, func(ctx context.Context, n manager.Node) error {
-		var imgs []kube.Image
-		if err := n.Call(ctx, http.MethodGet, "/api/images", nil, &imgs); err != nil {
-			return err
+		if !st.Reachable() {
+			continue
 		}
-		mu.Lock()
-		defer mu.Unlock()
-		hosts = append(hosts, n.Name)
-		for _, img := range imgs {
+		hosts = append(hosts, st.Node.Name)
+		for _, img := range st.Images {
 			if rows[img.Name] == nil {
 				rows[img.Name] = &imageRow{Name: img.Name, Size: img.Size, Hosts: map[string]kube.Image{}}
 			}
-			rows[img.Name].Hosts[n.Name] = img
+			rows[img.Name].Hosts[st.Node.Name] = img
 		}
-		return nil
-	})
+	}
+	errs := stateErrors(states)
 	var out []*imageRow
 	for _, row := range rows {
 		out = append(out, row)
@@ -103,6 +96,7 @@ func (s *Server) managerImageOp(w http.ResponseWriter, r *http.Request) {
 			}
 			for _, i := range imgs {
 				if i.Name == name {
+					defer s.manager.Refresh(n.Name)
 					return n.Call(ctx, http.MethodPost, manager.APIPath("/api/images/%s/delete", name), nil, nil)
 				}
 			}

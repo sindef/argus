@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"argus/internal/hostd"
 	"argus/internal/kube"
 )
 
@@ -22,8 +23,16 @@ type NodeState struct {
 	Node     Node
 	Info     kube.NodeInfo
 	VMs      []kube.VM
+	Networks []kube.Network
+	Images   []kube.Image
+	HostNet  HostNetwork
 	Error    string
 	Observed time.Time
+}
+
+type HostNetwork struct {
+	Net       hostd.HostNet `json:"net"`
+	Migration string        `json:"migration"`
 }
 
 func (s NodeState) Reachable() bool { return s.Error == "" && !s.Observed.IsZero() }
@@ -125,6 +134,9 @@ func (m *Manager) poll(ctx context.Context, n Node) {
 		if n.Call(ctx, "GET", "/api/metrics", nil, &sample) == nil {
 			m.tel.record(n.Name, info.CPUCores, sample)
 		}
+		n.Call(ctx, "GET", "/api/networks", nil, &st.Networks)
+		n.Call(ctx, "GET", "/api/images", nil, &st.Images)
+		n.Call(ctx, "GET", "/api/host/network", nil, &st.HostNet)
 	}
 	m.inv.mu.Lock()
 	m.inv.nodes[n.Name] = st

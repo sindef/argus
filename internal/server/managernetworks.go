@@ -10,7 +10,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"sync"
 
 	"argus/internal/auth"
 	"argus/internal/hostd"
@@ -101,21 +100,17 @@ func (s *Server) managerNetworks(w http.ResponseWriter, r *http.Request) {
 	org := session(r).Org
 	states := s.inventory(r)
 	defs, err := s.manager.Networks(r.Context(), org)
-	var mu sync.Mutex
 	onHost := map[string]map[string]kube.Network{}
-	errs := fanOut(r.Context(), states, func(ctx context.Context, n manager.Node) error {
-		var nets []kube.Network
-		if err := n.Call(ctx, http.MethodGet, "/api/networks", nil, &nets); err != nil {
-			return err
+	for _, st := range states {
+		if !st.Reachable() {
+			continue
 		}
-		mu.Lock()
-		defer mu.Unlock()
-		onHost[n.Name] = map[string]kube.Network{}
-		for _, x := range nets {
-			onHost[n.Name][x.Name] = x
+		onHost[st.Node.Name] = map[string]kube.Network{}
+		for _, x := range st.Networks {
+			onHost[st.Node.Name][x.Name] = x
 		}
-		return nil
-	})
+	}
+	errs := stateErrors(states)
 	attached := map[string]int{}
 	bridges := map[string][]string{}
 	for _, st := range states {
@@ -183,7 +178,7 @@ func (s *Server) managerNetworks(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	sort.Strings(all)
-	s.render(w, r, "networks.html", "layout", map[string]any{"Nav": "networks", "Rows": out, "Reachable": len(onHost), "Switches": switches(s.fleetHostNets(r.Context(), org), out), "Scopes": s.scopeNames(r), "AllBridges": all, "CanEdit": session(r).Role.Can(auth.Admin), "Error": errs})
+	s.render(w, r, "networks.html", "layout", map[string]any{"Nav": "networks", "Rows": out, "Reachable": len(onHost), "Switches": switches(s.fleetHostNets(org), out), "Scopes": s.scopeNames(r), "AllBridges": all, "CanEdit": session(r).Role.Can(auth.Admin), "Error": errs})
 }
 
 func networksFor(defs []manager.Network, n manager.Node) []manager.Network {
@@ -192,6 +187,7 @@ func networksFor(defs []manager.Network, n manager.Node) []manager.Network {
 
 func (s *Server) pushNetwork(r *http.Request, op string, n manager.Network) string {
 	return fanOut(r.Context(), s.inventory(r), func(ctx context.Context, node manager.Node) error {
+		defer s.manager.Refresh(node.Name)
 		req := netReq(n)
 		if op == "delete" || inScope(n.Scopes, node) {
 			return node.Call(ctx, http.MethodPost, "/api/networks/"+op, req, nil)

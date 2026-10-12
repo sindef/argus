@@ -24,7 +24,7 @@ type switchPort struct {
 
 func (s *Server) switchHosts(r *http.Request, name string) []string {
 	var hosts []string
-	for _, h := range s.fleetHostNets(r.Context(), session(r).Org) {
+	for _, h := range s.fleetHostNets(session(r).Org) {
 		if slices.ContainsFunc(h.Bridges, func(b hostd.Iface) bool { return b.Name == name }) {
 			hosts = append(hosts, h.Node.Name)
 		}
@@ -107,6 +107,7 @@ func (s *Server) managerSwitchTeaming(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		log.Printf("%s: teaming of %s on %s set to %+v", session(r).User, name, h, t)
+		s.manager.Refresh(h)
 		out = append(out, fmt.Sprintf("%s: %s updated and confirmed", h, name))
 	}
 }

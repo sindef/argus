@@ -1117,3 +1117,13 @@ func (s *Server) managerHASettings(w http.ResponseWriter, r *http.Request) {
 	log.Printf("%s: automatic failover %v", session(r).User, r.FormValue("automatic") != "")
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
+
+func stateErrors(states []manager.NodeState) string {
+	var errs []string
+	for _, st := range states {
+		if st.Error != "" {
+			errs = append(errs, st.Node.Name+": "+st.Error)
+		}
+	}
+	return strings.Join(errs, "; ")
+}
