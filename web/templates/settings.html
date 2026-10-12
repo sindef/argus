@@ -46,7 +46,7 @@
     <div class="table-wrap"><table>
       <thead><tr><th>Name</th><th>ID</th><th>SSO</th><th></th></tr></thead>
       <tbody>{{range .Orgs}}<tr><td>{{.Name}}</td><td class="mono">{{.ID}}</td><td>{{if .SSO}}On{{else}}<span class="muted">Off</span>{{end}}</td>
-        <td class="row-actions">{{if ne .ID "default"}}<form method="post" action="/settings/orgs/{{.ID}}/delete" onsubmit="return confirm('Delete {{.Name}}?')"><button type="submit" class="link danger">Delete</button></form>{{end}}</td></tr>{{end}}</tbody>
+        <td class="row-actions">{{if ne .ID "default"}}<form method="post" action="/settings/orgs/{{.ID}}/delete" data-confirm="Delete {{.Name}}?"><button type="submit" class="link danger">Delete</button></form>{{end}}</td></tr>{{end}}</tbody>
     </table></div>
   </section>
   <section class="pane" id="s-backup" data-icon="download">

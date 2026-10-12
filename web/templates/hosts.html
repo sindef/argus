@@ -22,7 +22,7 @@
         <div class="menu-list" hidden>
           <button hx-get="/groups/modal/move-host?host={{.Node.Name}}&dc={{.Node.Datacenter}}&cluster={{.Node.Cluster}}" hx-target="#modal">{{template "icon" "arrow-right-left"}}Move to…</button>
           <hr>
-          <form method="post" action="/hosts/{{.Node.Name}}/delete" onsubmit="return confirm('Remove {{.Node.Name}}?')"><button type="submit" class="danger">{{template "icon" "trash-2"}}Remove</button></form>
+          <form method="post" action="/hosts/{{.Node.Name}}/delete" data-confirm="Remove {{.Node.Name}}?"><button type="submit" class="danger">{{template "icon" "trash-2"}}Remove</button></form>
         </div>
       </div>
     {{end}}</td>

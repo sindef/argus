@@ -27,7 +27,7 @@
     <td class="row-actions">
       {{if ne .Name $.Session.User}}
       {{if not .SSO}}<form method="post" action="/users/{{.Name}}/reset"><button type="submit" class="link">Reset password</button></form>{{end}}
-      <form method="post" action="/users/{{.Name}}/delete" onsubmit="return confirm('Delete {{.Name}}?')"><button type="submit" class="link danger">Delete</button></form>
+      <form method="post" action="/users/{{.Name}}/delete" data-confirm="Delete {{.Name}}?"><button type="submit" class="link danger">Delete</button></form>
       {{end}}
     </td>
   </tr>

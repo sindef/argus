@@ -46,6 +46,12 @@
   <p id="flash" class="error toast" role="alert" hx-on::after-swap="clearTimeout(this.t); this.t = setTimeout(() => this.innerHTML = '', 8000)"></p>
   <aside id="drawer" class="drawer"></aside>
   <dialog id="modal" class="card wide"></dialog>
+  <dialog id="confirm" class="card">
+    <form class="form">
+      <h2></h2>
+      <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">OK</button></div>
+    </form>
+  </dialog>
   <dialog id="prompt" class="card">
     <form class="form">
       <h2></h2>

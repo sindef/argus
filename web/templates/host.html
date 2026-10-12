@@ -58,7 +58,7 @@
     <div class="table-wrap spaced"><table>
       <thead><tr><th>Token</th><th>Access</th><th>Created</th><th></th></tr></thead>
       <tbody>{{range .Tokens}}<tr><td>{{.Name}}</td><td>{{if .Scope}}{{.Scope}}{{else}}full{{end}}</td><td>{{.Created.Local.Format "2006-01-02 15:04"}}</td>
-        <td class="row-actions"><form method="post" action="/tokens/{{.Name}}/delete" onsubmit="return confirm('Revoke {{.Name}}?')"><button type="submit" class="link danger">Revoke</button></form></td></tr>{{end}}</tbody>
+        <td class="row-actions"><form method="post" action="/tokens/{{.Name}}/delete" data-confirm="Revoke {{.Name}}?"><button type="submit" class="link danger">Revoke</button></form></td></tr>{{end}}</tbody>
     </table></div>
     {{end}}
   </section>

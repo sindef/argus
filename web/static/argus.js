@@ -128,8 +128,31 @@
     document.querySelectorAll("[data-needs-selection]").forEach((b) => { b.disabled = n === 0; });
   }
 
+  const ask = (question, ok) => {
+    const dlg = document.getElementById("confirm");
+    const form = dlg.querySelector("form"), btn = form.querySelector("[type=submit]");
+    const verb = (question.match(/^(Delete|Remove|Destroy|Revoke|Shut down|Reboot|Restore|Erase|Export|Apply|Update|Migrate|Fail over)\b/) || [])[1];
+    dlg.querySelector("h2").textContent = question;
+    btn.textContent = verb || "OK";
+    btn.className = "btn " + (/^(Delete|Remove|Destroy|Revoke|Erase)/.test(question) ? "danger" : "primary");
+    form.onsubmit = (ev) => { ev.preventDefault(); dlg.close(); ok(); };
+    dlg.showModal();
+    btn.focus();
+  };
+  document.addEventListener("submit", (e) => {
+    const f = e.target;
+    if (!f.dataset.confirm || f.dataset.confirmed) return;
+    e.preventDefault();
+    ask(f.dataset.confirm, () => { f.dataset.confirmed = "1"; f.requestSubmit(); });
+  }, true);
+
   document.addEventListener("htmx:confirm", (e) => {
     const el = e.detail.elt, d = el.dataset, dlg = document.getElementById("prompt");
+    if (d.prompt === undefined && e.detail.question) {
+      e.preventDefault();
+      ask(e.detail.question, () => e.detail.issueRequest(true));
+      return;
+    }
     if (d.prompt === undefined || !dlg) return;
     e.preventDefault();
     const form = dlg.querySelector("form"), input = form.elements.value;
