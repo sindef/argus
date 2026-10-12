@@ -32,7 +32,7 @@ os: app hostd
 
 iso: os
 	docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v $(CURDIR)/build:/output \
-		$(AURORABOOT) build-iso --arch $(ARCH) --output /output/ oci:$(IMAGE)
+		$(AURORABOOT) build-iso --arch $(ARCH) --override-name argus-$(VERSION)-$(ARCH) --output /output/ oci:$(IMAGE)
 
 source-bundle: os
 	rm -rf $(SOURCES)
