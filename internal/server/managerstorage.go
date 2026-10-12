@@ -56,7 +56,8 @@ func (s *Server) fleetStorage(r *http.Request) ([]hostPool, []hostVolume, string
 }
 
 func (s *Server) managerStorage(w http.ResponseWriter, r *http.Request) {
-	pools, _, errs := s.fleetStorage(r)
+	data := s.managerData(r)
+	pools, vols, errs := s.fleetStorage(r)
 	var total, used int64
 	status := map[string]int{}
 	for _, p := range pools {
@@ -64,18 +65,17 @@ func (s *Server) managerStorage(w http.ResponseWriter, r *http.Request) {
 		used += p.Used
 		status[p.Status]++
 	}
-	s.render(w, r, "storage.html", "layout", map[string]any{"Nav": "storage", "Pools": pools, "Total": total, "Used": used, "Status": status, "Error": errs})
-}
-
-func (s *Server) managerVolumes(w http.ResponseWriter, r *http.Request) {
-	data := s.managerData(r)
-	_, vols, errs := s.fleetStorage(r)
 	attachable := map[string][]string{}
 	for _, h := range data["Hosts"].([]hostRow) {
 		attachable[h.Node.Name] = stoppedVMs(h.NodeState.VMs)
 	}
-	data["Nav"], data["Volumes"], data["Attachable"], data["Error"] = "volumes", vols, attachable, errs
-	s.render(w, r, "volumes.html", "layout", data)
+	data["Nav"], data["Pools"], data["Total"], data["Used"], data["Status"], data["Error"] = "storage", pools, total, used, status, errs
+	data["Volumes"], data["Attachable"] = vols, attachable
+	s.render(w, r, "storage.html", "layout", data)
+}
+
+func (s *Server) managerVolumes(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/storage#s-volumes", http.StatusSeeOther)
 }
 
 func (s *Server) managerVolumeOp(w http.ResponseWriter, r *http.Request) {

@@ -184,3 +184,59 @@
   </form>
 </section>
 {{end}}{{end}}
+
+{{define "volume-table"}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th>{{if .Manager}}<th>Host</th>{{end}}<th>Type</th><th>Size</th><th>Used by</th><th>Snapshots</th><th>Status</th><th></th></tr></thead>
+  <tbody>{{range .Volumes}}{{$base := "/volumes"}}{{if .Host}}{{$base = printf "/hosts/%s/volumes" .Host}}{{end}}
+  <tr data-context>
+    <td>{{template "icon" "hard-drive"}}{{.Name}}</td>
+    {{if $.Manager}}<td>{{.Host}}</td>{{end}}
+    <td>{{if .Image}}Image{{else if .Owner}}VM disk{{else}}Volume{{end}}</td>
+    <td>{{bytes .Size}}</td>
+    <td>{{with .UsedBy}}{{.}}{{else}}{{with .Owner}}{{.}}{{else}}<span class="muted">—</span>{{end}}{{end}}</td>
+    <td>{{len .Snapshots}}</td>
+    <td><span class="dot {{.Phase}}">{{.Phase}}{{if and .Progress (ne .Phase "Succeeded")}} {{.Progress}}{{end}}</span></td>
+    <td class="row-actions">{{if and $.CanOperate .Standalone}}
+      <div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
+        <div class="menu-list" hidden hx-target="#flash">
+          {{if not .UsedBy}}{{$vms := index $.Attachable .Host}}{{if $vms}}
+          <form class="form" style="padding:8px" hx-post="{{$base}}/attach">
+            <input type="hidden" name="name" value="{{.Name}}">
+            <select name="vm">{{range $vms}}<option>{{.}}</option>{{end}}</select>
+            <button class="btn sm" type="submit">{{template "icon" "cable"}}Attach</button>
+          </form><hr>{{end}}{{end}}
+          <button hx-post="{{$base}}/snapshot" hx-vals='{"name":"{{.Name}}"}'>{{template "icon" "camera"}}Snapshot</button>
+          {{range .Snapshots}}<button hx-post="{{$base}}/delete-snapshot" hx-vals='{"name":"{{.}}"}' hx-confirm="Delete snapshot {{.}}?">{{template "icon" "x"}}Delete {{.}}</button>{{end}}
+          <hr>
+          <button class="danger" hx-post="{{$base}}/delete" hx-vals='{"name":"{{.Name}}"}' hx-confirm="Delete volume {{.Name}}?">{{template "icon" "trash-2"}}Delete</button>
+        </div>
+      </div>
+    {{end}}</td>
+  </tr>
+  {{else}}<tr><td colspan="8" class="muted">No volumes.</td></tr>{{end}}</tbody>
+</table>
+</div>
+{{end}}
+
+{{define "volume-dialog"}}
+{{if .CanOperate}}
+<dialog id="new-volume" class="card">
+  <form class="form" hx-post="{{if .Manager}}/volumes{{else}}/volumes/create{{end}}" hx-target="#volume-error">
+    <h2>New volume</h2>
+    <p id="volume-error" class="error form-error"></p>
+    {{if .Manager}}<label>Host <select name="host" required>{{range .Hosts}}<option>{{.Node.Name}}</option>{{end}}</select></label>{{end}}
+    <div class="row">
+      <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
+      <label>Size (GiB) <input name="size" type="number" min="1" max="4096" value="10" required></label>
+    </div>
+    {{with .PoolChoices}}<label>Storage pool
+      <select name="pool">{{range .}}<option value="{{.Name}}">{{.Name}} ({{bytes .Free}} free)</option>{{end}}</select>
+    </label>{{end}}
+    <label>Import from URL <span class="help" title="Optional. Leave empty for a blank volume. qcow2, raw and compressed images are converted.">?</span><input name="url" type="url" placeholder="https://…"></label>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Create</button></div>
+  </form>
+</dialog>
+{{end}}
+{{end}}
