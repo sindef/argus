@@ -132,7 +132,7 @@ func (s *Server) rolloutBridge(ctx context.Context, n manager.Node, spec hostd.B
 	if err := n.Call(pctx, http.MethodGet, "/api/host/network", nil, &info); err != nil {
 		return fmt.Errorf("unreachable after the change, it rolls back automatically: %w", err)
 	}
-	return n.Call(ctx, http.MethodPost, "/api/host/network/confirm", nil, nil)
+	return n.Call(ctx, http.MethodPost, "/api/host/network/confirm", netOpReq{}, nil)
 }
 
 func (s *Server) managerNewVM(w http.ResponseWriter, r *http.Request) {
