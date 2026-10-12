@@ -236,6 +236,8 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/schedule/{op}", s.require(auth.Admin, s.apiScheduleOp))
 	s.hostAPIRoutes()
 	s.flrAPIRoutes()
+	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/media", s.require(auth.Admin, s.apiMedia))
+	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/media/{op}", s.require(auth.Admin, s.apiMedia))
 	s.cbtRoutes()
 	s.mux.HandleFunc("GET /api/host/network", s.require(auth.Admin, s.apiHostNetwork))
 	s.mux.HandleFunc("GET /api/host/status", s.require(auth.Admin, s.apiHostStatus))
@@ -403,6 +405,8 @@ var hostRoutes = []hostRouteDef{
 	{"POST /vms/{ns}/{name}/files", auth.Operator, auth.VMBackup, (*Server).filesStart},
 	{"GET /vms/{ns}/{name}/files/download", auth.Operator, auth.VMBackup, (*Server).filesDownload},
 	{"POST /vms/{ns}/{name}/files/close", auth.Operator, auth.VMBackup, (*Server).filesClose},
+	{"POST /vms/{ns}/{name}/media", auth.Operator, auth.VMConfig, (*Server).mediaMount},
+	{"POST /vms/{ns}/{name}/media/eject", auth.Operator, auth.VMConfig, (*Server).mediaEject},
 }
 
 func (s *Server) hostRoute(hr hostRouteDef, h http.HandlerFunc) {

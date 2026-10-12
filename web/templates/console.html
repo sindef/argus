@@ -7,8 +7,24 @@
   <a href="?type=vnc"{{if eq .Kind "vnc"}} class="active"{{end}}>Display</a>
   <a href="?type=serial"{{if eq .Kind "console"}} class="active"{{end}}>Serial</a>
 </nav>
+<div class="toolbar">
+  {{if eq .Kind "vnc"}}<button class="btn" data-dialog="paste-text">{{template "icon" "file-text"}}Paste text…</button>{{end}}
+  <form hx-post="{{.Media}}" hx-trigger="change" hx-encoding="multipart/form-data" hx-target="#media-state" data-progress="media-progress" class="inline">
+    <label class="btn">{{template "icon" "disc-3"}}Mount ISO…<input type="file" name="file" accept=".iso,.img" hidden></label>
+  </form>
+  <button class="btn" hx-post="{{.Media}}/eject" hx-target="#media-state">Eject</button>
+  <span class="help" title="Uploads an ISO from this computer to the host and inserts it in the VM's CD-ROM drive. A VM without a drive gets one at its next restart. Eject removes the uploaded copy.">?</span>
+  <progress id="media-progress" value="0" max="100" hidden></progress><span id="media-state" class="muted"></span>
+</div>
 <p id="state" class="muted">Connecting…</p>
 <div id="screen" class="screen" data-ws="{{.WS}}" data-kind="{{if eq .Kind "vnc"}}vnc{{else}}console{{end}}"></div>
 {{if ne .Kind "vnc"}}<link rel="stylesheet" href="/static/vendor/xterm/xterm.css">{{end}}
+{{if eq .Kind "vnc"}}<dialog id="paste-text" class="card">
+  <form id="paste-form" class="form">
+    <h2>Paste text</h2>
+    <label>Text <span class="help" title="Typed into the console as US-layout keystrokes. Characters outside ASCII are skipped.">?</span><textarea name="text" rows="6" required></textarea></label>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Type</button></div>
+  </form>
+</dialog>{{end}}
 <script type="module" src="/static/console.js"></script>
 {{end}}

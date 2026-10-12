@@ -194,7 +194,7 @@ func (s *Server) console(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("type") == "serial" {
 		kind = "console"
 	}
-	s.render(w, r, "console.html", "layout", map[string]any{"Namespace": r.PathValue("ns"), "Name": r.PathValue("name"), "Kind": kind, "Page": "/vms/" + r.PathValue("ns") + "/" + r.PathValue("name"), "WS": "/ws/" + r.PathValue("ns") + "/" + r.PathValue("name") + "/"})
+	s.render(w, r, "console.html", "layout", map[string]any{"Namespace": r.PathValue("ns"), "Name": r.PathValue("name"), "Kind": kind, "Page": "/vms/" + r.PathValue("ns") + "/" + r.PathValue("name"), "Media": "/vms/" + r.PathValue("ns") + "/" + r.PathValue("name") + "/media", "WS": "/ws/" + r.PathValue("ns") + "/" + r.PathValue("name") + "/"})
 }
 
 func (s *Server) consoleWS(w http.ResponseWriter, r *http.Request) {

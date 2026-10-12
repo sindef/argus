@@ -337,7 +337,8 @@ func (s *Server) managerConsole(w http.ResponseWriter, r *http.Request) {
 	}
 	ns, name := r.PathValue("ns"), r.PathValue("name")
 	page := fmt.Sprintf("/nodes/%s/vms/%s/%s", n.Name, ns, name)
-	s.render(w, r, "console.html", "layout", map[string]any{"Namespace": ns, "Name": name, "Kind": kind, "Page": page, "WS": page + "/ws/", "Nav": "vm:" + n.Name + "/" + name})
+	s.render(w, r, "console.html", "layout", map[string]any{"Namespace": ns, "Name": name, "Kind": kind, "Page": page, "WS": page + "/ws/", "Nav": "vm:" + n.Name + "/" + name,
+		"Media": fmt.Sprintf("/hosts/%s/vms/%s/%s/media", n.Name, ns, name)})
 }
 
 func (s *Server) orgNode(r *http.Request) (manager.Node, error) {

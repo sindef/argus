@@ -553,7 +553,7 @@ func (c *Client) Hardware(ctx context.Context, ns, name string) (Hardware, error
 }
 
 func (c *Client) SetHardware(ctx context.Context, ns, name string, hw Hardware) error {
-	return c.editVM(ctx, ns, name, func(o obj, _ bool) error {
+	return c.editVM(ctx, ns, name, func(o obj, running bool) error {
 		dom := []string{"spec", "template", "spec", "domain"}
 		cps := hw.CoresPerSocket
 		if cps <= 0 {
@@ -601,18 +601,34 @@ func (c *Client) SetHardware(ctx context.Context, ns, name string, hw Hardware) 
 		} else {
 			unstructured.RemoveNestedField(o, "spec", "template", "spec", "livenessProbe")
 		}
-		disks, _, _ := unstructured.NestedSlice(o, append(dom, "devices", "disks")...)
-		vols, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")
-		disks = without(disks, func(m obj) bool { return m["name"] == "cdrom" })
-		vols = without(vols, func(m obj) bool { return m["name"] == "cdrom" })
-		if hw.CDROM != "" {
+		return setCDROM(o, hw.CDROM, running)
+	})
+}
+
+func setCDROM(o obj, pvc string, hotplug bool) error {
+	dom := []string{"spec", "template", "spec", "domain"}
+	disks, _, _ := unstructured.NestedSlice(o, append(dom, "devices", "disks")...)
+	vols, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")
+	vols = without(vols, func(m obj) bool { return m["name"] == "cdrom" })
+	if pvc != "" {
+		if !slices.ContainsFunc(disks, func(d any) bool { return asObj(d)["name"] == "cdrom" }) {
 			disks = append(disks, obj{"name": "cdrom", "cdrom": obj{"bus": cdromBus()}})
-			vols = append(vols, obj{"name": "cdrom", "persistentVolumeClaim": obj{"claimName": hw.CDROM, "readOnly": true}})
 		}
-		if err := unstructured.SetNestedSlice(o, disks, append(dom, "devices", "disks")...); err != nil {
-			return err
+		claim := obj{"claimName": pvc, "readOnly": true}
+		if hotplug {
+			claim["hotpluggable"] = true
 		}
-		return unstructured.SetNestedSlice(o, vols, "spec", "template", "spec", "volumes")
+		vols = append(vols, obj{"name": "cdrom", "persistentVolumeClaim": claim})
+	}
+	if err := unstructured.SetNestedSlice(o, disks, append(dom, "devices", "disks")...); err != nil {
+		return err
+	}
+	return unstructured.SetNestedSlice(o, vols, "spec", "template", "spec", "volumes")
+}
+
+func (c *Client) SetCDROM(ctx context.Context, ns, name, pvc string) error {
+	return c.editVM(ctx, ns, name, func(o obj, running bool) error {
+		return setCDROM(o, pvc, running)
 	})
 }
 
