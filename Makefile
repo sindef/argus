@@ -1,5 +1,6 @@
 VERSION ?= 0.1.0
 ARCH ?= amd64
+NOTICES ?= none
 TAG ?= $(VERSION)$(if $(filter-out amd64,$(ARCH)),-$(ARCH))
 IMAGE ?= argus-os:$(TAG)
 PLATFORM = --platform linux/$(ARCH)
@@ -28,15 +29,16 @@ hostd:
 	mv os/build/app os/build/argus-hostd
 
 os: app hostd
-	docker buildx build $(PLATFORM) --load --build-arg VERSION=$(VERSION) -t $(IMAGE) os
+	docker buildx build $(PLATFORM) --load --build-arg VERSION=$(VERSION) --build-arg NOTICES=$(NOTICES) -t $(IMAGE) os
 
 iso: os
 	docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v $(CURDIR)/build:/output \
 		$(AURORABOOT) build-iso --arch $(ARCH) --override-name argus-$(VERSION)-$(ARCH) --output /output/ oci:$(IMAGE)
 
+source-bundle: NOTICES = full
 source-bundle: os
 	rm -rf $(SOURCES)
-	docker buildx build $(PLATFORM) --build-arg VERSION=$(VERSION) --target source-bundle --output type=local,dest=$(SOURCES) os
+	docker buildx build $(PLATFORM) --build-arg VERSION=$(VERSION) --build-arg NOTICES=full --target source-bundle --output type=local,dest=$(SOURCES) os
 	docker buildx build $(PLATFORM) --target source-bundle --output type=local,dest=$(SOURCES) .
 	cd $(SOURCES) && find . -type f ! -name SHA256SUMS -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > SHA256SUMS
 	rm -f $(BUNDLE)*

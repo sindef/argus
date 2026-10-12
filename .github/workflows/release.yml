@@ -110,7 +110,7 @@ jobs:
           set -eu
           V="${GITHUB_REF_NAME#v}"
           docker buildx build --push --platform "linux/$ARCH" --sbom=true --provenance=mode=max --metadata-file os.json \
-            --build-arg VERSION="$V" -t "$REGISTRY/argus-os:$V-$ARCH" os
+            --build-arg VERSION="$V" --build-arg NOTICES=full -t "$REGISTRY/argus-os:$V-$ARCH" os
           cosign sign --yes "$REGISTRY/argus-os@$(jq -r '."containerimage.digest"' os.json)"
   release:
     needs: os
