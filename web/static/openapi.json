@@ -917,6 +917,10 @@
      "started": {
       "type": "string",
       "format": "date-time"
+     },
+     "restartRequired": {
+      "type": "boolean",
+      "description": "Hardware changes are waiting for the next restart"
      }
     }
    },

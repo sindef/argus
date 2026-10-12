@@ -216,7 +216,7 @@ func (c *Client) AttachVolume(ctx context.Context, ns, vm, volume string) error 
 	if v.UsedBy != "" {
 		return fmt.Errorf("%s is attached to %s", volume, v.UsedBy)
 	}
-	return c.editStoppedVM(ctx, ns, vm, func(o obj) error {
+	return c.editVM(ctx, ns, vm, func(o obj, running bool) error {
 		disks, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "domain", "devices", "disks")
 		used := map[string]bool{}
 		for _, d := range disks {
@@ -228,8 +228,8 @@ func (c *Client) AttachVolume(ctx context.Context, ns, vm, volume string) error 
 		}
 		disk := fmt.Sprintf("disk%d", n)
 		volumes, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")
-		volumes = append(volumes, obj{"name": disk, "dataVolume": obj{"name": volume}})
-		disks = append(disks, obj{"name": disk, "disk": obj{"bus": "virtio"}})
+		vol, dk := diskEntry(disk, volume, running)
+		volumes, disks = append(volumes, vol), append(disks, dk)
 		if err := unstructured.SetNestedSlice(o, volumes, "spec", "template", "spec", "volumes"); err != nil {
 			return err
 		}

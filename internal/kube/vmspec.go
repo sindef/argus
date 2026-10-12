@@ -207,7 +207,7 @@ func (c *Client) DeleteVM(ctx context.Context, ns, name string) error {
 }
 
 func (c *Client) AddDisk(ctx context.Context, ns, name string, sizeGiB int, class string) error {
-	return c.editStoppedVM(ctx, ns, name, func(o obj) error {
+	return c.editVM(ctx, ns, name, func(o obj, running bool) error {
 		disks, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "domain", "devices", "disks")
 		used := map[string]bool{}
 		for _, d := range disks {
@@ -228,8 +228,8 @@ func (c *Client) AddDisk(ctx context.Context, ns, name string, sizeGiB int, clas
 			},
 		})
 		volumes, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")
-		volumes = append(volumes, obj{"name": disk, "dataVolume": obj{"name": dv}})
-		disks = append(disks, obj{"name": disk, "disk": obj{"bus": "virtio"}})
+		vol, dk := diskEntry(disk, dv, running)
+		volumes, disks = append(volumes, vol), append(disks, dk)
 		if err := unstructured.SetNestedSlice(o, templates, "spec", "dataVolumeTemplates"); err != nil {
 			return err
 		}
@@ -245,21 +245,26 @@ func (c *Client) RemoveDisk(ctx context.Context, ns, name, disk string) error {
 		return fmt.Errorf("cannot remove the root disk")
 	}
 	owned := ""
-	err := c.editStoppedVM(ctx, ns, name, func(o obj) error {
+	err := c.editVM(ctx, ns, name, func(o obj, running bool) error {
 		disks, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "domain", "devices", "disks")
 		volumes, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")
 		templates, _, _ := unstructured.NestedSlice(o, "spec", "dataVolumeTemplates")
 		disks = without(disks, func(m obj) bool { return m["name"] == disk })
 		dv := ""
+		hot := false
 		volumes = without(volumes, func(m obj) bool {
 			if m["name"] != disk {
 				return false
 			}
 			if v, ok := m["dataVolume"].(obj); ok {
 				dv, _ = v["name"].(string)
+				hot, _ = v["hotpluggable"].(bool)
 			}
 			return true
 		})
+		if running && !hot {
+			return fmt.Errorf("power off %s to remove %s; only disks added while it was running can be removed live", name, disk)
+		}
 		before := len(templates)
 		templates = without(templates, func(m obj) bool {
 			md, _ := m["metadata"].(obj)
@@ -282,21 +287,36 @@ func (c *Client) RemoveDisk(ctx context.Context, ns, name, disk string) error {
 	return c.dyn.Resource(dvGVR).Namespace(ns).Delete(ctx, owned, metav1.DeleteOptions{})
 }
 
-func (c *Client) editStoppedVM(ctx context.Context, ns, name string, fn func(obj) error) error {
+func (c *Client) editVM(ctx context.Context, ns, name string, fn func(o obj, running bool) error) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		if _, err := c.dyn.Resource(vmiGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
-			return fmt.Errorf("power off %s first", name)
-		}
+		_, err := c.dyn.Resource(vmiGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+		running := !apierrors.IsNotFound(err)
 		vm, err := c.dyn.Resource(vmGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return err
 		}
-		if err := fn(vm.Object); err != nil {
+		if err := fn(vm.Object, running); err != nil {
 			return err
 		}
 		_, err = c.dyn.Resource(vmGVR).Namespace(ns).Update(ctx, vm, metav1.UpdateOptions{})
 		return err
 	})
+}
+
+func (c *Client) editStoppedVM(ctx context.Context, ns, name string, fn func(obj) error) error {
+	return c.editVM(ctx, ns, name, func(o obj, running bool) error {
+		if running {
+			return fmt.Errorf("power off %s first", name)
+		}
+		return fn(o)
+	})
+}
+
+func diskEntry(disk, dv string, running bool) (obj, obj) {
+	if running {
+		return obj{"name": disk, "dataVolume": obj{"name": dv, "hotpluggable": true}}, obj{"name": disk, "disk": obj{"bus": "scsi"}}
+	}
+	return obj{"name": disk, "dataVolume": obj{"name": dv}}, obj{"name": disk, "disk": obj{"bus": "virtio"}}
 }
 
 func without(items []interface{}, drop func(obj) bool) []interface{} {
@@ -477,7 +497,7 @@ func (c *Client) Hardware(ctx context.Context, ns, name string) (Hardware, error
 }
 
 func (c *Client) SetHardware(ctx context.Context, ns, name string, hw Hardware) error {
-	return c.editStoppedVM(ctx, ns, name, func(o obj) error {
+	return c.editVM(ctx, ns, name, func(o obj, _ bool) error {
 		dom := []string{"spec", "template", "spec", "domain"}
 		unstructured.SetNestedField(o, hw.Cores, append(dom, "cpu", "cores")...)
 		unstructured.SetNestedField(o, fmt.Sprintf("%dMi", hw.MemoryMiB), append(dom, "memory", "guest")...)
@@ -514,7 +534,7 @@ func (c *Client) SetHardware(ctx context.Context, ns, name string, hw Hardware) 
 }
 
 func (c *Client) AddNIC(ctx context.Context, ns, name, network string) error {
-	return c.editStoppedVM(ctx, ns, name, func(o obj) error {
+	return c.editVM(ctx, ns, name, func(o obj, _ bool) error {
 		ifaces, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "domain", "devices", "interfaces")
 		nets, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "networks")
 		used := map[string]bool{}

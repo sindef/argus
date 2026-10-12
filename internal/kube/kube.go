@@ -49,22 +49,23 @@ func (c *Client) guard() error {
 }
 
 type VM struct {
-	Namespace    string
-	Name         string
-	DisplayName  string
-	Status       string
-	Tags         []string
-	Template     bool
-	Backup       string
-	Running      bool
-	Cores        int64
-	Memory       string
-	StorageBytes int64
-	Node         string
-	OS           string
-	Started      time.Time
-	Disks        []Disk
-	NICs         []NIC
+	Namespace      string
+	Name           string
+	DisplayName    string
+	Status         string
+	Tags           []string
+	Template       bool
+	Backup         string
+	Running        bool
+	Cores          int64
+	Memory         string
+	StorageBytes   int64
+	Node           string
+	OS             string
+	Started        time.Time
+	Disks          []Disk
+	NICs           []NIC
+	PendingRestart bool
 }
 
 func (v VM) Label() string {
@@ -352,6 +353,12 @@ func toVM(v, vmi *unstructured.Unstructured) VM {
 		}
 	}
 	vm.Running = vm.Status == "Running"
+	conds, _, _ := unstructured.NestedSlice(o, "status", "conditions")
+	for _, c := range conds {
+		if t := asStr(asObj(c)["type"]); (t == "RestartRequired" || t == "MigrationRequired") && asStr(asObj(c)["status"]) == "True" {
+			vm.PendingRestart = vm.Running
+		}
+	}
 	vm.Cores, _, _ = unstructured.NestedInt64(o, "spec", "template", "spec", "domain", "cpu", "cores")
 	if vm.Memory, _, _ = unstructured.NestedString(o, "spec", "template", "spec", "domain", "memory", "guest"); vm.Memory == "" {
 		vm.Memory, _, _ = unstructured.NestedString(o, "spec", "template", "spec", "domain", "resources", "requests", "memory")

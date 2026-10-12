@@ -82,7 +82,7 @@
 {{with .VM}}
 <div class="drawer-head">
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-monitor"/></svg>
-  <div><h2>{{.Label}}</h2><span class="dot {{.Status}}">{{.Status}}</span></div>
+  <div><h2>{{.Label}}</h2><span class="dot {{.Status}}">{{.Status}}</span>{{if .PendingRestart}} <span class="badge" title="Some hardware changes apply when the VM next restarts.">Restart required</span>{{end}}</div>
   <button class="icon-btn close" data-close-drawer aria-label="Close">{{template "icon" "x"}}</button>
 </div>
 {{if $.CanOperate}}

@@ -9,9 +9,11 @@ spec:
   workloadUpdateStrategy:
     workloadUpdateMethods: []
   configuration:
+    vmRolloutStrategy: LiveUpdate
     developerConfiguration:
       featureGates:
         - DecentralizedLiveMigration
+        - DeclarativeHotplugVolumes
     virtTemplateDeployment:
       enabled: false
     virtualMachineOptions:

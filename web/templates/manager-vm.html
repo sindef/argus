@@ -4,7 +4,7 @@
 <div class="page-head">
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-monitor"/></svg>
   <div>
-    <h1 class="inline">{{.Label}} <span class="dot {{.Status}}">{{.Status}}</span></h1>
+    <h1 class="inline">{{.Label}} <span class="dot {{.Status}}">{{.Status}}</span>{{if .PendingRestart}} <span class="badge" title="Some hardware changes apply when the VM next restarts.">Restart required</span>{{end}}</h1>
     <div class="crumbs">{{with $.Node.Cluster}}{{.}} / {{end}}{{$.Node.Name}} / {{.Name}}</div>
   </div>
   {{if $.CanOperate}}

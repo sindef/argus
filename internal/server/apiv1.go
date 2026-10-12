@@ -39,11 +39,12 @@ type v1VM struct {
 	OS           string    `json:"os,omitempty"`
 	IPs          []string  `json:"ips,omitempty"`
 	Started      time.Time `json:"started,omitzero"`
+	Restart      bool      `json:"restartRequired"`
 }
 
 func toV1VM(host string, v kube.VM) v1VM {
 	return v1VM{Host: host, Name: v.Name, DisplayName: v.DisplayName, Status: v.Status, Running: v.Running, Cores: v.Cores, Memory: v.Memory,
-		StorageBytes: v.StorageBytes, Tags: v.Tags, Template: v.Template, OS: v.OS, IPs: v.IPs(), Started: v.Started}
+		StorageBytes: v.StorageBytes, Tags: v.Tags, Template: v.Template, OS: v.OS, IPs: v.IPs(), Started: v.Started, Restart: v.PendingRestart}
 }
 
 type v1NewVM struct {
