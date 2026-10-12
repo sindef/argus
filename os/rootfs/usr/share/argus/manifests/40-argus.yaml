@@ -61,7 +61,7 @@ rules:
     verbs: [create]
   - apiGroups: [snapshot.kubevirt.io]
     resources: [virtualmachinesnapshots]
-    verbs: [get, list, create, delete]
+    verbs: [get, list, create, patch, delete]
   - apiGroups: [snapshot.kubevirt.io]
     resources: [virtualmachinerestores]
     verbs: [create]

@@ -28,32 +28,92 @@ type Snapshot struct {
 	Ready    bool
 	Auto     bool
 	Quiesced bool
+	Parent   string
+	Current  bool
+	Depth    int
 }
 
 const (
-	autoLabel        = "argus.io/auto"
-	BackupAnnotation = "argus.io/backup"
+	autoLabel         = "argus.io/auto"
+	BackupAnnotation  = "argus.io/backup"
+	parentAnnotation  = "argus.io/parent"
+	currentAnnotation = "argus.io/current"
 )
 
-func (c *Client) ListSnapshots(ctx context.Context, ns, vm string) ([]Snapshot, error) {
+func (c *Client) vmSnapshots(ctx context.Context, ns, vm string) ([]unstructured.Unstructured, error) {
 	list, err := c.dyn.Resource(vmSnapGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
-	var out []Snapshot
-	for _, s := range list.Items {
-		if src, _, _ := unstructured.NestedString(s.Object, "spec", "source", "name"); src != vm || strings.HasPrefix(s.GetName(), "argus-") {
-			continue
-		}
-		snap := Snapshot{Name: s.GetName(), Created: s.GetCreationTimestamp().Time, Auto: s.GetLabels()[autoLabel] == "true"}
+	return slices.DeleteFunc(list.Items, func(s unstructured.Unstructured) bool {
+		src, _, _ := unstructured.NestedString(s.Object, "spec", "source", "name")
+		return src != vm || strings.HasPrefix(s.GetName(), "argus-")
+	}), nil
+}
+
+func (c *Client) ListSnapshots(ctx context.Context, ns, vm string) ([]Snapshot, error) {
+	items, err := c.vmSnapshots(ctx, ns, vm)
+	if err != nil {
+		return nil, err
+	}
+	var all []Snapshot
+	for _, s := range items {
+		snap := Snapshot{Name: s.GetName(), Created: s.GetCreationTimestamp().Time, Auto: s.GetLabels()[autoLabel] == "true",
+			Parent: s.GetAnnotations()[parentAnnotation], Current: s.GetAnnotations()[currentAnnotation] == "true"}
 		snap.Phase, _, _ = unstructured.NestedString(s.Object, "status", "phase")
 		snap.Ready, _, _ = unstructured.NestedBool(s.Object, "status", "readyToUse")
 		ind, _, _ := unstructured.NestedStringSlice(s.Object, "status", "indications")
 		snap.Quiesced = slices.Contains(ind, "GuestAgent")
-		out = append(out, snap)
+		all = append(all, snap)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Created.After(out[j].Created) })
-	return out, nil
+	return snapshotTree(all), nil
+}
+
+func snapshotTree(all []Snapshot) []Snapshot {
+	sort.Slice(all, func(i, j int) bool { return all[i].Created.Before(all[j].Created) })
+	names := map[string]bool{}
+	for _, s := range all {
+		names[s.Name] = true
+	}
+	children := map[string][]Snapshot{}
+	for _, s := range all {
+		p := s.Parent
+		if !names[p] {
+			p = ""
+		}
+		children[p] = append(children[p], s)
+	}
+	var out []Snapshot
+	var walk func(string, int)
+	walk = func(parent string, depth int) {
+		for _, s := range children[parent] {
+			s.Depth = depth
+			out = append(out, s)
+			walk(s.Name, depth+1)
+		}
+	}
+	walk("", 0)
+	return out
+}
+
+func (c *Client) annotateSnapshot(ctx context.Context, ns, name string, ann obj) error {
+	patch, _ := json.Marshal(obj{"metadata": obj{"annotations": ann}})
+	_, err := c.dyn.Resource(vmSnapGVR).Namespace(ns).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	return err
+}
+
+func (c *Client) markCurrent(ctx context.Context, ns string, items []unstructured.Unstructured, name string) error {
+	for _, s := range items {
+		if s.GetName() != name && s.GetAnnotations()[currentAnnotation] == "true" {
+			if err := c.annotateSnapshot(ctx, ns, s.GetName(), obj{currentAnnotation: nil}); err != nil {
+				return err
+			}
+		}
+	}
+	if name == "" {
+		return nil
+	}
+	return c.annotateSnapshot(ctx, ns, name, obj{currentAnnotation: "true"})
 }
 
 func (c *Client) CreateSnapshot(ctx context.Context, ns, vm string) (string, error) {
@@ -87,7 +147,28 @@ func (c *Client) SetBackupPolicy(ctx context.Context, ns, vm, policy string) err
 }
 
 func (c *Client) createSnapshot(ctx context.Context, ns, vm, name string, labels obj) (string, error) {
-	meta := obj{"name": name}
+	items, err := c.vmSnapshots(ctx, ns, vm)
+	if err != nil {
+		return "", err
+	}
+	parent, current, tracked := "", "", false
+	var newest time.Time
+	for _, s := range items {
+		a := s.GetAnnotations()
+		if _, ok := a[parentAnnotation]; ok {
+			tracked = true
+		}
+		if a[currentAnnotation] == "true" {
+			current, tracked = s.GetName(), true
+		}
+		if s.GetCreationTimestamp().After(newest) {
+			parent, newest = s.GetName(), s.GetCreationTimestamp().Time
+		}
+	}
+	if tracked {
+		parent = current
+	}
+	meta := obj{"name": name, "annotations": obj{parentAnnotation: parent}}
 	if labels != nil {
 		meta["labels"] = labels
 	}
@@ -97,8 +178,10 @@ func (c *Client) createSnapshot(ctx context.Context, ns, vm, name string, labels
 		"metadata":   meta,
 		"spec":       obj{"source": obj{"apiGroup": "kubevirt.io", "kind": "VirtualMachine", "name": vm}},
 	}}
-	_, err := c.dyn.Resource(vmSnapGVR).Namespace(ns).Create(ctx, snap, metav1.CreateOptions{})
-	return name, err
+	if _, err := c.dyn.Resource(vmSnapGVR).Namespace(ns).Create(ctx, snap, metav1.CreateOptions{}); err != nil {
+		return name, err
+	}
+	return name, c.markCurrent(ctx, ns, items, name)
 }
 
 func (c *Client) RestoreSnapshot(ctx context.Context, ns, vm, snapshot string) error {
@@ -114,10 +197,39 @@ func (c *Client) RestoreSnapshot(ctx context.Context, ns, vm, snapshot string) e
 			"virtualMachineSnapshotName": snapshot,
 		},
 	}}
-	_, err := c.dyn.Resource(vmRestoreGVR).Namespace(ns).Create(ctx, restore, metav1.CreateOptions{})
-	return err
+	if _, err := c.dyn.Resource(vmRestoreGVR).Namespace(ns).Create(ctx, restore, metav1.CreateOptions{}); err != nil {
+		return err
+	}
+	items, err := c.vmSnapshots(ctx, ns, vm)
+	if err != nil {
+		return err
+	}
+	return c.markCurrent(ctx, ns, items, snapshot)
 }
 
 func (c *Client) DeleteSnapshot(ctx context.Context, ns, snapshot string) error {
-	return c.dyn.Resource(vmSnapGVR).Namespace(ns).Delete(ctx, snapshot, metav1.DeleteOptions{})
+	snap, err := c.dyn.Resource(vmSnapGVR).Namespace(ns).Get(ctx, snapshot, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	if err := c.dyn.Resource(vmSnapGVR).Namespace(ns).Delete(ctx, snapshot, metav1.DeleteOptions{}); err != nil {
+		return err
+	}
+	vm, _, _ := unstructured.NestedString(snap.Object, "spec", "source", "name")
+	items, err := c.vmSnapshots(ctx, ns, vm)
+	if err != nil {
+		return err
+	}
+	parent := snap.GetAnnotations()[parentAnnotation]
+	for _, s := range items {
+		if s.GetAnnotations()[parentAnnotation] == snapshot {
+			if err := c.annotateSnapshot(ctx, ns, s.GetName(), obj{parentAnnotation: parent}); err != nil {
+				return err
+			}
+		}
+	}
+	if snap.GetAnnotations()[currentAnnotation] == "true" && parent != "" {
+		return c.annotateSnapshot(ctx, ns, parent, obj{currentAnnotation: "true"})
+	}
+	return nil
 }

@@ -231,10 +231,12 @@ func (s *Server) v1Snapshots(w http.ResponseWriter, r *http.Request) {
 		Created time.Time `json:"created"`
 		Ready   bool      `json:"ready"`
 		Auto    bool      `json:"auto"`
+		Parent  string    `json:"parent,omitempty"`
+		Current bool      `json:"current"`
 	}
 	out := []v1Snap{}
 	for _, sn := range snaps {
-		out = append(out, v1Snap{sn.Name, sn.Created, sn.Ready, sn.Auto})
+		out = append(out, v1Snap{sn.Name, sn.Created, sn.Ready, sn.Auto, sn.Parent, sn.Current})
 	}
 	writeJSON(w, out)
 }

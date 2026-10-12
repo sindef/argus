@@ -1096,6 +1096,14 @@
      },
      "auto": {
       "type": "boolean"
+     },
+     "parent": {
+      "type": "string",
+      "description": "Snapshot this one was taken from; empty for a root"
+     },
+     "current": {
+      "type": "boolean",
+      "description": "The VM's current state descends from this snapshot"
      }
     }
    },

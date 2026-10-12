@@ -98,8 +98,8 @@
 {{else if eq $.Tab "snapshots"}}
 {{with $.Snapshots}}
 <div class="table-wrap"><table>
-  <thead><tr><th>Created</th><th>Name</th><th>Status</th><th></th></tr></thead>
-  <tbody>{{range .}}<tr><td>{{.Created.Local.Format "2006-01-02 15:04"}}</td><td class="mono">{{.Name}}</td>
+  <thead><tr><th>Name</th><th>Created</th><th>Status</th><th></th></tr></thead>
+  <tbody>{{range .}}<tr><td class="mono snap-node{{if .Depth}} child{{end}}" style="--depth: {{.Depth}}">{{.Name}}{{if .Current}} <span class="badge" title="The VM's disks have changed since this snapshot; the next snapshot becomes its child.">You are here</span>{{end}}</td><td>{{.Created.Local.Format "2006-01-02 15:04"}}</td>
     <td><span class="dot {{if .Ready}}Ready{{else}}{{.Phase}}{{end}}">{{if .Ready}}Ready{{else}}{{.Phase}}{{end}}</span>{{if .Quiesced}} <span class="badge" title="The guest agent froze file systems, so applications saw a clean point in time.">Quiesced</span>{{end}}</td>
     <td class="row-actions">{{if $.CanOperate}}{{if not $.VM.Running}}<button class="link" hx-post="{{$p}}/snapshots/{{.Name}}/restore" hx-target="#flash" hx-confirm="Restore {{$.VM.Label}} to this snapshot? Current disk contents are lost.">Restore</button>{{end}}<button class="link danger" hx-post="{{$p}}/snapshots/{{.Name}}/delete" hx-target="#flash" hx-confirm="Delete this snapshot?">Delete</button>{{end}}</td></tr>{{end}}</tbody>
 </table></div>
