@@ -1,18 +1,18 @@
 {{define "manager-nav"}}
 <a class="nav-link{{if eq .Nav "home"}} active{{end}}" href="/">{{template "icon" "house"}}Home</a>
 <div class="nav-section" id="infra">
-  <button class="nav-head">{{template "icon" "layers"}}Infrastructure<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-up"/></svg></button>
+  <button class="nav-head">{{template "icon" "layers"}}Infrastructure<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-down"/></svg></button>
   <div class="nav-items" hx-get="/nav/tree?nav={{.Nav}}" hx-trigger="load, every 30s" hx-swap="innerHTML"></div>
 </div>
 <div class="nav-section" id="storage">
-  <button class="nav-head">{{template "icon" "database"}}Storage<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-up"/></svg></button>
+  <button class="nav-head">{{template "icon" "database"}}Storage<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-down"/></svg></button>
   <div class="nav-items">
     <a class="nav-link sub{{if eq .Nav "storage"}} active{{end}}" href="/storage">Storage Pools</a>
     <a class="nav-link sub{{if eq .Nav "images"}} active{{end}}" href="/images">Images</a>
   </div>
 </div>
 <div class="nav-section" id="networking">
-  <button class="nav-head">{{template "icon" "network"}}Networking<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-up"/></svg></button>
+  <button class="nav-head">{{template "icon" "network"}}Networking<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-down"/></svg></button>
   <div class="nav-items">
     <a class="nav-link sub{{if eq .Nav "networks"}} active{{end}}" href="/networks">Networks</a>
     {{if .OrgAdmin}}<a class="nav-link sub{{if eq .Nav "hostnets"}} active{{end}}" href="/network/hosts">Host networks</a>{{end}}
@@ -21,7 +21,7 @@
 {{if .OrgAdmin}}
 <div class="nav-sep"></div>
 <div class="nav-section" id="admin">
-  <button class="nav-head">{{template "icon" "settings"}}Administration<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-up"/></svg></button>
+  <button class="nav-head">{{template "icon" "settings"}}Administration<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-down"/></svg></button>
   <div class="nav-items">
     <a class="nav-link sub{{if eq .Nav "hosts"}} active{{end}}" href="/hosts">Hosts</a>
     <a class="nav-link sub{{if eq .Nav "users"}} active{{end}}" href="/users">Users</a>
