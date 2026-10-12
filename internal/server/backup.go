@@ -399,7 +399,7 @@ func (s *Server) restoreBackup(ctx context.Context, store, vm, stamp, target str
 	}
 	job := restoreJob{Store: store, Rel: rel, Namespace: meta.Namespace, Target: target, Key: meta.Namespace + "/" + vm}
 	s.trackRestore(token, job)
-	if err := s.kube.ImportVM(ctx, meta.Namespace, target, "restore-"+stamp, ex); err != nil {
+	if err := s.kube.ImportVM(ctx, meta.Namespace, target, "restore-"+stamp, ex, kube.ImportOptions{}); err != nil {
 		s.untrackRestore(token)
 		return err
 	}

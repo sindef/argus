@@ -135,12 +135,18 @@ func (s *Server) apiImport(w http.ResponseWriter, r *http.Request) {
 		Name      string      `json:"name"`
 		Operation string      `json:"operation"`
 		Export    kube.Export `json:"export"`
+		Pool      string      `json:"pool"`
+		Template  bool        `json:"template"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || !validObject.MatchString(req.Name) || req.Operation == "" {
 		apiError(w, r, http.StatusBadRequest, errors.New("invalid import request"))
 		return
 	}
-	if err := s.kube.ImportVM(r.Context(), kube.Namespace, req.Name, req.Operation, req.Export); err != nil {
+	class, err := s.poolClass(r.Context(), req.Pool)
+	if err == nil {
+		err = s.kube.ImportVM(r.Context(), kube.Namespace, req.Name, req.Operation, req.Export, kube.ImportOptions{StorageClass: class, Template: req.Template})
+	}
+	if err != nil {
 		apiError(w, r, http.StatusConflict, err)
 		return
 	}
@@ -392,7 +398,8 @@ func (s *Server) apiSnapshotOp(w http.ResponseWriter, r *http.Request) {
 func (s *Server) apiRenameClone(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
 	var req struct {
-		Value string `json:"value"`
+		Value    string `json:"value"`
+		Template bool   `json:"template"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		apiError(w, r, http.StatusBadRequest, err)
@@ -403,7 +410,7 @@ func (s *Server) apiRenameClone(w http.ResponseWriter, r *http.Request) {
 		if !validObject.MatchString(req.Value) {
 			err = errors.New("invalid clone name")
 		} else {
-			err = s.kube.Clone(r.Context(), ns, name, req.Value)
+			err = s.kube.Clone(r.Context(), ns, name, req.Value, req.Template)
 		}
 	} else {
 		err = s.kube.Rename(r.Context(), ns, name, req.Value)

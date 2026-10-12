@@ -3,6 +3,7 @@ package kube
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -41,7 +42,7 @@ func (c *Client) Rename(ctx context.Context, ns, name, display string) error {
 	return err
 }
 
-func (c *Client) Clone(ctx context.Context, ns, name, target string) error {
+func (c *Client) Clone(ctx context.Context, ns, name, target string, template bool) error {
 	if err := c.guard(); err != nil {
 		return err
 	}
@@ -65,10 +66,44 @@ func (c *Client) Clone(ctx context.Context, ns, name, target string) error {
 			"target":            obj{"apiGroup": "kubevirt.io", "kind": "VirtualMachine", "name": target},
 			"newMacAddresses":   macs,
 			"annotationFilters": []string{"*", "!" + displayNameAnnotation},
+			"labelFilters":      []string{"*", "!" + haLabel, "!" + TemplateLabel},
 		},
 	}}
-	_, err = c.dyn.Resource(cloneGVR).Namespace(ns).Create(ctx, cl, metav1.CreateOptions{})
-	return err
+	if template {
+		unstructured.SetNestedStringSlice(cl.Object, []string{`{"op":"add","path":"/spec/runStrategy","value":"Halted"}`}, "spec", "patches")
+	}
+	created, err := c.dyn.Resource(cloneGVR).Namespace(ns).Create(ctx, cl, metav1.CreateOptions{})
+	if err != nil {
+		return err
+	}
+	go c.finishClone(ns, created.GetName(), target, template)
+	return nil
+}
+
+func (c *Client) finishClone(ns, clone, target string, template bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
+	defer cancel()
+	for ctx.Err() == nil {
+		cur, err := c.dyn.Resource(cloneGVR).Namespace(ns).Get(ctx, clone, metav1.GetOptions{})
+		if err != nil {
+			log.Printf("clone %s: %v", target, err)
+			return
+		}
+		switch phase, _, _ := unstructured.NestedString(cur.Object, "status", "phase"); phase {
+		case "Succeeded":
+			if template {
+				if err := c.setTemplate(ctx, ns, target, true); err != nil {
+					log.Printf("clone %s: mark as template: %v", target, err)
+				}
+			}
+			c.dyn.Resource(cloneGVR).Namespace(ns).Delete(ctx, clone, metav1.DeleteOptions{})
+			return
+		case "Failed":
+			log.Printf("clone %s failed", target)
+			return
+		}
+		time.Sleep(5 * time.Second)
+	}
 }
 
 func (c *Client) Events(ctx context.Context, ns, name string, limit int) ([]Event, error) {

@@ -128,7 +128,7 @@ func (s *Server) bulk(w http.ResponseWriter, r *http.Request) {
 		flash(w, r, errors.New("select at least one VM"))
 		return
 	}
-	single := act == "clone" || act == "rename"
+	single := act == "clone" || act == "rename" || act == "template-copy"
 	if single && len(sel) != 1 {
 		flash(w, r, errors.New("select exactly one VM"))
 		return
@@ -152,11 +152,11 @@ func (s *Server) bulk(w http.ResponseWriter, r *http.Request) {
 			err = s.kube.DeleteVM(r.Context(), ns, name)
 		case "rename":
 			err = s.kube.Rename(r.Context(), ns, name, prompt)
-		case "clone":
+		case "clone", "template-copy":
 			if !validObject.MatchString(prompt) {
-				err = errors.New("invalid clone name")
+				err = errors.New("invalid name")
 			} else {
-				err = s.kube.Clone(r.Context(), ns, name, prompt)
+				err = s.kube.Clone(r.Context(), ns, name, prompt, act == "template-copy")
 			}
 		default:
 			err = s.kube.Action(r.Context(), ns, name, act)

@@ -191,7 +191,12 @@ func (c *Client) DeleteExport(ctx context.Context, ns, name string) error {
 
 func importName(vm string) string { return "argus-import-" + vm }
 
-func (c *Client) ImportVM(ctx context.Context, ns, name, operation string, ex Export) error {
+type ImportOptions struct {
+	StorageClass string
+	Template     bool
+}
+
+func (c *Client) ImportVM(ctx context.Context, ns, name, operation string, ex Export, opts ImportOptions) error {
 	if err := c.guard(); err != nil {
 		return err
 	}
@@ -211,14 +216,14 @@ func (c *Client) ImportVM(ctx context.Context, ns, name, operation string, ex Ex
 	if _, err := c.dyn.Resource(cmGVR).Namespace(ns).Create(ctx, cm, metav1.CreateOptions{}); err != nil {
 		return err
 	}
-	err := c.createImportVM(ctx, ns, name, operation, src, ex)
+	err := c.createImportVM(ctx, ns, name, operation, src, ex, opts)
 	if err != nil {
 		c.FinishImport(context.Background(), ns, name)
 	}
 	return err
 }
 
-func (c *Client) createImportVM(ctx context.Context, ns, name, operation, src string, ex Export) error {
+func (c *Client) createImportVM(ctx context.Context, ns, name, operation, src string, ex Export, opts ImportOptions) error {
 	if err := c.Secrets(ns).Create(ctx, src, "Opaque", map[string][]byte{"token": []byte("x-kubevirt-export-token: " + ex.Token)}); err != nil {
 		return err
 	}
@@ -239,6 +244,9 @@ func (c *Client) createImportVM(ctx context.Context, ns, name, operation, src st
 			return err
 		}
 		unstructured.RemoveNestedField(t.(obj), "spec", "sourceRef")
+		if opts.StorageClass != "" {
+			unstructured.SetNestedField(t.(obj), opts.StorageClass, "spec", "storage", "storageClassName")
+		}
 	}
 	if err := unstructured.SetNestedSlice(spec, templates, "dataVolumeTemplates"); err != nil {
 		return err
@@ -251,6 +259,9 @@ func (c *Client) createImportVM(ctx context.Context, ns, name, operation, src st
 		"metadata":   obj{"name": name, "annotations": obj{operationAnnotation: operation}},
 		"spec":       spec,
 	}}
+	if opts.Template {
+		vm.SetLabels(map[string]string{TemplateLabel: "true"})
+	}
 	_, err := c.dyn.Resource(vmGVR).Namespace(ns).Create(ctx, vm, metav1.CreateOptions{})
 	return err
 }

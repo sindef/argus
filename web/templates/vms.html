@@ -19,6 +19,7 @@
     <button class="btn" data-menu data-needs-selection>{{template "icon" "ellipsis"}}More{{template "icon" "chevron-down"}}</button>
     <div class="menu-list" hidden>
       <button hx-post="/vms/bulk/clone" hx-include="input[name=sel]:checked" hx-target="#flash" data-prompt="Clone" data-prompt-placeholder="Name for the clone">{{template "icon" "copy"}}Clone</button>
+      <button hx-post="/vms/bulk/template-copy" hx-include="input[name=sel]:checked" hx-target="#flash" data-prompt="Create template" data-prompt-placeholder="Template name">{{template "icon" "layers"}}Create template</button>
       <button hx-post="/vms/bulk/rename" hx-include="input[name=sel]:checked" hx-target="#flash" data-prompt="Rename" data-prompt-placeholder="Display name" data-prompt-optional>{{template "icon" "pencil"}}Rename</button>
       <hr>
       <button class="danger" hx-post="/vms/bulk/delete" hx-include="input[name=sel]:checked" hx-target="#flash" hx-confirm="Delete the selected VMs and their disks?">{{template "icon" "trash-2"}}Delete</button>
@@ -194,6 +195,7 @@
   <hr>
   <button hx-post="{{$p}}/snapshots">{{template "icon" "camera"}}Snapshot</button>
   <button hx-post="/vms/bulk/clone" hx-vals='{{$sel}}' data-prompt="Clone" data-prompt-placeholder="Name for the clone">{{template "icon" "copy"}}Clone</button>
+  <button hx-post="/vms/bulk/template-copy" hx-vals='{{$sel}}' data-prompt="Create template" data-prompt-placeholder="Template name">{{template "icon" "layers"}}Create template</button>
   <button hx-post="/vms/bulk/rename" hx-vals='{{$sel}}' data-prompt="Rename" data-prompt-placeholder="Display name" data-prompt-value="{{.DisplayName}}" data-prompt-optional>{{template "icon" "pencil"}}Rename</button>
   <button data-dialog="vm-tags" data-fill='{"action":"{{$p}}/tags","tags":"{{join .Tags ", "}}"}'>{{template "icon" "tag"}}Tags…</button>
   <hr>
