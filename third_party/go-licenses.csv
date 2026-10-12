@@ -1,9 +1,12 @@
+github.com/Azure/go-ntlmssp,third_party/licenses/go/github.com/Azure/go-ntlmssp/LICENSE,MIT
 github.com/coreos/go-oidc/v3/oidc,third_party/licenses/go/github.com/coreos/go-oidc/v3/oidc/LICENSE,Apache-2.0
 github.com/davecgh/go-spew/spew,third_party/licenses/go/github.com/davecgh/go-spew/spew/LICENSE,ISC
 github.com/dustin/go-humanize,third_party/licenses/go/github.com/dustin/go-humanize/LICENSE,MIT
 github.com/fxamacker/cbor/v2,third_party/licenses/go/github.com/fxamacker/cbor/v2/LICENSE,MIT
+github.com/go-asn1-ber/asn1-ber,third_party/licenses/go/github.com/go-asn1-ber/asn1-ber/LICENSE,MIT
 github.com/go-jose/go-jose/v4,third_party/licenses/go/github.com/go-jose/go-jose/v4/LICENSE,Apache-2.0
 github.com/go-jose/go-jose/v4/json,third_party/licenses/go/github.com/go-jose/go-jose/v4/json/LICENSE,BSD-3-Clause
+github.com/go-ldap/ldap/v3,third_party/licenses/go/github.com/go-ldap/ldap/v3/LICENSE,MIT
 github.com/go-logr/logr,third_party/licenses/go/github.com/go-logr/logr/LICENSE,Apache-2.0
 github.com/google/uuid,third_party/licenses/go/github.com/google/uuid/LICENSE,BSD-3-Clause
 github.com/gorilla/websocket,third_party/licenses/go/github.com/gorilla/websocket/LICENSE,BSD-2-Clause

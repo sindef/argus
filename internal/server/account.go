@@ -51,6 +51,9 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u, ok, err := store.Verify(r.Context(), r.FormValue("username"), r.FormValue("password"))
+	if !ok && err == nil && s.manager != nil {
+		u, ok, err = s.directoryLogin(r, store)
+	}
 	<-s.limiter.slots
 	if err != nil {
 		log.Printf("login: %v", err)
@@ -243,4 +246,24 @@ func (s *Server) setScopes(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("%s: set %s scopes to %q", session(r).User, name, r.FormValue("scopes"))
 	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) directoryLogin(r *http.Request, store *auth.Store) (auth.User, bool, error) {
+	org, err := s.manager.Org(r.Context(), r.FormValue("org"))
+	if err != nil || !org.Directory() {
+		return auth.User{}, false, nil
+	}
+	name := strings.ToLower(strings.TrimSpace(r.FormValue("username")))
+	dn, groups, err := org.LDAP.Authenticate(r.Context(), name, r.FormValue("password"))
+	if err != nil {
+		return auth.User{}, false, fmt.Errorf("directory: %w", err)
+	}
+	role, scopes, matched, ok := store.SSOAccess(r.Context(), groups)
+	if !ok {
+		return auth.User{}, false, fmt.Errorf("directory: %s is in no mapped group", dn)
+	}
+	if err := store.UpsertSSO(r.Context(), name, "ldap|"+dn, role, scopes, matched); err != nil {
+		return auth.User{}, false, err
+	}
+	return auth.User{Name: name, Role: role, Scopes: scopes, SSO: true}, true, nil
 }

@@ -206,7 +206,9 @@ func (s *Store) SSOAccess(ctx context.Context, claimed []string) (Role, []string
 	var grants []grant
 	var matched []string
 	for _, g := range gs {
-		if slices.ContainsFunc(g.SSO, func(n string) bool { return slices.Contains(claimed, n) }) {
+		if slices.ContainsFunc(g.SSO, func(n string) bool {
+			return slices.ContainsFunc(claimed, func(c string) bool { return strings.EqualFold(c, n) })
+		}) {
 			grants = append(grants, grant{g.Role, g.Scopes})
 			matched = append(matched, g.Name)
 		}

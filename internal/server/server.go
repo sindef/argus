@@ -185,6 +185,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("POST /network/hosts/bridge", s.requireOrg(auth.Admin, s.managerBridgeRollout))
 		s.mux.HandleFunc("GET /settings", s.requireOrg(auth.Admin, s.managerSettings))
 		s.mux.HandleFunc("POST /settings/sso", s.requireOrg(auth.Admin, s.managerSSO))
+		s.mux.HandleFunc("POST /settings/ldap", s.requireOrg(auth.Admin, s.managerLDAP))
 		s.mux.HandleFunc("POST /settings/orgs", s.requireOrg(auth.Admin, s.managerAddOrg))
 		s.mux.HandleFunc("POST /settings/orgs/{id}/delete", s.requireOrg(auth.Admin, s.managerDeleteOrg))
 		s.mux.HandleFunc("POST /settings/orgs/{id}/rename", s.requireOrg(auth.Admin, s.managerRenameOrg))

@@ -65,5 +65,5 @@ func (s *Store) SetTOTP(ctx context.Context, name, secret string) error {
 
 func (s *Store) StartSession(ctx context.Context, u User, remember bool) string {
 	role, scopes := s.Access(ctx, u)
-	return s.NewSession(Session{User: u.Name, Role: role, MustChange: u.MustChange, Scopes: scopes}, remember)
+	return s.NewSession(Session{User: u.Name, Role: role, MustChange: u.MustChange, SSO: u.SSO, Scopes: scopes}, remember)
 }

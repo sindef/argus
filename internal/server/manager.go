@@ -22,6 +22,7 @@ import (
 	"argus/internal/dbstore"
 	"argus/internal/kube"
 	"argus/internal/manager"
+	"argus/internal/netguard"
 	"argus/internal/sealed"
 
 	"github.com/gorilla/websocket"
@@ -689,6 +690,40 @@ func (s *Server) managerSSO(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("%s: updated SSO for %s", session(r).User, org.ID)
 	s.renderSettings(w, r, "Single sign-on saved.", nil)
+}
+
+func (s *Server) managerLDAP(w http.ResponseWriter, r *http.Request) {
+	org, err := s.manager.Org(r.Context(), session(r).Org)
+	if err != nil {
+		s.renderSettings(w, r, "", err)
+		return
+	}
+	if u := strings.TrimSpace(r.FormValue("url")); u == "" {
+		org.LDAP = nil
+	} else {
+		l := manager.LDAP{URL: u, StartTLS: r.FormValue("starttls") != "", CA: strings.TrimSpace(r.FormValue("ca")), BindDN: strings.TrimSpace(r.FormValue("bind_dn")),
+			BindPassword: r.FormValue("bind_password"), BaseDN: strings.TrimSpace(r.FormValue("base_dn")), UserFilter: strings.TrimSpace(r.FormValue("user_filter")), GroupFilter: strings.TrimSpace(r.FormValue("group_filter"))}
+		if l.BindPassword == "" && org.LDAP != nil {
+			l.BindPassword = org.LDAP.BindPassword
+		}
+		if u, perr := url.Parse(l.URL); perr == nil {
+			err = netguard.CheckHost(r.Context(), u.Host)
+		}
+		if err == nil {
+			err = l.Test()
+		}
+		if err != nil {
+			s.renderSettings(w, r, "", fmt.Errorf("directory test failed: %w", err))
+			return
+		}
+		org.LDAP = &l
+	}
+	if err := s.manager.SaveOrg(r.Context(), org); err != nil {
+		s.renderSettings(w, r, "", err)
+		return
+	}
+	log.Printf("%s: updated directory sign-in for %s", session(r).User, org.ID)
+	s.renderSettings(w, r, "Directory sign-in saved.", nil)
 }
 
 func (s *Server) managerRenameOrg(w http.ResponseWriter, r *http.Request) {

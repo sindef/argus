@@ -36,7 +36,7 @@
       <label>Role <select name="role">{{range .Roles}}<option value="{{.}}">{{.}}</option>{{end}}</select></label>
     </div>
     <label>Scope <span class="help" title="Comma separated datacenters or datacenter/cluster. Empty means the whole organization.">?</span><input name="scopes" list="scope-names" placeholder="All"></label>
-    <label>SSO groups <span class="help" title="Comma separated group names from the identity provider's groups claim.">?</span><input name="sso" placeholder="argus-admins"></label>
+    <label>SSO / directory groups <span class="help" title="One per line: group names from the identity provider's groups claim, or directory groups by name (CN) or full DN.">?</span><textarea name="sso" rows="2" placeholder="argus-admins"></textarea></label>
     <div class="field">Members</div>
     {{with .Users}}<div class="table-wrap picks"><table><tbody>{{range .}}<tr><td><label class="check"><input type="checkbox" name="members" value="{{.Name}}"> {{.Name}}</label></td><td class="muted">{{.Role}}</td></tr>{{end}}</tbody></table></div>{{else}}<p class="muted">No local users.</p>{{end}}
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Save</button></div>

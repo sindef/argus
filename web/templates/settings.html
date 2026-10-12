@@ -19,6 +19,27 @@
       <div class="actions"><button class="btn primary" type="submit">Save</button></div>
     </form>
   </section>
+  <section class="pane" id="s-ldap" data-icon="users">
+    <header><h2>Directory (LDAP / AD)</h2></header>
+    <form method="post" action="/settings/ldap" class="form">
+      {{$l := .Org.LDAP}}
+      <div class="row">
+        <label>URL <span class="help" title="ldaps://dc.example.com, or ldap:// with StartTLS. Leave empty to turn directory sign-in off.">?</span><input name="url" placeholder="ldaps://dc.example.com" value="{{with $l}}{{.URL}}{{end}}"></label>
+        <label class="check"><input type="checkbox" name="starttls"{{with $l}}{{if .StartTLS}} checked{{end}}{{end}}> StartTLS</label>
+      </div>
+      <div class="row">
+        <label>Bind DN <input name="bind_dn" placeholder="CN=argus,OU=Service,DC=example,DC=com" value="{{with $l}}{{.BindDN}}{{end}}"></label>
+        <label>Bind password <input name="bind_password" type="password" autocomplete="new-password" placeholder="{{with $l}}{{if .BindPassword}}unchanged{{end}}{{end}}"></label>
+      </div>
+      <label>Base DN <input name="base_dn" placeholder="DC=example,DC=com" value="{{with $l}}{{.BaseDN}}{{end}}"></label>
+      <details><summary class="muted">Advanced</summary>
+        <label>User filter <span class="help" title="{user} is the sign-in name.">?</span><input name="user_filter" class="mono" placeholder="(|(sAMAccountName={user})(uid={user})(userPrincipalName={user}))" value="{{with $l}}{{.UserFilter}}{{end}}"></label>
+        <label>Group filter <span class="help" title="{dn} is the user's DN. For nested AD groups use (member:1.2.840.113556.1.4.1941:={dn}).">?</span><input name="group_filter" class="mono" placeholder="(|(member={dn})(uniqueMember={dn})(memberUid={user}))" value="{{with $l}}{{.GroupFilter}}{{end}}"></label>
+        <label>CA certificate (PEM) <span class="help" title="Only needed when the directory certificate is not publicly trusted.">?</span><textarea name="ca" rows="3" class="mono">{{with $l}}{{.CA}}{{end}}</textarea></label>
+      </details>
+      <div class="actions"><button class="btn primary" type="submit">Test and save</button></div>
+    </form>
+  </section>
   {{if .Super}}
   <section class="pane" id="s-migration" data-icon="network">
     <header><h2>Migration network</h2></header>

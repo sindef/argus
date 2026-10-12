@@ -96,7 +96,7 @@ func (s *Server) groupsPage(w http.ResponseWriter, r *http.Request) {
 	}
 	var rows []groupRow
 	for _, g := range gs {
-		rows = append(rows, groupRow{g, fill(map[string]any{"old": g.Name, "name": g.Name, "role": g.Role, "scopes": strings.Join(g.Scopes, ", "), "members": append([]string{}, g.Members...), "sso": strings.Join(g.SSO, ", ")})})
+		rows = append(rows, groupRow{g, fill(map[string]any{"old": g.Name, "name": g.Name, "role": g.Role, "scopes": strings.Join(g.Scopes, ", "), "members": append([]string{}, g.Members...), "sso": strings.Join(g.SSO, "\n")})})
 	}
 	local := slices.DeleteFunc(us, func(u auth.User) bool { return u.SSO })
 	s.render(w, r, "groups.html", "layout", map[string]any{"Nav": "user-groups", "Groups": rows, "Users": local, "Roles": auth.Roles, "Scopes": s.scopeNames(r), "Error": errText(err)})
@@ -105,9 +105,15 @@ func (s *Server) groupsPage(w http.ResponseWriter, r *http.Request) {
 func (s *Server) saveGroup(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	var sso []string
-	for _, g := range strings.Split(r.FormValue("sso"), ",") {
-		if g = strings.TrimSpace(g); g != "" {
-			sso = append(sso, g)
+	for _, line := range strings.Split(r.FormValue("sso"), "\n") {
+		parts := []string{line}
+		if !strings.Contains(line, "=") {
+			parts = strings.Split(line, ",")
+		}
+		for _, g := range parts {
+			if g = strings.TrimSpace(g); g != "" {
+				sso = append(sso, g)
+			}
 		}
 	}
 	g := auth.Group{Name: r.FormValue("name"), Role: auth.Role(r.FormValue("role")), Scopes: scopeList(r.FormValue("scopes")), Members: r.Form["members"], SSO: sso}

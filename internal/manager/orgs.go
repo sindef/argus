@@ -25,6 +25,7 @@ type Org struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	OIDC *OIDC  `json:"oidc,omitempty"`
+	LDAP *LDAP  `json:"ldap,omitempty"`
 }
 
 func (o Org) SSO() bool { return o.OIDC != nil && o.OIDC.Issuer != "" }
