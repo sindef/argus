@@ -50,6 +50,7 @@ type Server struct {
 	mux         *http.ServeMux
 	backups     backupState
 	schedSeen   time.Time
+	flr         flrState
 	certs       *tlscert.Holder
 	dataDir     string
 	esxi        esxiStreams
@@ -87,7 +88,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	}
 	s.version = readEnv(o.ReleaseFile)["KAIROS_VERSION"]
 	s.sso.m = map[string]ssoFlow{}
-	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html", "devices.html", "hostnet.html", "dashboard.html", "hostnets.html", "profile.html", "manager-images.html", "audit.html", "groups.html", "tokens.html", "firewall.html"} {
+	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html", "devices.html", "files.html", "hostnet.html", "dashboard.html", "hostnets.html", "profile.html", "manager-images.html", "audit.html", "groups.html", "tokens.html", "firewall.html"} {
 		t, err := template.New(p).Funcs(funcs).ParseFS(web.FS, "templates/layout.html", "templates/manager-nav.html", "templates/"+p)
 		if err != nil {
 			return nil, err
@@ -234,6 +235,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/backups/{op}", s.require(auth.Admin, s.apiVMBackupOp))
 	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/schedule/{op}", s.require(auth.Admin, s.apiScheduleOp))
 	s.hostAPIRoutes()
+	s.flrAPIRoutes()
 	s.cbtRoutes()
 	s.mux.HandleFunc("GET /api/host/network", s.require(auth.Admin, s.apiHostNetwork))
 	s.mux.HandleFunc("GET /api/host/status", s.require(auth.Admin, s.apiHostStatus))
@@ -397,6 +399,10 @@ var hostRoutes = []hostRouteDef{
 	{"POST /vms/{ns}/{name}/disks/{disk}/download", auth.Operator, auth.VMBackup, (*Server).downloadLink},
 	{"GET /vms/{ns}/{name}/disks/{disk}/download", auth.Operator, auth.VMBackup, (*Server).downloadDisk},
 	{"GET /vms/{ns}/{name}/export.ovf", auth.Operator, auth.VMBackup, (*Server).exportOVF},
+	{"GET /vms/{ns}/{name}/files", auth.Operator, auth.VMBackup, (*Server).filesPage},
+	{"POST /vms/{ns}/{name}/files", auth.Operator, auth.VMBackup, (*Server).filesStart},
+	{"GET /vms/{ns}/{name}/files/download", auth.Operator, auth.VMBackup, (*Server).filesDownload},
+	{"POST /vms/{ns}/{name}/files/close", auth.Operator, auth.VMBackup, (*Server).filesClose},
 }
 
 func (s *Server) hostRoute(hr hostRouteDef, h http.HandlerFunc) {

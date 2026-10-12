@@ -182,6 +182,7 @@ func (s *Server) storageTick() {
 	if _, err := s.hostd.SweepSnapshots(ctx, keep); err != nil {
 		log.Printf("storage cleanup: %v", err)
 	}
+	s.flrSweep(ctx)
 }
 
 func (s *Server) backupTick() {

@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -103,6 +105,39 @@ func NewServer() *Server {
 		reply(w, ch, err)
 	})
 	s.mux.HandleFunc("GET /zfs/read", zfsRead)
+	s.mux.HandleFunc("PUT /flr/{id}/{disk}", func(w http.ResponseWriter, r *http.Request) {
+		err := FLRLoad(r.Context(), r.PathValue("id"), r.PathValue("disk"), r.Body)
+		log.Printf("file restore %s %s: %v", r.PathValue("id"), r.PathValue("disk"), err)
+		reply(w, nil, err)
+	})
+	s.mux.HandleFunc("GET /flr/{id}", func(w http.ResponseWriter, r *http.Request) {
+		parts, err := FLRParts(r.PathValue("id"))
+		reply(w, parts, err)
+	})
+	s.mux.HandleFunc("GET /flr/{id}/ls", func(w http.ResponseWriter, r *http.Request) {
+		entries, err := FLRList(r.Context(), r.PathValue("id"), r.URL.Query().Get("part"), r.URL.Query().Get("path"))
+		reply(w, entries, err)
+	})
+	s.mux.HandleFunc("GET /flr/{id}/file", func(w http.ResponseWriter, r *http.Request) {
+		started := false
+		err := FLRCopy(r.Context(), r.PathValue("id"), r.URL.Query().Get("part"), r.URL.Query().Get("path"), func(size int64) io.Writer {
+			started = true
+			w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+			return w
+		})
+		if err != nil && !started {
+			reply(w, nil, err)
+		}
+	})
+	s.mux.HandleFunc("POST /flr/{id}/close", func(w http.ResponseWriter, r *http.Request) {
+		reply(w, nil, FLRClose(r.Context(), r.PathValue("id")))
+	})
+	s.mux.HandleFunc("POST /flr/sweep", func(w http.ResponseWriter, r *http.Request) {
+		if closed := FLRSweep(r.Context(), 2*time.Hour); len(closed) > 0 {
+			log.Printf("file restore sweep: %v", closed)
+		}
+		reply(w, nil, nil)
+	})
 	s.mux.HandleFunc("GET /zfs/volumes", func(w http.ResponseWriter, r *http.Request) {
 		vols, err := ZVols(r.Context(), r.URL.Query()["ds"])
 		reply(w, vols, err)

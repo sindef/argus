@@ -51,6 +51,7 @@ var funcs = template.FuncMap{
 	"picks":        func(disks any, field string) map[string]any { return map[string]any{"Disks": disks, "Field": field} },
 	"min100":       func(v int) int { return min(v, 100) },
 	"list":         func(v ...string) []string { return v },
+	"split":        strings.Split,
 	"rangeSeconds": func(r string) int64 { return int64(rangeDuration(r).Seconds()) },
 	"join":         strings.Join,
 	"dict": func(kv ...any) map[string]any {

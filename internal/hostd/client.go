@@ -91,6 +91,36 @@ func (c *Client) ZFSRead(ctx context.Context, ds, snap string, h http.Header) (*
 	return resp, nil
 }
 
+func (c *Client) FLRLoad(ctx context.Context, id, disk string, image io.Reader) error {
+	resp, err := c.stream(ctx, http.MethodPut, "/flr/"+id+"/"+disk, image)
+	if err == nil {
+		resp.Body.Close()
+	}
+	return err
+}
+
+func (c *Client) FLRParts(ctx context.Context, id string) ([]FLRPart, error) {
+	var out []FLRPart
+	return out, c.do(ctx, http.MethodGet, "/flr/"+id, nil, &out)
+}
+
+func (c *Client) FLRList(ctx context.Context, id, part, path string) ([]FLREntry, error) {
+	var out []FLREntry
+	return out, c.do(ctx, http.MethodGet, "/flr/"+id+"/ls?"+url.Values{"part": {part}, "path": {path}}.Encode(), nil, &out)
+}
+
+func (c *Client) FLRFile(ctx context.Context, id, part, path string) (*http.Response, error) {
+	return c.stream(ctx, http.MethodGet, "/flr/"+id+"/file?"+url.Values{"part": {part}, "path": {path}}.Encode(), nil)
+}
+
+func (c *Client) FLRClose(ctx context.Context, id string) error {
+	return c.do(ctx, http.MethodPost, "/flr/"+id+"/close", nil, nil)
+}
+
+func (c *Client) FLRSweep(ctx context.Context) error {
+	return c.do(ctx, http.MethodPost, "/flr/sweep", nil, nil)
+}
+
 func (c *Client) ZVols(ctx context.Context, datasets []string) (map[string]ZVol, error) {
 	var out map[string]ZVol
 	return out, c.do(ctx, http.MethodGet, "/zfs/volumes?"+url.Values{"ds": datasets}.Encode(), nil, &out)

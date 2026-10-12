@@ -395,7 +395,7 @@ func (s *Server) managerVM(w http.ResponseWriter, r *http.Request) {
 	case "backups":
 		var b VMBackups
 		err = n.Call(r.Context(), http.MethodGet, manager.APIPath("/api/vms/%s/%s/backups", ns, name), nil, &b)
-		data["Backups"] = map[string]any{"B": b, "P": fmt.Sprintf("/nodes/%s/vms/%s/%s", n.Name, ns, name), "Name": name, "CanOperate": data["CanOperate"]}
+		data["Backups"] = map[string]any{"B": b, "P": fmt.Sprintf("/nodes/%s/vms/%s/%s", n.Name, ns, name), "H": fmt.Sprintf("/hosts/%s/vms/%s/%s", n.Name, ns, name), "Name": name, "CanOperate": data["CanOperate"]}
 	}
 	data["Error"] = errText(err)
 	s.render(w, r, "manager-vm.html", "layout", data)

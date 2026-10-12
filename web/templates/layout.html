@@ -160,7 +160,7 @@
   <div class="table-wrap"><table>
     <thead><tr><th>Taken</th><th>Target</th><th>Size</th><th></th></tr></thead>
     <tbody>{{range $b.Backups}}<tr><td title="{{.Stamp}}">{{stamp .Stamp}}{{if not .Complete}} <span class="dot Warning" title="No completion manifest; the copy was interrupted">incomplete</span>{{end}}</td><td>{{.Target}}</td><td>{{bytes .Size}}</td>
-      <td class="row-actions">{{if $.CanOperate}}{{if .Complete}}<button class="link" data-dialog="restore-backup" data-fill='{"stamp":"{{.Stamp}}","store":"{{.Target}}"}'>Restore</button>{{end}}<button class="link danger" hx-post="{{$.P}}/backups/delete" hx-vals='{"stamp":"{{.Stamp}}","store":"{{.Target}}"}' hx-target="#flash" hx-confirm="Delete this backup from {{.Target}}?">Delete</button>{{end}}</td></tr>
+      <td class="row-actions">{{if $.CanOperate}}{{if .Complete}}<button class="link" hx-post="{{$.H}}/files" hx-vals='{"store":"{{.Target}}","stamp":"{{.Stamp}}"}' hx-target="#flash">Browse files</button><button class="link" data-dialog="restore-backup" data-fill='{"stamp":"{{.Stamp}}","store":"{{.Target}}"}'>Restore</button>{{end}}<button class="link danger" hx-post="{{$.P}}/backups/delete" hx-vals='{"stamp":"{{.Stamp}}","store":"{{.Target}}"}' hx-target="#flash" hx-confirm="Delete this backup from {{.Target}}?">Delete</button>{{end}}</td></tr>
     {{else}}<tr><td colspan="4" class="muted">{{if $b.Targets}}No backups yet.{{else}}Add a backup target in host settings.{{end}}</td></tr>{{end}}</tbody>
   </table></div>
 </div>

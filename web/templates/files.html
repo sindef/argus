@@ -1,0 +1,28 @@
+{{define "content"}}{{$base := printf "%s/vms/%s/%s/files" .Base .NS .Name}}{{$s := .S}}
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-download"/></svg>
+  <div><h1>Files in backup {{with $s.Stamp}}{{stamp .}}{{end}}</h1><div class="crumbs">{{.Name}}</div></div>
+  {{if $s.ID}}<div class="actions"><button class="btn" hx-post="{{$base}}/close" hx-vals='{"id":"{{$s.ID}}"}' hx-target="#flash">Close</button></div>{{end}}
+</div>
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+{{if eq $s.State "Unpacking"}}
+<div class="card" hx-get="{{$base}}?id={{$s.ID}}" hx-trigger="every 3s" hx-swap="none"><p class="muted">Unpacking the backup on the host. Large disks take a while.</p></div>
+{{else if eq $s.State "Failed"}}
+<p class="error">{{$s.Error}}</p>
+{{else if eq $s.State "Ready"}}
+<div class="card">
+  <div class="card-head"><h2>{{if .Part}}<a href="{{$base}}?id={{$s.ID}}">Volumes</a> / <a href="{{$base}}?id={{$s.ID}}&part={{.Part}}">{{.Part}}</a>{{$acc := ""}}{{range $seg := split .Path "/"}}{{if $seg}}{{$acc = printf "%s/%s" $acc $seg}} / <a href="{{$base}}?id={{$s.ID}}&part={{$.Part}}&path={{$acc}}">{{$seg}}</a>{{end}}{{end}}{{else}}Volumes{{end}}</h2><span class="help" title="Read-only view of the backup. Closed automatically after 2 hours.">?</span></div>
+  <div class="table-wrap"><table>
+  {{if .Part}}
+    <thead><tr><th>Name</th><th>Size</th><th>Modified</th></tr></thead>
+    <tbody>{{range .Entries}}{{$p := .Name}}{{with $.Path}}{{$p = printf "%s/%s" . $p}}{{end}}<tr>
+      <td>{{if .Dir}}{{template "icon" "chevron-right"}}<a href="{{$base}}?id={{$s.ID}}&part={{$.Part}}&path={{$p}}">{{.Name}}</a>{{else if .Link}}{{template "icon" "arrow-right-left"}}<span class="muted">{{.Name}}</span>{{else}}{{template "icon" "file-text"}}<a href="{{$base}}/download?id={{$s.ID}}&part={{$.Part}}&path={{$p}}" download>{{.Name}}</a>{{end}}</td>
+      <td>{{if not .Dir}}{{bytes .Size}}{{end}}</td><td>{{.Modified.Local.Format "2006-01-02 15:04"}}</td>
+    </tr>{{else}}<tr><td colspan="3" class="muted">Empty folder.</td></tr>{{end}}</tbody>
+  {{else}}
+    <tbody>{{range $s.Parts}}<tr><td>{{template "icon" "hard-drive"}}<a href="{{$base}}?id={{$s.ID}}&part={{.Name}}">{{.Name}}</a></td><td class="muted">{{.FS}}</td></tr>{{end}}</tbody>
+  {{end}}
+  </table></div>
+</div>
+{{end}}
+{{end}}

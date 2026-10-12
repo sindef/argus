@@ -115,7 +115,7 @@ func (s *Server) vmDrawer(w http.ResponseWriter, r *http.Request) {
 		data["Move"] = map[string]any{"P": "/vms/" + vm.Namespace + "/" + vm.Name, "Pools": pools}
 		data["PoolOf"] = poolNames(pools)
 	case "backups":
-		data["Backups"] = map[string]any{"B": s.vmBackupInfo(r.Context(), vm.Namespace, vm.Name), "P": "/vms/" + vm.Namespace + "/" + vm.Name, "Name": vm.Name, "CanOperate": data["CanOperate"]}
+		data["Backups"] = map[string]any{"B": s.vmBackupInfo(r.Context(), vm.Namespace, vm.Name), "P": "/vms/" + vm.Namespace + "/" + vm.Name, "H": "/vms/" + vm.Namespace + "/" + vm.Name, "Name": vm.Name, "CanOperate": data["CanOperate"]}
 	}
 	data["Error"] = errText(err)
 	s.render(w, r, "vms.html", "drawer", data)
