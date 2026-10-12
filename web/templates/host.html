@@ -42,7 +42,7 @@
   <div class="table-wrap"><table>
     <thead><tr><th>Name</th><th>Type</th><th>Location</th><th></th></tr></thead>
     <tbody>{{range $.Targets}}<tr><td>{{.Name}}</td><td>{{if eq .Kind "s3"}}S3{{else}}NFS{{end}}</td><td class="mono">{{.Where}}</td>
-      <td class="row-actions">{{if eq .Kind "s3"}}<button class="link" data-dialog="add-target" data-fill='{"name":"{{.Name}}","endpoint":"{{.Endpoint}}","region":"{{.Region}}","bucket":"{{.Bucket}}","prefix":"{{.Prefix}}","access_key":"{{.AccessKey}}"}'>Edit</button><button class="link danger" hx-post="/host/backup-targets/remove" hx-vals='{"name":"{{.Name}}"}' hx-target="#flash" hx-confirm="Remove backup target {{.Name}}? Backups already on it stay there.">Remove</button>{{end}}</td></tr>
+      <td class="row-actions">{{if eq .Kind "s3"}}<button class="link" data-dialog="add-target" data-fill='{"name":"{{.Name}}","endpoint":"{{.Endpoint}}","region":"{{.Region}}","bucket":"{{.Bucket}}","prefix":"{{.Prefix}}","access_key":"{{.AccessKey}}","lock_days":"{{.LockDays}}"}'>Edit</button><button class="link danger" hx-post="/host/backup-targets/remove" hx-vals='{"name":"{{.Name}}"}' hx-target="#flash" hx-confirm="Remove backup target {{.Name}}? Backups already on it stay there.">Remove</button>{{end}}</td></tr>
     {{else}}<tr><td colspan="4" class="muted">No backup targets.</td></tr>{{end}}</tbody>
   </table></div>
   <h3>NFS <span class="help" title="NFS export for VM backups, shown above as nfs. Tested for write access before saving. Leave empty to remove.">?</span></h3>
@@ -82,6 +82,10 @@
     <div class="row">
       <label>Access key <input name="access_key" autocomplete="off" required></label>
       <label>Secret key <input name="secret_key" type="password" autocomplete="new-password" placeholder="unchanged when editing"></label>
+    </div>
+    <div class="row">
+      <label>Encryption passphrase <span class="help" title="Backups are encrypted with AES-256-GCM before upload. Keep the passphrase safe: backups cannot be restored without it, and changing it leaves older backups needing the old one.">?</span><input name="passphrase" type="password" autocomplete="new-password" placeholder="none, or unchanged when editing"></label>
+      <label>Immutable for (days) <span class="help" title="S3 Object Lock in compliance mode. The bucket must have Object Lock enabled. Locked backups cannot be deleted or overwritten until the period ends.">?</span><input name="lock_days" type="number" min="0" max="3650" value="0" class="num"></label>
     </div>
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Test and save</button></div>
   </form>

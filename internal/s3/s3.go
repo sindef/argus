@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/hmac"
+	"crypto/md5"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/xml"
 	"errors"
@@ -29,6 +31,7 @@ type Client struct {
 	Bucket    string
 	AccessKey string
 	SecretKey string
+	LockDays  int
 	HTTP      *http.Client
 }
 
@@ -86,9 +89,11 @@ func (c *Client) sign(req *http.Request, payloadHash string) {
 	amzDate, day := now.Format("20060102T150405Z"), now.Format("20060102")
 	req.Header.Set("x-amz-date", amzDate)
 	req.Header.Set("x-amz-content-sha256", payloadHash)
-	names := []string{"host", "x-amz-content-sha256", "x-amz-date"}
-	if req.Header.Get("Content-Type") != "" {
-		names = append(names, "content-type")
+	names := []string{"host"}
+	for k := range req.Header {
+		if lk := strings.ToLower(k); strings.HasPrefix(lk, "x-amz-") || lk == "content-type" || lk == "content-md5" {
+			names = append(names, lk)
+		}
 	}
 	slices.Sort(names)
 	var canonHeaders strings.Builder
@@ -121,6 +126,14 @@ func (c *Client) do(ctx context.Context, method, key string, q url.Values, body 
 	req.ContentLength = int64(len(body))
 	if ctype != "" {
 		req.Header.Set("Content-Type", ctype)
+	}
+	if method == http.MethodPut || method == http.MethodPost && body != nil {
+		sum := md5.Sum(body)
+		req.Header.Set("Content-MD5", base64.StdEncoding.EncodeToString(sum[:]))
+	}
+	if c.LockDays > 0 && (method == http.MethodPut && q.Get("partNumber") == "" || method == http.MethodPost && q.Has("uploads")) {
+		req.Header.Set("x-amz-object-lock-mode", "COMPLIANCE")
+		req.Header.Set("x-amz-object-lock-retain-until-date", time.Now().UTC().AddDate(0, 0, c.LockDays).Format(time.RFC3339))
 	}
 	sum := sha256.Sum256(body)
 	c.sign(req, hex.EncodeToString(sum[:]))

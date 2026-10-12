@@ -17,6 +17,7 @@ import (
 
 	"argus/internal/hostd"
 	"argus/internal/s3"
+	"argus/internal/sealed"
 )
 
 const targetsKey = "argus-backup-targets"
@@ -24,14 +25,16 @@ const targetsKey = "argus-backup-targets"
 var stampRE = regexp.MustCompile(`^[0-9]{8}-[0-9]{6}$`)
 
 type BackupTarget struct {
-	Name      string `json:"name"`
-	Kind      string `json:"kind"`
-	Endpoint  string `json:"endpoint"`
-	Region    string `json:"region,omitempty"`
-	Bucket    string `json:"bucket,omitempty"`
-	Prefix    string `json:"prefix,omitempty"`
-	AccessKey string `json:"accessKey,omitempty"`
-	SecretKey string `json:"secretKey,omitempty"`
+	Name       string `json:"name"`
+	Kind       string `json:"kind"`
+	Endpoint   string `json:"endpoint"`
+	Region     string `json:"region,omitempty"`
+	Bucket     string `json:"bucket,omitempty"`
+	Prefix     string `json:"prefix,omitempty"`
+	AccessKey  string `json:"accessKey,omitempty"`
+	SecretKey  string `json:"secretKey,omitempty"`
+	Passphrase string `json:"passphrase,omitempty"`
+	LockDays   int    `json:"lockDays,omitempty"`
 }
 
 func (t BackupTarget) Where() string {
@@ -84,9 +87,45 @@ func (t BackupTarget) open(h *hostd.Client) backupStore {
 		if prefix != "" {
 			prefix += "/"
 		}
-		return s3Store{c: &s3.Client{Endpoint: t.Endpoint, Region: t.Region, Bucket: t.Bucket, AccessKey: t.AccessKey, SecretKey: t.SecretKey}, prefix: prefix}
+		var st backupStore = s3Store{c: &s3.Client{Endpoint: t.Endpoint, Region: t.Region, Bucket: t.Bucket, AccessKey: t.AccessKey, SecretKey: t.SecretKey, LockDays: t.LockDays}, prefix: prefix}
+		if t.Passphrase != "" {
+			st = encryptedStore{st, t.Passphrase}
+		}
+		return st
 	}
 	return hostdStore{h}
+}
+
+type encryptedStore struct {
+	backupStore
+	passphrase string
+}
+
+func (e encryptedStore) Put(ctx context.Context, rel string, r io.Reader) error {
+	pr, pw := io.Pipe()
+	go func() { pw.CloseWithError(sealed.Encrypt(pw, r, e.passphrase)) }()
+	err := e.backupStore.Put(ctx, rel, pr)
+	pr.CloseWithError(err)
+	return err
+}
+
+func (e encryptedStore) Get(ctx context.Context, rel string) (io.ReadCloser, int64, error) {
+	body, size, err := e.backupStore.Get(ctx, rel)
+	if err != nil {
+		return nil, 0, err
+	}
+	dec, encrypted, err := sealed.Decrypt(body, e.passphrase)
+	if err != nil {
+		body.Close()
+		return nil, 0, err
+	}
+	if encrypted {
+		size = sealed.PlainSize(size)
+	}
+	return struct {
+		io.Reader
+		io.Closer
+	}{dec, body}, size, nil
 }
 
 func (s *Server) saveTarget(ctx context.Context, t BackupTarget, remove bool) error {
@@ -114,11 +153,19 @@ func (s *Server) saveTarget(ctx context.Context, t BackupTarget, remove bool) er
 		if i >= 0 && t.SecretKey == "" {
 			t.SecretKey = targets[i].SecretKey
 		}
+		if i >= 0 && t.Passphrase == "" {
+			t.Passphrase = targets[i].Passphrase
+		}
+		if t.LockDays < 0 || t.LockDays > 3650 {
+			return errors.New("immutability must be 0-3650 days")
+		}
 		if t.SecretKey == "" {
 			return errors.New("secret key is required")
 		}
 		probe := ".argus-probe-" + newToken()[:12]
-		st := t.open(nil).(s3Store)
+		probeTarget := t
+		probeTarget.Passphrase, probeTarget.LockDays = "", 0
+		st := probeTarget.open(nil).(s3Store)
 		if err := st.c.Put(ctx, st.prefix+probe, bytes.NewReader([]byte("ok"))); err != nil {
 			return fmt.Errorf("cannot write to the bucket: %w", err)
 		}
@@ -218,6 +265,10 @@ func manifestOf(ctx context.Context, st backupStore, rel string) (hostd.Manifest
 	}
 	err = json.NewDecoder(io.LimitReader(body, 1<<20)).Decode(&man)
 	body.Close()
+	var syntax *json.SyntaxError
+	if err != nil && !errors.As(err, &syntax) {
+		return man, err
+	}
 	if err != nil || len(man.Files) == 0 {
 		return man, errors.New("backup manifest is unreadable")
 	}

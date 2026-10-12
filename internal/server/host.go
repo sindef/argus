@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -178,7 +179,7 @@ func (s *Server) renderHost(w http.ResponseWriter, r *http.Request, notice strin
 	}
 	if ts, terr := s.backupTargets(r.Context()); terr == nil {
 		for i := range ts {
-			ts[i].SecretKey = ""
+			ts[i].SecretKey, ts[i].Passphrase = "", ""
 		}
 		data["Targets"] = ts
 	}
@@ -357,7 +358,8 @@ func formFile(r *http.Request, name string) ([]byte, error) {
 
 func (s *Server) backupTargetForm(w http.ResponseWriter, r *http.Request) {
 	t := BackupTarget{Name: strings.TrimSpace(r.FormValue("name")), Kind: "s3", Endpoint: strings.TrimSpace(r.FormValue("endpoint")), Region: strings.TrimSpace(r.FormValue("region")),
-		Bucket: strings.TrimSpace(r.FormValue("bucket")), Prefix: strings.Trim(strings.TrimSpace(r.FormValue("prefix")), "/"), AccessKey: strings.TrimSpace(r.FormValue("access_key")), SecretKey: r.FormValue("secret_key")}
+		Bucket: strings.TrimSpace(r.FormValue("bucket")), Prefix: strings.Trim(strings.TrimSpace(r.FormValue("prefix")), "/"), AccessKey: strings.TrimSpace(r.FormValue("access_key")), SecretKey: r.FormValue("secret_key"), Passphrase: r.FormValue("passphrase")}
+	t.LockDays, _ = strconv.Atoi(r.FormValue("lock_days"))
 	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
 	defer cancel()
 	if err := s.saveTarget(ctx, t, r.PathValue("op") == "remove"); err != nil {
@@ -375,7 +377,7 @@ func (s *Server) apiBackupTargets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for i := range ts {
-		ts[i].SecretKey = ""
+		ts[i].SecretKey, ts[i].Passphrase = "", ""
 	}
 	writeJSON(w, ts)
 }
