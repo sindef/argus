@@ -79,7 +79,7 @@ func (n Node) Stream(ctx context.Context, url string, h http.Header) (*http.Resp
 	for k, v := range h {
 		req.Header[k] = v
 	}
-	resp, err := (&http.Client{Transport: n.client().Transport, CheckRedirect: n.client().CheckRedirect}).Do(req)
+	resp, err := n.streaming().Do(req)
 	if err == nil && resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
 		return nil, fmt.Errorf("%s: %s", n.Name, resp.Status)

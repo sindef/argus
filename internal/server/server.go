@@ -250,6 +250,11 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("GET /api/probe", s.require(auth.Admin, s.apiProbe))
 	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/ha", s.require(auth.Admin, s.apiSetHA))
 	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/replica/{op}", s.require(auth.Admin, s.apiReplica))
+	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/zfs", s.require(auth.Admin, s.apiZFSDisks))
+	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/zfs/snapshot", s.require(auth.Admin, s.apiZFSSnapshot))
+	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/zfs/prune", s.require(auth.Admin, s.apiZFSPrune))
+	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/zfs/send", s.require(auth.Admin, s.apiZFSSend))
+	s.mux.HandleFunc("PUT /api/vms/{ns}/{name}/zfs/recv", s.require(auth.Admin, s.apiZFSRecv))
 	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/snapshot-export", s.require(auth.Admin, s.apiSnapshotExport))
 	s.mux.HandleFunc("GET /api/kubevirt-ca", s.require(auth.Admin, s.apiKubeVirtCA))
 	s.mux.HandleFunc("POST /api/kubevirt-external-ca", s.require(auth.Admin, s.apiExternalCA))
@@ -311,7 +316,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "cross-origin request refused", http.StatusForbidden)
 		return
 	}
-	if ct := r.Header.Get("Content-Type"); r.Body != nil && !strings.HasPrefix(ct, "multipart/") {
+	if ct := r.Header.Get("Content-Type"); r.Body != nil && !strings.HasPrefix(ct, "multipart/") && !strings.HasSuffix(r.URL.Path, "/zfs/recv") {
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	}
 	s.mux.ServeHTTP(w, r)

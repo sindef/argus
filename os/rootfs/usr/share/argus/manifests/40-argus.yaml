@@ -27,7 +27,7 @@ rules:
     resources: [virtualmachineinstances/vnc, virtualmachineinstances/console]
     verbs: [get]
   - apiGroups: [subresources.kubevirt.io]
-    resources: [virtualmachineinstances/pause, virtualmachineinstances/unpause]
+    resources: [virtualmachineinstances/pause, virtualmachineinstances/unpause, virtualmachineinstances/freeze, virtualmachineinstances/unfreeze]
     verbs: [update]
   - apiGroups: [clone.kubevirt.io]
     resources: [virtualmachineclones]

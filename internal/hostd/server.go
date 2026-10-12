@@ -54,6 +54,47 @@ func NewServer() *Server {
 		}
 		reply(w, nil, err)
 	})
+	s.mux.HandleFunc("GET /zfs/snapshots", func(w http.ResponseWriter, r *http.Request) {
+		ds := r.URL.Query()["ds"]
+		err := checkDatasets(ds)
+		out := map[string][]string{}
+		for _, d := range ds {
+			if err == nil {
+				out[d], err = zfsSnapshots(r.Context(), d)
+			}
+		}
+		reply(w, out, err)
+	})
+	s.mux.HandleFunc("POST /zfs/snapshot", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Datasets []string
+			Snap     string
+		}
+		err := decode(r, &req)
+		if err == nil {
+			err = checkDatasets(req.Datasets)
+		}
+		if err == nil && !validZSnap.MatchString(req.Snap) {
+			err = fmt.Errorf("invalid snapshot %q", req.Snap)
+		}
+		if err == nil {
+			err = zfsSnapshot(r.Context(), req.Datasets, req.Snap)
+		}
+		reply(w, nil, err)
+	})
+	s.mux.HandleFunc("POST /zfs/prune", func(w http.ResponseWriter, r *http.Request) {
+		var req struct{ Datasets, Keep []string }
+		err := decode(r, &req)
+		if err == nil {
+			err = checkDatasets(req.Datasets)
+		}
+		if err == nil {
+			err = zfsPrune(r.Context(), req.Datasets, req.Keep)
+		}
+		reply(w, nil, err)
+	})
+	s.mux.HandleFunc("GET /zfs/send", zfsSend)
+	s.mux.HandleFunc("PUT /zfs/recv", zfsRecv)
 	s.mux.HandleFunc("GET /settings", func(w http.ResponseWriter, r *http.Request) { reply(w, readSettings(), nil) })
 	s.mux.HandleFunc("POST /settings", s.locked(func(w http.ResponseWriter, r *http.Request) {
 		var u SettingsUpdate

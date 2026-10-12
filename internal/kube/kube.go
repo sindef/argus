@@ -276,8 +276,11 @@ func (c *Client) Power(ctx context.Context, ns, name, action string) error {
 	if action == "pause" || action == "unpause" {
 		resource = "virtualmachineinstances"
 	}
-	u := c.cfg.Host + subresourcePath(ns, resource, name, action)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, u, bytes.NewBufferString("{}"))
+	return c.subresource(ctx, ns, resource, name, action, "{}")
+}
+
+func (c *Client) subresource(ctx context.Context, ns, resource, name, sub, body string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.cfg.Host+subresourcePath(ns, resource, name, sub), bytes.NewBufferString(body))
 	if err != nil {
 		return err
 	}
@@ -293,7 +296,7 @@ func (c *Client) Power(ctx context.Context, ns, name, action string) error {
 		if st.Message == "" {
 			st.Message = resp.Status
 		}
-		return fmt.Errorf("%s %s: %s", action, name, st.Message)
+		return fmt.Errorf("%s %s: %s", sub, name, st.Message)
 	}
 	return nil
 }

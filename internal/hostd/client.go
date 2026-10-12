@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -29,21 +30,61 @@ func NewClient(socket, nodeIP string) *Client {
 }
 
 func (c *Client) PutBackupFile(ctx context.Context, rel string, body io.Reader) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, "http://hostd/backup/files/"+rel, body)
+	resp, err := c.stream(ctx, http.MethodPut, "/backup/files/"+rel, body)
+	if err == nil {
+		resp.Body.Close()
+	}
+	return err
+}
+
+func (c *Client) stream(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, "http://hostd"+path, body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	resp, err := c.raw.Do(req)
 	if err != nil {
-		return fmt.Errorf("host helper unavailable: %w", err)
+		return nil, fmt.Errorf("host helper unavailable: %w", err)
 	}
-	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
+		defer resp.Body.Close()
 		var e struct{ Error string }
 		json.NewDecoder(resp.Body).Decode(&e)
-		return errors.New(e.Error)
+		if e.Error == "" {
+			e.Error = resp.Status
+		}
+		return nil, errors.New(e.Error)
 	}
-	return nil
+	return resp, nil
+}
+
+func (c *Client) ZFSSnapshots(ctx context.Context, datasets []string) (map[string][]string, error) {
+	var out map[string][]string
+	return out, c.do(ctx, http.MethodGet, "/zfs/snapshots?"+url.Values{"ds": datasets}.Encode(), nil, &out)
+}
+
+func (c *Client) ZFSSnapshot(ctx context.Context, datasets []string, snap string) error {
+	return c.do(ctx, http.MethodPost, "/zfs/snapshot", map[string]any{"datasets": datasets, "snap": snap}, nil)
+}
+
+func (c *Client) ZFSPrune(ctx context.Context, datasets, keep []string) error {
+	return c.do(ctx, http.MethodPost, "/zfs/prune", map[string]any{"datasets": datasets, "keep": keep}, nil)
+}
+
+func (c *Client) ZFSSend(ctx context.Context, ds, snap, from string) (*http.Response, error) {
+	return c.stream(ctx, http.MethodGet, "/zfs/send?"+url.Values{"ds": {ds}, "snap": {snap}, "from": {from}}.Encode(), nil)
+}
+
+func (c *Client) ZFSRecv(ctx context.Context, ds string, full bool, body io.Reader) error {
+	q := url.Values{"ds": {ds}}
+	if full {
+		q.Set("full", "1")
+	}
+	resp, err := c.stream(ctx, http.MethodPut, "/zfs/recv?"+q.Encode(), body)
+	if err == nil {
+		resp.Body.Close()
+	}
+	return err
 }
 
 func (c *Client) GetBackupFile(ctx context.Context, rel string) (*http.Response, error) {

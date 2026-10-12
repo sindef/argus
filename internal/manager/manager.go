@@ -340,6 +340,33 @@ func (n Node) Proxy(ctx context.Context, method, path string, body io.Reader, h 
 	return n.client().Do(req)
 }
 
+func (n Node) streaming() *http.Client {
+	return &http.Client{Transport: n.client().Transport, CheckRedirect: n.client().CheckRedirect}
+}
+
+func (n Node) open(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, n.URL+path, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+n.Token)
+	req.Header.Set("Content-Type", "application/octet-stream")
+	resp, err := n.streaming().Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 300 {
+		defer resp.Body.Close()
+		var e struct{ Error string }
+		json.NewDecoder(resp.Body).Decode(&e)
+		if e.Error == "" {
+			e.Error = resp.Status
+		}
+		return nil, fmt.Errorf("%s: %s", n.Name, e.Error)
+	}
+	return resp, nil
+}
+
 func (n Node) Info(ctx context.Context) (NodeInfo, error) {
 	var info NodeInfo
 	return info, n.do(ctx, http.MethodGet, "/api/node", nil, &info)

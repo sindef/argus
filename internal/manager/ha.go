@@ -367,16 +367,22 @@ func (c *Manager) sync(ctx context.Context, p Protected) error {
 	if err != nil {
 		return err
 	}
+	vms, err := replica.VMs(ctx)
+	if err != nil {
+		return err
+	}
+	exists := slices.ContainsFunc(vms, func(v kube.VM) bool { return v.Name == p.VM })
+	if exists {
+		if err := zsync(ctx, p.VM, owner, replica); !errors.Is(err, errNoZFS) {
+			return err
+		}
+	}
 	var ex kube.Export
 	if err := owner.do(ctx, http.MethodPost, vmPath(p.VM, "snapshot-export"), map[string]string{"baseURL": owner.URL}, &ex); err != nil {
 		return err
 	}
 	defer owner.do(context.Background(), http.MethodPost, vmPath(p.VM, "unexport"), nil, nil)
-	vms, err := replica.VMs(ctx)
-	if err != nil {
-		return err
-	}
-	if !slices.ContainsFunc(vms, func(v kube.VM) bool { return v.Name == p.VM }) {
+	if !exists {
 		return c.firstReplica(ctx, p, replica, ex)
 	}
 	var mapping map[string]string
