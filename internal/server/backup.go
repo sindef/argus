@@ -346,15 +346,7 @@ func (s *Server) copyDisk(ctx context.Context, st backupStore, ns, name, dv, tok
 	if err != nil {
 		return mf, err
 	}
-	pool := x509.NewCertPool()
-	pool.AppendCertsFromPEM([]byte(cert))
-	hc := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}, ResponseHeaderTimeout: time.Minute}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src, nil)
-	if err != nil {
-		return mf, err
-	}
-	req.Header.Set("x-kubevirt-export-token", token)
-	resp, err := hc.Do(req)
+	resp, err := openExport(ctx, src, cert, token)
 	if err != nil {
 		return mf, err
 	}
@@ -468,21 +460,10 @@ func (s *Server) watchRestore(token string, job restoreJob) {
 	defer s.untrackRestore(token)
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
 	defer cancel()
-	failed := ""
-	for ctx.Err() == nil {
-		disks, err := s.kube.DiskStatus(ctx, job.Namespace, job.Target)
-		done := err == nil && len(disks) > 0
-		for _, d := range disks {
-			if d.Phase == "Failed" {
-				failed = d.Name
-			}
-			done = done && (d.Phase == "Succeeded" || d.Phase == "Failed")
-		}
-		if done {
-			break
-		}
-		time.Sleep(10 * time.Second)
-	}
+	failed, _ := kube.WaitDisks(ctx, 10*time.Second, func(ctx context.Context) ([]kube.DiskStatus, error) {
+		disks, _ := s.kube.DiskStatus(ctx, job.Namespace, job.Target)
+		return disks, ctx.Err()
+	}, nil)
 	s.kube.FinishImport(context.Background(), job.Namespace, job.Target)
 	switch {
 	case failed != "":
@@ -739,12 +720,7 @@ func (s *Server) streamDisk(w http.ResponseWriter, r *http.Request, ns, name, di
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	pool := x509.NewCertPool()
-	pool.AppendCertsFromPEM([]byte(cert))
-	hc := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}, ResponseHeaderTimeout: time.Minute}}
-	req, _ := http.NewRequestWithContext(r.Context(), http.MethodGet, src, nil)
-	req.Header.Set("x-kubevirt-export-token", ex.Token)
-	resp, err := hc.Do(req)
+	resp, err := openExport(r.Context(), src, cert, ex.Token)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
@@ -761,4 +737,16 @@ func (s *Server) streamDisk(w http.ResponseWriter, r *http.Request, ns, name, di
 	}
 	copied, _ = io.Copy(w, resp.Body)
 	log.Printf("%s: downloaded %s/%s disk %s (%d bytes)", session(r).User, ns, name, disk, copied)
+}
+
+func openExport(ctx context.Context, src, ca, token string) (*http.Response, error) {
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM([]byte(ca))
+	hc := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}, ResponseHeaderTimeout: time.Minute}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("x-kubevirt-export-token", token)
+	return hc.Do(req)
 }

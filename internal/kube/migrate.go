@@ -346,3 +346,43 @@ func ValidateRestoreSpec(spec obj) error {
 	}
 	return nil
 }
+
+func WaitDisks(ctx context.Context, every time.Duration, list func(context.Context) ([]DiskStatus, error), progress func([]DiskStatus)) (string, error) {
+	for {
+		disks, err := list(ctx)
+		if err != nil {
+			return "", err
+		}
+		if len(disks) > 0 {
+			done := true
+			for _, d := range disks {
+				if d.Phase == "Failed" {
+					return d.Name, nil
+				}
+				done = done && d.Phase == "Succeeded"
+			}
+			if done {
+				return "", nil
+			}
+		}
+		if progress != nil {
+			progress(disks)
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(every):
+		}
+	}
+}
+
+func (c *Client) DataVolumes(ns string, names ...string) func(context.Context) ([]DiskStatus, error) {
+	return func(ctx context.Context) ([]DiskStatus, error) {
+		var out []DiskStatus
+		for _, n := range names {
+			phase, _ := c.DataVolumePhase(ctx, ns, n)
+			out = append(out, DiskStatus{Name: n, Phase: phase})
+		}
+		return out, nil
+	}
+}

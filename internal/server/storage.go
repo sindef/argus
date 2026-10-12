@@ -194,20 +194,15 @@ func (s *Server) moveDisk(ctx context.Context, ns, name, disk, pool string) erro
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
 		defer cancel()
-		for ctx.Err() == nil {
-			phase, err := s.kube.DataVolumePhase(ctx, ns, moved)
-			switch {
-			case err == nil && phase == "Succeeded":
-				if err := s.kube.DeleteDataVolume(ctx, ns, old); err != nil {
-					log.Printf("move disk %s/%s: delete %s: %v", name, disk, old, err)
-				}
-				log.Printf("move disk %s/%s to %s: done", name, disk, pool)
-				return
-			case err == nil && phase == "Failed":
-				log.Printf("move disk %s/%s to %s: copy failed, %s kept", name, disk, pool, old)
-				return
+		failed, err := kube.WaitDisks(ctx, 10*time.Second, s.kube.DataVolumes(ns, moved), nil)
+		switch {
+		case failed != "":
+			log.Printf("move disk %s/%s to %s: copy failed, %s kept", name, disk, pool, old)
+		case err == nil:
+			if err := s.kube.DeleteDataVolume(ctx, ns, old); err != nil {
+				log.Printf("move disk %s/%s: delete %s: %v", name, disk, old, err)
 			}
-			time.Sleep(10 * time.Second)
+			log.Printf("move disk %s/%s to %s: done", name, disk, pool)
 		}
 	}()
 	return nil

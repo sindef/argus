@@ -372,26 +372,12 @@ func (c *Manager) sync(ctx context.Context, p Protected) error {
 		replica.do(cctx, http.MethodPost, vmPath(p.VM, "replica/abort"), map[string]any{"mapping": mapping}, nil)
 		return cause
 	}
-	for {
-		var disks []kube.DiskStatus
-		if err := replica.do(ctx, http.MethodPost, vmPath(p.VM, "replica/status"), map[string]any{"mapping": mapping}, &disks); err != nil {
-			return abort(err)
-		}
-		done := true
-		for _, d := range disks {
-			if d.Phase == "Failed" {
-				return abort(fmt.Errorf("disk %s failed to copy; previous replica kept", d.Name))
-			}
-			done = done && d.Phase == "Succeeded"
-		}
-		if done {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			return abort(ctx.Err())
-		case <-time.After(5 * time.Second):
-		}
+	failed, err := kube.WaitDisks(ctx, 5*time.Second, nodeDisks(replica, vmPath(p.VM, "replica/status"), map[string]any{"mapping": mapping}), nil)
+	if failed != "" {
+		err = fmt.Errorf("disk %s failed to copy; previous replica kept", failed)
+	}
+	if err != nil {
+		return abort(err)
 	}
 	if err := replica.do(ctx, http.MethodPost, vmPath(p.VM, "replica/swap"), map[string]any{"export": ex, "mapping": mapping}, nil); err != nil {
 		return abort(err)
@@ -407,27 +393,11 @@ func (c *Manager) firstReplica(ctx context.Context, p Protected, replica Node, e
 	if err := replica.do(ctx, http.MethodPost, vmPath(p.VM, "ha"), map[string]bool{"enabled": true}, nil); err != nil {
 		return err
 	}
-	for {
-		var disks []kube.DiskStatus
-		if err := replica.do(ctx, http.MethodGet, vmPath(p.VM, "disks"), nil, &disks); err != nil {
-			return err
-		}
-		done := true
-		for _, d := range disks {
-			if d.Phase == "Failed" {
-				return fmt.Errorf("disk %s failed to copy", d.Name)
-			}
-			done = done && d.Phase == "Succeeded"
-		}
-		if done {
-			return nil
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(5 * time.Second):
-		}
+	failed, err := kube.WaitDisks(ctx, 5*time.Second, nodeDisks(replica, vmPath(p.VM, "disks"), nil), nil)
+	if failed != "" {
+		return fmt.Errorf("disk %s failed to copy", failed)
 	}
+	return err
 }
 
 func recovering(name string, fn func()) {

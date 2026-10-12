@@ -403,18 +403,8 @@ func (s *Server) importESXi(ctx context.Context, f func(string) string) (string,
 		defer cleanup()
 		ctx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
 		defer cancel()
-		for ctx.Err() == nil {
-			done := true
-			for _, dv := range dvs {
-				phase, _ := s.kube.DataVolumePhase(ctx, kube.Namespace, dv)
-				done = done && (phase == "Succeeded" || phase == "Failed")
-			}
-			if done {
-				log.Printf("import of %s from ESXi %s finished", v.Name, e.Host)
-				return
-			}
-			time.Sleep(15 * time.Second)
-		}
+		failed, err := kube.WaitDisks(ctx, 15*time.Second, s.kube.DataVolumes(kube.Namespace, dvs...), nil)
+		log.Printf("import of %s from ESXi %s finished (failed disk %q): %v", v.Name, e.Host, failed, err)
 	}()
 	return v.Name, nil
 }

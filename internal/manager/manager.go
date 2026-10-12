@@ -512,36 +512,38 @@ func (c *Manager) importAndWait(ctx context.Context, j *Job, dst Node, name, poo
 	return dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, name, "imported"), nil, nil)
 }
 
-func (c *Manager) waitDisks(ctx context.Context, j *Job, dst Node, name string) error {
-	for {
+func nodeDisks(n Node, path string, body any) func(context.Context) ([]kube.DiskStatus, error) {
+	return func(ctx context.Context) ([]kube.DiskStatus, error) {
 		var disks []kube.DiskStatus
-		if err := dst.do(ctx, http.MethodGet, vmPathIn(kube.Namespace, name, "disks"), nil, &disks); err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			c.update(j, "Copying (waiting for "+dst.Name+")", false, false)
-		} else {
-			done, progress := len(disks) > 0, []string{}
-			for _, d := range disks {
-				if d.Phase == "Failed" {
-					return fmt.Errorf("disk %s failed to copy", d.Name)
-				}
-				if d.Phase != "Succeeded" {
-					done = false
-				}
-				progress = append(progress, d.Name+" "+d.Progress)
-			}
-			if done {
-				return nil
-			}
-			c.update(j, "Copying "+strings.Join(progress, ", "), false, false)
+		method := http.MethodGet
+		if body != nil {
+			method = http.MethodPost
 		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(5 * time.Second):
-		}
+		return disks, n.do(ctx, method, path, body, &disks)
 	}
+}
+
+func (c *Manager) waitDisks(ctx context.Context, j *Job, dst Node, name string) error {
+	fetch := nodeDisks(dst, vmPathIn(kube.Namespace, name, "disks"), nil)
+	list := func(ctx context.Context) ([]kube.DiskStatus, error) {
+		disks, err := fetch(ctx)
+		if err != nil && ctx.Err() == nil {
+			c.update(j, "Copying (waiting for "+dst.Name+")", false, false)
+			return nil, nil
+		}
+		return disks, err
+	}
+	failed, err := kube.WaitDisks(ctx, 5*time.Second, list, func(disks []kube.DiskStatus) {
+		var progress []string
+		for _, d := range disks {
+			progress = append(progress, d.Name+" "+d.Progress)
+		}
+		c.update(j, "Copying "+strings.Join(progress, ", "), false, false)
+	})
+	if failed != "" {
+		return fmt.Errorf("disk %s failed to copy", failed)
+	}
+	return err
 }
 
 func (c *Manager) migrate(ctx context.Context, j *Job, src, dst Node, ns, vm string) error {

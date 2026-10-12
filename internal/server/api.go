@@ -2,8 +2,6 @@ package server
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -184,16 +182,7 @@ func (s *Server) exportPassthrough(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	pool := x509.NewCertPool()
-	pool.AppendCertsFromPEM([]byte(ca))
-	hc := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}, ResponseHeaderTimeout: time.Minute}}
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, src, nil)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	req.Header.Set("x-kubevirt-export-token", token)
-	resp, err := hc.Do(req)
+	resp, err := openExport(r.Context(), src, ca, token)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
