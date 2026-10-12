@@ -68,7 +68,16 @@
 </section>
 <section class="pane" id="s-switches" data-icon="split">
   <header><h2>Virtual switches</h2></header>
-  <dl class="kv">{{range $h, $b := .Bridges}}<dt>{{$h}}</dt><dd class="mono">{{range $b}}{{.}} {{end}}</dd>{{else}}<dd class="muted">No reachable hosts.</dd>{{end}}</dl>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Virtual switch</th><th>Uplinks</th><th>Networks</th></tr></thead>
+  <tbody>{{range .Switches}}<tr>
+    <td>{{template "icon" "split"}}<span class="mono">{{.Name}}</span>{{with .Missing}}<div><span class="dot Warning" title="Networks on this switch cannot be applied to these hosts">Missing on {{range $i, $h := .}}{{if $i}}, {{end}}{{$h}}{{end}}</span></div>{{end}}</td>
+    <td>{{range .Uplinks}}<div>{{.Host}} <span class="mono muted">{{range .Ports}}{{.}} {{else}}no uplink{{end}}</span></div>{{end}}</td>
+    <td>{{range .Networks}}<div>{{.Name}} <span class="muted">{{if .VLAN}}VLAN {{.VLAN}}{{else}}untagged{{end}}</span></div>{{else}}<span class="muted">—</span>{{end}}</td>
+  </tr>{{else}}<tr><td colspan="3" class="muted">No reachable hosts.</td></tr>{{end}}</tbody>
+</table>
+</div>
 </section>
 </div>
 {{if .CanEdit}}

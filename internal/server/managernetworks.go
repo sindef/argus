@@ -16,6 +16,51 @@ import (
 	"argus/internal/manager"
 )
 
+type switchRow struct {
+	Name     string
+	Uplinks  []switchUplink
+	Missing  []string
+	Networks []*netRow
+}
+
+type switchUplink struct {
+	Host  string
+	Ports []string
+}
+
+func switches(hosts []hostNetRow, nets []*netRow) []switchRow {
+	byName := map[string]*switchRow{}
+	var reachable []string
+	for _, h := range hosts {
+		if h.Error != "" {
+			continue
+		}
+		reachable = append(reachable, h.Node.Name)
+		for _, b := range h.Bridges {
+			if byName[b.Name] == nil {
+				byName[b.Name] = &switchRow{Name: b.Name}
+			}
+			byName[b.Name].Uplinks = append(byName[b.Name].Uplinks, switchUplink{h.Node.Name, b.Ports})
+		}
+	}
+	var out []switchRow
+	for _, sw := range byName {
+		for _, h := range reachable {
+			if !slices.ContainsFunc(sw.Uplinks, func(u switchUplink) bool { return u.Host == h }) {
+				sw.Missing = append(sw.Missing, h)
+			}
+		}
+		for _, n := range nets {
+			if n.BridgeName() == sw.Name {
+				sw.Networks = append(sw.Networks, n)
+			}
+		}
+		out = append(out, *sw)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
 type netRow struct {
 	manager.Network
 	Defined  bool
@@ -100,7 +145,7 @@ func (s *Server) managerNetworks(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	sort.Strings(all)
-	s.render(w, r, "networks.html", "layout", map[string]any{"Nav": "networks", "Rows": out, "Reachable": len(onHost), "Bridges": bridges, "AllBridges": all, "CanEdit": session(r).Role.Can(auth.Admin), "Error": errs})
+	s.render(w, r, "networks.html", "layout", map[string]any{"Nav": "networks", "Rows": out, "Reachable": len(onHost), "Switches": switches(s.fleetHostNets(r.Context(), org), out), "AllBridges": all, "CanEdit": session(r).Role.Can(auth.Admin), "Error": errs})
 }
 
 func (s *Server) pushNetwork(r *http.Request, op string, n manager.Network) string {
