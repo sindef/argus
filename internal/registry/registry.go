@@ -2,6 +2,9 @@ package registry
 
 import (
 	"archive/tar"
+	"bufio"
+	"bytes"
+	"compress/gzip"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -12,6 +15,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -288,7 +292,74 @@ func (g *Registry) serveManifest(w http.ResponseWriter, r *http.Request, repo, r
 	}
 }
 
+var ErrNotDisk = errors.New("not a disk image: expected qcow2, raw, ISO, VMDK, VHDX or VDI")
+
+const sniffLen = 0x8006
+
+func isDisk(b []byte) bool {
+	at := func(off int, magic string) bool {
+		return len(b) >= off+len(magic) && string(b[off:off+len(magic)]) == magic
+	}
+	return at(0, "QFI\xfb") || at(0, "KDMV") || at(0, "vhdxfile") || at(0x40, "\x7f\x10\xda\xbe") || at(0x8001, "CD001") || at(510, "\x55\xaa") || at(512, "EFI PART")
+}
+
+func sniff(r io.Reader) (io.Reader, error) {
+	br := bufio.NewReaderSize(r, sniffLen)
+	b, err := br.Peek(sniffLen)
+	if err != nil && err != io.EOF {
+		return nil, err
+	}
+	if !isDisk(b) {
+		return nil, ErrNotDisk
+	}
+	return br, nil
+}
+
+func (g *Registry) checkDisk(m manifest) error {
+	for _, l := range m.Layers {
+		f, err := os.Open(g.blob(l.Digest))
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		br := bufio.NewReader(f)
+		var r io.Reader = br
+		switch magic, _ := br.Peek(4); {
+		case bytes.HasPrefix(magic, []byte{0x1f, 0x8b}):
+			zr, err := gzip.NewReader(br)
+			if err != nil {
+				return err
+			}
+			r = zr
+		case bytes.Equal(magic, []byte{0x28, 0xb5, 0x2f, 0xfd}):
+			return errors.New("zstd-compressed layers are not supported; push with gzip or no compression")
+		}
+		tr := tar.NewReader(r)
+		for {
+			h, err := tr.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return err
+			}
+			if h.Typeflag == tar.TypeReg && strings.HasPrefix(path.Clean(h.Name), "disk/") {
+				_, err := sniff(tr)
+				return err
+			}
+		}
+	}
+	if len(m.Layers) > 0 {
+		return errors.New("not a disk image: no file under /disk")
+	}
+	return nil
+}
+
 func (g *Registry) putManifest(repo, ref, ct string, b []byte) (string, error) {
+	return g.storeManifest(repo, ref, ct, b, true)
+}
+
+func (g *Registry) storeManifest(repo, ref, ct string, b []byte, check bool) (string, error) {
 	var m manifest
 	if err := json.Unmarshal(b, &m); err != nil || m.SchemaVersion != 2 {
 		return "", errors.New("manifest must be schema version 2 JSON")
@@ -303,6 +374,16 @@ func (g *Registry) putManifest(repo, ref, ct string, b []byte) (string, error) {
 	isTag := !digestRE.MatchString(ref)
 	if isTag && !tagRE.MatchString(ref) || !isTag && ref != d {
 		return "", errors.New("reference does not match the manifest")
+	}
+	for _, c := range m.refs() {
+		if !exists(g.layerLink(repo, c.Digest)) && !exists(g.manifestLink(repo, c.Digest)) {
+			return "", fmt.Errorf("blob %s is not in %s", c.Digest, repo)
+		}
+	}
+	if check {
+		if err := g.checkDisk(m); err != nil {
+			return "", err
+		}
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -546,6 +627,10 @@ func (g *Registry) PutDisk(repo, tag, file string, size int64, src io.Reader) (s
 	if !repoRE.MatchString(repo) || !tagRE.MatchString(tag) {
 		return "", errors.New("invalid image name or tag")
 	}
+	src, err := sniff(src)
+	if err != nil {
+		return "", err
+	}
 	tmp := g.upload(newID())
 	f, err := os.Create(tmp)
 	if err != nil {
@@ -587,7 +672,7 @@ func (g *Registry) PutDisk(repo, tag, file string, size int64, src io.Reader) (s
 	}
 	config.MediaType = ociConfig
 	m, _ := json.Marshal(manifest{SchemaVersion: 2, MediaType: ociManifest, Config: &config, Layers: []descriptor{layer}})
-	return g.putManifest(repo, tag, ociManifest, m)
+	return g.storeManifest(repo, tag, ociManifest, m, false)
 }
 
 func (g *Registry) List(prefix string) []Image {

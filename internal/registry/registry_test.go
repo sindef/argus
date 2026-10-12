@@ -46,7 +46,7 @@ func TestPushPullDelete(t *testing.T) {
 		t.Fatalf("foreign repo: %d", resp.StatusCode)
 	}
 
-	layer := bytes.Repeat([]byte("layer"), 1000)
+	layer := tarLayer(t, "disk/a.img", rawDisk())
 	ld := digestOf(layer)
 	resp := do(t, srv, "POST", "/v2/org/app/blobs/uploads/", nil, basic...)
 	if resp.StatusCode != 202 {
@@ -78,14 +78,23 @@ func TestPushPullDelete(t *testing.T) {
 		t.Fatalf("put manifest: %d", resp.StatusCode)
 	}
 
+	app := tarLayer(t, "bin/sh", []byte("#!"))
+	if resp := do(t, srv, "POST", "/v2/org/app/blobs/uploads/?digest="+digestOf(app), app, basic...); resp.StatusCode != 201 {
+		t.Fatalf("app layer upload: %d", resp.StatusCode)
+	}
+	notDisk, _ := json.Marshal(manifest{SchemaVersion: 2, MediaType: ociManifest, Config: &descriptor{Digest: cd}, Layers: []descriptor{{Digest: digestOf(app)}}})
+	if resp := do(t, srv, "PUT", "/v2/org/app/manifests/sh", notDisk, basic...); resp.StatusCode != 400 {
+		t.Fatalf("non-disk image accepted: %d", resp.StatusCode)
+	}
+
 	resp = do(t, srv, "GET", "/v2/org/app/manifests/v1", nil, basic...)
 	got, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 || !bytes.Equal(got, m) || resp.Header.Get("Content-Type") != ociManifest {
 		t.Fatalf("get manifest: %d %s", resp.StatusCode, resp.Header.Get("Content-Type"))
 	}
-	resp = do(t, srv, "GET", "/v2/org/app/blobs/"+ld, nil, append(basic, "Range", "bytes=5-9")...)
+	resp = do(t, srv, "GET", "/v2/org/app/blobs/"+ld, nil, append(basic, "Range", "bytes=0-5")...)
 	got, _ = io.ReadAll(resp.Body)
-	if resp.StatusCode != 206 || string(got) != "layer" {
+	if resp.StatusCode != 206 || string(got) != "disk/a" {
 		t.Fatalf("ranged blob: %d %q", resp.StatusCode, got)
 	}
 	if resp := do(t, srv, "GET", "/v2/org/other/blobs/"+ld, nil, basic...); resp.StatusCode != 404 {
@@ -114,7 +123,7 @@ func TestPutDisk(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	disk := bytes.Repeat([]byte{1, 2, 3, 4}, 4096)
+	disk := rawDisk()
 	d, err := g.PutDisk("org/cirros", "0.6", "cirros.qcow2", int64(len(disk)), bytes.NewReader(disk))
 	if err != nil {
 		t.Fatal(err)
@@ -143,9 +152,26 @@ func TestPutDisk(t *testing.T) {
 	if strings.Join(names, ",") != "disk/,disk/cirros.qcow2" {
 		t.Fatalf("layer entries: %v", names)
 	}
-	if _, err := g.PutDisk("org/short", "x", "a.raw", 10, bytes.NewReader([]byte("abc"))); err == nil {
-		t.Fatal("short input accepted")
+	if _, err := g.PutDisk("org/text", "x", "a.raw", 3, bytes.NewReader([]byte("abc"))); err != ErrNotDisk {
+		t.Fatalf("non-disk upload: %v", err)
 	}
+}
+
+func rawDisk() []byte {
+	b := make([]byte, 64<<10)
+	b[510], b[511] = 0x55, 0xaa
+	return b
+}
+
+func tarLayer(t *testing.T, name string, content []byte) []byte {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	if err := tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: name, Mode: 0o444, Size: int64(len(content))}); err != nil {
+		t.Fatal(err)
+	}
+	tw.Write(content)
+	tw.Close()
+	return buf.Bytes()
 }
 
 func must(t *testing.T, p string) io.Reader {
