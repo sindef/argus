@@ -47,6 +47,18 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if fs.Shared() {
+		log.Printf("standby: waiting to become the active Manager")
+		host, _ := os.Hostname()
+		lost, err := fs.Lead(context.Background(), fmt.Sprintf("%s/%d/%d", host, os.Getpid(), time.Now().UnixNano()))
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("active: this Manager now serves requests")
+		go func() {
+			log.Fatalf("lost the active role, exiting so a standby can take over: %v", <-lost)
+		}()
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if n, err := fs.ImportFiles(ctx, data); err != nil {
@@ -112,6 +124,9 @@ func env(k, def string) string {
 func openStore(data, keyFile string) (*dbstore.Store, error) {
 	if err := os.MkdirAll(data, 0o700); err != nil {
 		return nil, err
+	}
+	if url := os.Getenv("ARGUS_DATABASE_URL"); url != "" {
+		return dbstore.Open(url, keyFile)
 	}
 	return dbstore.Open(filepath.Join(data, "argus.db"), keyFile)
 }

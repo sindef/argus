@@ -14,7 +14,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	_ "modernc.org/sqlite"
@@ -31,6 +33,24 @@ type Record struct {
 type Store struct {
 	db   *sql.DB
 	aead cipher.AEAD
+	pg   bool
+}
+
+func (s *Store) q(query string) string {
+	if !s.pg {
+		return query
+	}
+	var b strings.Builder
+	n := 0
+	for _, c := range query {
+		if c == '?' {
+			n++
+			fmt.Fprintf(&b, "$%d", n)
+			continue
+		}
+		b.WriteRune(c)
+	}
+	return b.String()
 }
 
 func loadKey(path string) ([]byte, error) {
@@ -79,20 +99,77 @@ func Open(dbPath, keyPath string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", "file:"+dbPath+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(FULL)")
+	s := &Store{aead: aead, pg: strings.HasPrefix(dbPath, "postgres://") || strings.HasPrefix(dbPath, "postgresql://")}
+	blob := "BLOB"
+	if s.pg {
+		s.db, err = sql.Open("pgx", dbPath)
+		blob = "BYTEA"
+	} else {
+		s.db, err = sql.Open("sqlite", "file:"+dbPath+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(FULL)")
+		s.db.SetMaxOpenConns(1)
+	}
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS records (name TEXT PRIMARY KEY, version INTEGER NOT NULL, type TEXT NOT NULL, data BLOB NOT NULL)`); err != nil {
-		db.Close()
+	if _, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS records (name TEXT PRIMARY KEY, version INTEGER NOT NULL, type TEXT NOT NULL, data ` + blob + ` NOT NULL)`); err != nil {
+		s.db.Close()
 		return nil, err
 	}
-	if err := os.Chmod(dbPath, 0o600); err != nil {
-		db.Close()
+	if !s.pg {
+		if err := os.Chmod(dbPath, 0o600); err != nil {
+			s.db.Close()
+			return nil, err
+		}
+	}
+	return s, nil
+}
+
+const (
+	leaseTTL   = 15 * time.Second
+	leaseRenew = 5 * time.Second
+)
+
+func (s *Store) Shared() bool { return s.pg }
+
+func (s *Store) Lead(ctx context.Context, holder string) (<-chan error, error) {
+	if _, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS leader (id INTEGER PRIMARY KEY, holder TEXT NOT NULL, expires TIMESTAMPTZ NOT NULL)`); err != nil {
 		return nil, err
 	}
-	return &Store{db: db, aead: aead}, nil
+	for {
+		res, err := s.db.ExecContext(ctx, `INSERT INTO leader (id, holder, expires) VALUES (1, $1, now() + $2::interval)
+			ON CONFLICT (id) DO UPDATE SET holder = EXCLUDED.holder, expires = EXCLUDED.expires WHERE leader.expires < now() OR leader.holder = EXCLUDED.holder`, holder, leaseTTL.String())
+		if err == nil {
+			if n, _ := res.RowsAffected(); n == 1 {
+				break
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(leaseRenew / 2):
+		}
+	}
+	lost := make(chan error, 1)
+	go func() {
+		renewed := time.Now()
+		for range time.Tick(leaseRenew) {
+			rctx, cancel := context.WithTimeout(context.Background(), leaseRenew/2)
+			res, err := s.db.ExecContext(rctx, `UPDATE leader SET expires = now() + $2::interval WHERE id = 1 AND holder = $1`, holder, leaseTTL.String())
+			cancel()
+			if err == nil {
+				if n, _ := res.RowsAffected(); n == 1 {
+					renewed = time.Now()
+					continue
+				}
+				err = errors.New("another Manager holds the lease")
+			}
+			if time.Since(renewed) >= 2*leaseRenew {
+				lost <- err
+				return
+			}
+		}
+	}()
+	return lost, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -125,7 +202,7 @@ func (s *Store) open(name string, blob []byte) (map[string][]byte, error) {
 func (s *Store) Get(ctx context.Context, name string) (map[string][]byte, string, error) {
 	var version int
 	var blob []byte
-	err := s.db.QueryRowContext(ctx, `SELECT version, data FROM records WHERE name = ?`, name).Scan(&version, &blob)
+	err := s.db.QueryRowContext(ctx, s.q(`SELECT version, data FROM records WHERE name = ?`), name).Scan(&version, &blob)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, "", apierrors.NewNotFound(resource, name)
 	}
@@ -141,7 +218,7 @@ func (s *Store) Create(ctx context.Context, name, typ string, data map[string][]
 	if err != nil {
 		return err
 	}
-	res, err := s.db.ExecContext(ctx, `INSERT INTO records (name, version, type, data) VALUES (?, 1, ?, ?) ON CONFLICT(name) DO NOTHING`, name, typ, blob)
+	res, err := s.db.ExecContext(ctx, s.q(`INSERT INTO records (name, version, type, data) VALUES (?, 1, ?, ?) ON CONFLICT(name) DO NOTHING`), name, typ, blob)
 	if err != nil {
 		return err
 	}
@@ -160,7 +237,7 @@ func (s *Store) Update(ctx context.Context, name, resourceVersion string, data m
 	if err != nil {
 		return err
 	}
-	res, err := s.db.ExecContext(ctx, `UPDATE records SET version = version + 1, data = ? WHERE name = ? AND version = ?`, blob, name, version)
+	res, err := s.db.ExecContext(ctx, s.q(`UPDATE records SET version = version + 1, data = ? WHERE name = ? AND version = ?`), blob, name, version)
 	if err != nil {
 		return err
 	}
@@ -174,7 +251,7 @@ func (s *Store) Update(ctx context.Context, name, resourceVersion string, data m
 }
 
 func (s *Store) Export(ctx context.Context) (map[string]Record, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT name, version, type, data FROM records ORDER BY name`)
+	rows, err := s.db.QueryContext(ctx, s.q(`SELECT name, version, type, data FROM records ORDER BY name`))
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +274,7 @@ func (s *Store) Export(ctx context.Context) (map[string]Record, error) {
 
 func (s *Store) Empty(ctx context.Context) (bool, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM records`).Scan(&n)
+	err := s.db.QueryRowContext(ctx, s.q(`SELECT COUNT(*) FROM records`)).Scan(&n)
 	return n == 0, err
 }
 
@@ -207,7 +284,7 @@ func (s *Store) Replace(ctx context.Context, recs map[string]Record) error {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM records`); err != nil {
+	if _, err := tx.ExecContext(ctx, s.q(`DELETE FROM records`)); err != nil {
 		return err
 	}
 	for name, rec := range recs {
@@ -215,7 +292,7 @@ func (s *Store) Replace(ctx context.Context, recs map[string]Record) error {
 		if err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO records (name, version, type, data) VALUES (?, ?, ?, ?)`, name, max(rec.Version, 1), rec.Type, blob); err != nil {
+		if _, err := tx.ExecContext(ctx, s.q(`INSERT INTO records (name, version, type, data) VALUES (?, ?, ?, ?)`), name, max(rec.Version, 1), rec.Type, blob); err != nil {
 			return err
 		}
 	}
