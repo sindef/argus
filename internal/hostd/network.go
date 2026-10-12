@@ -287,7 +287,7 @@ func (s *Server) createBridge(ctx context.Context, spec BridgeSpec) error {
 	}
 	files := map[string]string{}
 	add := func(path, body string) { files[path] = body }
-	add(unit(spec.Name, "netdev", fmt.Sprintf("[NetDev]\nName=%s\nKind=bridge\n\n[Bridge]\nVLANFiltering=yes\nDefaultPVID=1\n", spec.Name)))
+	add(unit(spec.Name, "netdev", fmt.Sprintf("[NetDev]\nName=%s\nKind=bridge\nMACAddress=%s\n\n[Bridge]\nVLANFiltering=yes\nDefaultPVID=1\n", spec.Name, exists[spec.Ports[0]].MAC)))
 	add(unit(spec.Name, "network", fmt.Sprintf("[Match]\nName=%s\n\n[Network]\nLinkLocalAddressing=no\nConfigureWithoutCarrier=yes\n", spec.Name)))
 	created := []string{spec.Name}
 	if spec.Bond != "" {
