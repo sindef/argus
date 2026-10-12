@@ -172,24 +172,23 @@ func (c *Manager) heartbeat(ctx context.Context) {
 	if err != nil {
 		return
 	}
+	urls := map[string]string{}
+	for _, n := range nodes {
+		urls[n.Name] = n.URL
+	}
 	var wg sync.WaitGroup
 	for _, n := range nodes {
-		owned := []string{}
+		owned, replicas := []string{}, map[string]string{}
 		for _, p := range ps {
 			if p.Owner == n.Name {
 				owned = append(owned, p.VM)
-			}
-		}
-		peers := []string{}
-		for _, o := range nodes {
-			if o.Name != n.Name {
-				peers = append(peers, o.URL)
+				replicas[p.VM] = urls[p.Replica]
 			}
 		}
 		wg.Add(1)
 		go func(n Node) {
 			defer wg.Done()
-			if err := n.do(ctx, http.MethodPost, "/api/heartbeat", map[string]any{"owned": owned, "peers": peers}, nil); err == nil {
+			if err := n.do(ctx, http.MethodPost, "/api/heartbeat", map[string]any{"owned": owned, "replicas": replicas}, nil); err == nil {
 				c.mu.Lock()
 				c.lastSeen[n.Name] = time.Now()
 				c.mu.Unlock()

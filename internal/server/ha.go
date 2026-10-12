@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -24,11 +25,10 @@ const (
 )
 
 type haState struct {
-	mu    sync.Mutex
-	last  time.Time
-	owned map[string]bool
-	peers []string
-	vms   []string
+	mu       sync.Mutex
+	last     time.Time
+	owned    []string
+	replicas map[string]string
 }
 
 func (s *Server) writeFence() {
@@ -36,28 +36,28 @@ func (s *Server) writeFence() {
 		return
 	}
 	s.ha.mu.Lock()
-	text := fmt.Sprintf("%d\n%s\n%s\n", s.ha.last.Unix(), strings.Join(s.ha.peers, " "), strings.Join(s.ha.vms, " "))
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d\n", s.ha.last.Unix())
+	for vm, replica := range s.ha.replicas {
+		fmt.Fprintf(&b, "%s %s\n", vm, replica)
+	}
 	s.ha.mu.Unlock()
-	if err := os.WriteFile(filepath.Join(s.runDir, "ha-fence"), []byte(text), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(s.runDir, "ha-fence"), []byte(b.String()), 0o644); err != nil {
 		log.Printf("ha: %v", err)
 	}
 }
 
 func (s *Server) apiHeartbeat(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Owned []string `json:"owned"`
-		Peers []string `json:"peers"`
+		Owned    []string          `json:"owned"`
+		Replicas map[string]string `json:"replicas"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		apiError(w, r, http.StatusBadRequest, err)
 		return
 	}
-	owned := map[string]bool{}
-	for _, n := range req.Owned {
-		owned[n] = true
-	}
 	s.ha.mu.Lock()
-	s.ha.last, s.ha.owned, s.ha.peers = time.Now(), owned, req.Peers
+	s.ha.last, s.ha.owned, s.ha.replicas = time.Now(), req.Owned, req.Replicas
 	s.ha.mu.Unlock()
 	s.writeFence()
 	writeJSON(w, map[string]string{})
@@ -129,43 +129,33 @@ func (s *Server) haLoop() {
 
 func (s *Server) haTick() {
 	s.ha.mu.Lock()
-	last, owned, peers := s.ha.last, s.ha.owned, s.ha.peers
+	last, owned, replicas := s.ha.last, s.ha.owned, s.ha.replicas
 	s.ha.mu.Unlock()
 	if last.IsZero() {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), haInterval)
+	defer cancel()
 	vms, err := s.kube.HAVMs(ctx)
 	if err != nil {
-		cancel()
 		log.Printf("ha: %v", err)
 		return
 	}
-	names := make([]string, 0, len(vms))
-	for _, vm := range vms {
-		names = append(names, vm.Name)
-	}
-	s.ha.mu.Lock()
-	s.ha.vms = names
-	s.ha.mu.Unlock()
-	s.writeFence()
 	fresh := time.Since(last) < heartbeatFresh
-	isolated := false
-	if !fresh {
-		isolated = true
-		for _, p := range peers {
-			if reachable(p) {
-				isolated = false
-				break
-			}
+	up := map[string]bool{}
+	lost := func(url string) bool {
+		if _, ok := up[url]; !ok {
+			up[url] = reachable(url)
 		}
+		return !up[url]
 	}
 	for _, vm := range vms {
+		replica := replicas[vm.Name]
 		want := vm.Running
 		switch {
 		case fresh:
-			want = owned[vm.Name] && !vm.UserStopped
-		case isolated:
+			want = slices.Contains(owned, vm.Name) && !vm.UserStopped
+		case replica != "" && lost(replica):
 			want = false
 		}
 		if want == vm.Running {
@@ -179,9 +169,8 @@ func (s *Server) haTick() {
 			log.Printf("ha: %s %s: %v", action, vm.Name, err)
 			continue
 		}
-		log.Printf("ha: %s %s (fresh=%v isolated=%v)", action, vm.Name, fresh, isolated)
+		log.Printf("ha: %s %s (fresh=%v)", action, vm.Name, fresh)
 	}
-	cancel()
 }
 
 type replicaReq struct {
