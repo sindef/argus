@@ -36,6 +36,11 @@
       e.stopPropagation();
       return;
     }
+    const trow = e.target.closest(".tree span.row");
+    if (trow && !e.target.closest("a, button, .menu-list")) {
+      const a = trow.querySelector(":scope > a[href]");
+      if (a) { location.href = a.href; return; }
+    }
     const reveal = e.target.closest("[data-reveal]");
     if (reveal) {
       const input = reveal.parentElement.querySelector("input");
