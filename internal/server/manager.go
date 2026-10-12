@@ -369,7 +369,7 @@ func (s *Server) managerVM(w http.ResponseWriter, r *http.Request) {
 		tab = "summary"
 	}
 	data := s.managerData(r)
-	data["Node"], data["VM"], data["Tab"], data["Tabs"] = n, vm, tab, vmTabs
+	data["Node"], data["VM"], data["Tab"], data["Tabs"], data["Range"] = n, vm, tab, vmTabs, r.URL.Query().Get("range")
 	data["Ctx"] = map[string]any{"V": vmRow{VM: vm, Host: n.Name}, "Page": fmt.Sprintf("/nodes/%s/vms/%s/%s", n.Name, ns, name), "CanOperate": data["CanOperate"], "IsAdmin": data["IsAdmin"]}
 	data["Nav"] = "vm:" + n.Name + "/" + name
 	if st, ok := s.manager.NodeState(n.Name); ok {
@@ -815,7 +815,7 @@ func (s *Server) managerVMMetrics(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	ps := s.manager.VMSeries(n.Name, ns, name)
+	ps := s.manager.VMSeries(n.Name, ns, name, time.Now().Add(-rangeDuration(r.URL.Query().Get("range"))))
 	cols := map[string][]float32{}
 	t := make([]int64, len(ps))
 	for i, p := range ps {
@@ -831,10 +831,7 @@ func (s *Server) managerVMMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) managerFleetMetrics(w http.ResponseWriter, r *http.Request) {
-	since := time.Now().Add(-24 * time.Hour)
-	if r.URL.Query().Get("range") == "7d" {
-		since = time.Now().Add(-7 * 24 * time.Hour)
-	}
+	since := time.Now().Add(-rangeDuration(r.URL.Query().Get("range")))
 	var nodes []string
 	if n := r.URL.Query().Get("node"); n != "" {
 		if _, err := s.nodeIn(r, n); err != nil {
@@ -865,6 +862,18 @@ func (s *Server) managerFleetMetrics(w http.ResponseWriter, r *http.Request) {
 		cols["poolFree"] = append(cols["poolFree"], p.V[5])
 	}
 	writeJSON(w, map[string]any{"t": t, "cols": cols})
+}
+
+func rangeDuration(r string) time.Duration {
+	switch r {
+	case "7d":
+		return 7 * 24 * time.Hour
+	case "30d":
+		return 30 * 24 * time.Hour
+	case "1y":
+		return 365 * 24 * time.Hour
+	}
+	return 24 * time.Hour
 }
 
 type hostEvent struct {

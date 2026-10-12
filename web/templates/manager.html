@@ -118,9 +118,9 @@
 </div>
 <div class="card">
   <div class="card-head"><h2>Resource Utilization</h2>
-    <nav class="seg right"><a href="?range=24h"{{if ne .Range "7d"}} class="active"{{end}}>24h</a><a href="?range=7d"{{if eq .Range "7d"}} class="active"{{end}}>7d</a></nav>
+    <nav class="seg right">{{$r := or .Range "24h"}}{{range list "24h" "7d" "30d" "1y"}}<a href="?range={{.}}"{{if eq . $r}} class="active"{{end}}>{{.}}</a>{{end}}</nav>
   </div>
-  <div class="chart" data-src="/metrics?range={{.Range}}&dc={{.DC}}&cluster={{.Cluster}}" data-window="{{if eq .Range "7d"}}604800{{else}}86400{{end}}" data-cols="cpu,mem" data-labels="CPU,Memory" data-unit="%" data-height="220"></div>
+  <div class="chart" data-src="/metrics?range={{.Range}}&dc={{.DC}}&cluster={{.Cluster}}" data-window="{{rangeSeconds .Range}}" data-cols="cpu,mem" data-labels="CPU,Memory" data-unit="%" data-height="220"></div>
 </div>
 <div class="grid overview spaced">
   {{if not .Cluster}}<div class="card">

@@ -47,11 +47,12 @@ var funcs = template.FuncMap{
 		}
 		return int(num(a) / num(b) * 100)
 	},
-	"limit":  func(evs []kube.Event, n int) []kube.Event { return evs[:min(n, len(evs))] },
-	"picks":  func(disks any, field string) map[string]any { return map[string]any{"Disks": disks, "Field": field} },
-	"min100": func(v int) int { return min(v, 100) },
-	"list":   func(v ...string) []string { return v },
-	"join":   strings.Join,
+	"limit":        func(evs []kube.Event, n int) []kube.Event { return evs[:min(n, len(evs))] },
+	"picks":        func(disks any, field string) map[string]any { return map[string]any{"Disks": disks, "Field": field} },
+	"min100":       func(v int) int { return min(v, 100) },
+	"list":         func(v ...string) []string { return v },
+	"rangeSeconds": func(r string) int64 { return int64(rangeDuration(r).Seconds()) },
+	"join":         strings.Join,
 	"dict": func(kv ...any) map[string]any {
 		m := map[string]any{}
 		for i := 0; i+1 < len(kv); i += 2 {

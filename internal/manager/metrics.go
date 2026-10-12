@@ -18,6 +18,8 @@ const (
 	hostWindow = 7 * 24 * time.Hour
 	hostStep   = 5 * time.Minute
 	saveEvery  = 5 * time.Minute
+	vmLong     = 30 * 24 * time.Hour
+	hostLong   = 365 * 24 * time.Hour
 )
 
 type Point struct {
@@ -31,27 +33,30 @@ type mark struct {
 }
 
 type telemetry struct {
-	mu       sync.Mutex
-	path     string
-	saved    time.Time
-	VMs      map[string][]Point
-	Hosts    map[string][]Point
-	vmMark   map[string]mark
-	hostMark map[string]mark
+	mu          sync.Mutex
+	path        string
+	saved       time.Time
+	VMs         map[string][]Point
+	Hosts       map[string][]Point
+	VMsHourly   map[string][]Point
+	HostsHourly map[string][]Point
+	vmMark      map[string]mark
+	hostMark    map[string]mark
 }
 
 func newTelemetry(path string) *telemetry {
 	t := &telemetry{path: path, VMs: map[string][]Point{}, Hosts: map[string][]Point{}, vmMark: map[string]mark{}, hostMark: map[string]mark{}, saved: time.Now()}
-	if path == "" {
-		return t
+	if f, err := os.Open(path); err == nil {
+		if err := gob.NewDecoder(f).Decode(t); err != nil {
+			log.Printf("telemetry: %v", err)
+		}
+		f.Close()
 	}
-	f, err := os.Open(path)
-	if err != nil {
-		return t
+	if t.VMsHourly == nil {
+		t.VMsHourly = map[string][]Point{}
 	}
-	defer f.Close()
-	if err := gob.NewDecoder(f).Decode(t); err != nil {
-		log.Printf("telemetry: %v", err)
+	if t.HostsHourly == nil {
+		t.HostsHourly = map[string][]Point{}
 	}
 	return t
 }
@@ -91,6 +96,25 @@ func appendPoint(ps []Point, p Point, window time.Duration) []Point {
 	return ps[i:]
 }
 
+func rollup(fine, hourly []Point, next Point, window time.Duration) []Point {
+	if len(fine) == 0 || fine[len(fine)-1].T/3600 == next.T/3600 {
+		return hourly
+	}
+	hour := fine[len(fine)-1].T / 3600 * 3600
+	avg := Point{T: hour}
+	n := float32(0)
+	for i := len(fine) - 1; i >= 0 && fine[i].T >= hour; i-- {
+		for j := range avg.V {
+			avg.V[j] += fine[i].V[j]
+		}
+		n++
+	}
+	for j := range avg.V {
+		avg.V[j] /= n
+	}
+	return appendPoint(hourly, avg, window)
+}
+
 func (t *telemetry) record(node string, cores int64, s kube.MetricsSample) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -102,7 +126,9 @@ func (t *telemetry) record(node string, cores int64, s kube.MetricsSample) {
 		if d := host[0] - m.C[0]; d > 0 {
 			cpu = float32(100 * (1 - (host[1]-m.C[1])/d))
 		}
-		t.Hosts[node] = appendPoint(t.Hosts[node], Point{T: s.Time.Unix(), V: [6]float32{cpu, float32(s.MemUsed), float32(s.MemTotal), float32(cores), float32(s.PoolUsed), float32(s.PoolFree)}}, hostWindow)
+		p := Point{T: s.Time.Unix(), V: [6]float32{cpu, float32(s.MemUsed), float32(s.MemTotal), float32(cores), float32(s.PoolUsed), float32(s.PoolFree)}}
+		t.HostsHourly[node] = rollup(t.Hosts[node], t.HostsHourly[node], p, hostLong)
+		t.Hosts[node] = appendPoint(t.Hosts[node], p, hostWindow)
 		t.hostMark[node] = mark{s.Time, host}
 	}
 	for vm, c := range s.VMs {
@@ -120,10 +146,11 @@ func (t *telemetry) record(node string, cores int64, s kube.MetricsSample) {
 		for i := 2; i < 6; i++ {
 			p.V[i] = rate(c[i], m.C[i], dt)
 		}
+		t.VMsHourly[k] = rollup(t.VMs[k], t.VMsHourly[k], p, vmLong)
 		t.VMs[k] = appendPoint(t.VMs[k], p, vmWindow)
 		t.vmMark[k] = mark{s.Time, c}
 	}
-	cut := s.Time.Add(-vmWindow).Unix()
+	cut, longCut := s.Time.Add(-vmWindow).Unix(), s.Time.Add(-vmLong).Unix()
 	for k, ps := range t.VMs {
 		if _, ok := s.VMs[strings.TrimPrefix(k, node+"/")]; strings.HasPrefix(k, node+"/") && !ok {
 			delete(t.vmMark, k)
@@ -132,21 +159,35 @@ func (t *telemetry) record(node string, cores int64, s kube.MetricsSample) {
 			}
 		}
 	}
+	for k, ps := range t.VMsHourly {
+		if strings.HasPrefix(k, node+"/") && (len(ps) == 0 || ps[len(ps)-1].T < longCut) {
+			delete(t.VMsHourly, k)
+		}
+	}
 }
 
-func (m *Manager) VMSeries(node, ns, vm string) []Point {
+func (m *Manager) VMSeries(node, ns, vm string, since time.Time) []Point {
 	m.tel.mu.Lock()
 	defer m.tel.mu.Unlock()
-	return append([]Point(nil), m.tel.VMs[node+"/"+ns+"/"+vm]...)
+	src := m.tel.VMs
+	if time.Since(since) > vmWindow {
+		src = m.tel.VMsHourly
+	}
+	ps := src[node+"/"+ns+"/"+vm]
+	i := sort.Search(len(ps), func(i int) bool { return ps[i].T >= since.Unix() })
+	return append([]Point(nil), ps[i:]...)
 }
 
 func (m *Manager) HostSeries(nodes []string, since time.Time) []Point {
 	m.tel.mu.Lock()
 	defer m.tel.mu.Unlock()
-	step := int64(hostStep / time.Second)
+	step, src := int64(hostStep/time.Second), m.tel.Hosts
+	if time.Since(since) > hostWindow {
+		step, src = 3600, m.tel.HostsHourly
+	}
 	buckets := map[int64]*Point{}
 	for _, n := range nodes {
-		for _, p := range m.tel.Hosts[n] {
+		for _, p := range src[n] {
 			if p.T < since.Unix() {
 				continue
 			}
