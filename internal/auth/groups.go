@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -27,15 +26,9 @@ var validGroup = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}$`)
 func (s *Store) groupsKey() string { return s.key + "-groups" }
 
 func (s *Store) loadGroups(ctx context.Context) ([]Group, string, error) {
-	data, rv, err := s.secrets.Get(ctx, s.groupsKey())
-	if apierrors.IsNotFound(err) {
-		return nil, "", nil
-	}
-	if err != nil {
-		return nil, "", err
-	}
 	var gs []Group
-	return gs, rv, json.Unmarshal(data[groupsFile], &gs)
+	rv, err := LoadJSON(ctx, s.secrets, s.groupsKey(), groupsFile, &gs)
+	return gs, rv, err
 }
 
 func (s *Store) Groups(ctx context.Context) ([]Group, error) {
@@ -56,13 +49,7 @@ func (s *Store) modifyGroups(ctx context.Context, fn func([]Group) ([]Group, err
 		if gs, err = fn(gs); err != nil {
 			return err
 		}
-		b, _ := json.Marshal(gs)
-		data := map[string][]byte{groupsFile: b}
-		if rv == "" {
-			err = s.secrets.Create(ctx, s.groupsKey(), "Opaque", data)
-		} else {
-			err = s.secrets.Update(ctx, s.groupsKey(), rv, data)
-		}
+		err = SaveJSON(ctx, s.secrets, s.groupsKey(), groupsFile, rv, gs)
 		if (apierrors.IsConflict(err) || apierrors.IsAlreadyExists(err)) && attempt < 3 {
 			continue
 		}

@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"argus/internal/auth"
 	"argus/internal/hostd"
 	"argus/internal/kube"
 
@@ -428,15 +429,7 @@ func (s *Server) saveRestores() {
 	s.backups.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	store := s.auth.Secrets()
-	data := map[string][]byte{"restores": b}
-	_, rv, err := store.Get(ctx, restoresKey)
-	if err != nil {
-		err = store.Create(ctx, restoresKey, "Opaque", data)
-	} else {
-		err = store.Update(ctx, restoresKey, rv, data)
-	}
-	if err != nil {
+	if err := auth.PutJSON(ctx, s.auth.Secrets(), restoresKey, "restores", json.RawMessage(b)); err != nil {
 		log.Printf("restores: save: %v", err)
 	}
 }
@@ -459,12 +452,8 @@ func (s *Server) untrackRestore(token string) {
 }
 
 func (s *Server) resumeRestores() {
-	data, _, err := s.auth.Secrets().Get(context.Background(), restoresKey)
-	if err != nil {
-		return
-	}
 	var m map[string]restoreJob
-	if json.Unmarshal(data["restores"], &m) != nil {
+	if _, err := auth.LoadJSON(context.Background(), s.auth.Secrets(), restoresKey, "restores", &m); err != nil {
 		return
 	}
 	s.backups.mu.Lock()

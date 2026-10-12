@@ -2,7 +2,6 @@ package manager
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -13,9 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"argus/internal/auth"
 	"argus/internal/kube"
-
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const (
@@ -39,15 +37,9 @@ func (c *Manager) Protected(ctx context.Context) ([]Protected, error) {
 }
 
 func (c *Manager) loadHA(ctx context.Context) ([]Protected, string, error) {
-	data, rv, err := c.store.Get(ctx, haKey)
-	if apierrors.IsNotFound(err) {
-		return nil, "", nil
-	}
-	if err != nil {
-		return nil, "", err
-	}
 	var ps []Protected
-	return ps, rv, json.Unmarshal(data["vms"], &ps)
+	rv, err := auth.LoadJSON(ctx, c.store, haKey, "vms", &ps)
+	return ps, rv, err
 }
 
 func (c *Manager) updateHA(ctx context.Context, fn func([]Protected) ([]Protected, error)) error {
@@ -60,15 +52,7 @@ func (c *Manager) updateHA(ctx context.Context, fn func([]Protected) ([]Protecte
 	if ps, err = fn(ps); err != nil {
 		return err
 	}
-	b, err := json.Marshal(ps)
-	if err != nil {
-		return err
-	}
-	data := map[string][]byte{"vms": b}
-	if rv == "" {
-		return c.store.Create(ctx, haKey, "Opaque", data)
-	}
-	return c.store.Update(ctx, haKey, rv, data)
+	return auth.SaveJSON(ctx, c.store, haKey, "vms", rv, ps)
 }
 
 func vmPath(vm, suffix string) string {
@@ -219,23 +203,12 @@ type HASettings struct {
 
 func (c *Manager) HASettings(ctx context.Context) HASettings {
 	var h HASettings
-	if data, _, err := c.store.Get(ctx, haSettingsKey); err == nil {
-		json.Unmarshal(data["ha"], &h)
-	}
+	auth.LoadJSON(ctx, c.store, haSettingsKey, "ha", &h)
 	return h
 }
 
 func (c *Manager) SetHASettings(ctx context.Context, h HASettings) error {
-	b, _ := json.Marshal(h)
-	data := map[string][]byte{"ha": b}
-	_, rv, err := c.store.Get(ctx, haSettingsKey)
-	if apierrors.IsNotFound(err) {
-		return c.store.Create(ctx, haSettingsKey, "Opaque", data)
-	}
-	if err != nil {
-		return err
-	}
-	return c.store.Update(ctx, haSettingsKey, rv, data)
+	return auth.PutJSON(ctx, c.store, haSettingsKey, "ha", h)
 }
 
 func (c *Manager) Down(node string) bool { return c.down(node) }

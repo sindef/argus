@@ -16,8 +16,6 @@ import (
 	"time"
 
 	"argus/internal/manager"
-
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 type Alarm struct {
@@ -50,14 +48,8 @@ const notifyKey = "argus-notify"
 
 func (s *Server) loadNotify(ctx context.Context) (Notify, string, error) {
 	var n Notify
-	data, rv, err := s.auth.Secrets().Get(ctx, notifyKey)
-	if apierrors.IsNotFound(err) {
-		return n, "", nil
-	}
-	if err != nil {
-		return n, "", err
-	}
-	return n, rv, json.Unmarshal(data["config"], &n)
+	rv, err := s.loadJSON(ctx, notifyKey, &n)
+	return n, rv, err
 }
 
 func (s *Server) saveNotify(ctx context.Context, n Notify) error {
@@ -68,12 +60,7 @@ func (s *Server) saveNotify(ctx context.Context, n Notify) error {
 	if n.SMTPPass == "" {
 		n.SMTPPass = old.SMTPPass
 	}
-	b, _ := json.Marshal(n)
-	data := map[string][]byte{"config": b}
-	if rv == "" {
-		return s.auth.Secrets().Create(ctx, notifyKey, "Opaque", data)
-	}
-	return s.auth.Secrets().Update(ctx, notifyKey, rv, data)
+	return s.saveJSON(ctx, notifyKey, rv, n)
 }
 
 func (n Notify) send(ctx context.Context, subject, text string) error {

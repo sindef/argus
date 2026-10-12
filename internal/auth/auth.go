@@ -164,15 +164,7 @@ func (s *Store) flushSessions(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	data := map[string][]byte{"sessions": b}
-	_, rv, err := s.secrets.Get(ctx, sessionsSecret)
-	switch {
-	case apierrors.IsNotFound(err):
-		err = s.secrets.Create(ctx, sessionsSecret, "Opaque", data)
-	case err == nil:
-		err = s.secrets.Update(ctx, sessionsSecret, rv, data)
-	}
-	if err != nil {
+	if err = PutJSON(ctx, s.secrets, sessionsSecret, "sessions", json.RawMessage(b)); err != nil {
 		s.sessions.mu.Lock()
 		s.sessions.dirty = true
 		s.sessions.mu.Unlock()
@@ -242,15 +234,9 @@ func RandomPassword() string {
 }
 
 func (s *Store) load(ctx context.Context) ([]User, string, error) {
-	data, rv, err := s.secrets.Get(ctx, s.key)
-	if apierrors.IsNotFound(err) {
-		return nil, "", nil
-	}
-	if err != nil {
-		return nil, "", err
-	}
 	var us []User
-	return us, rv, json.Unmarshal(data[secretKey], &us)
+	rv, err := LoadJSON(ctx, s.secrets, s.key, secretKey, &us)
+	return us, rv, err
 }
 
 func (s *Store) modify(ctx context.Context, fn func([]User) ([]User, error)) error {
@@ -262,16 +248,7 @@ func (s *Store) modify(ctx context.Context, fn func([]User) ([]User, error)) err
 		if us, err = fn(us); err != nil {
 			return err
 		}
-		b, err := json.Marshal(us)
-		if err != nil {
-			return err
-		}
-		data := map[string][]byte{secretKey: b}
-		if rv == "" {
-			err = s.secrets.Create(ctx, s.key, "Opaque", data)
-		} else {
-			err = s.secrets.Update(ctx, s.key, rv, data)
-		}
+		err = SaveJSON(ctx, s.secrets, s.key, secretKey, rv, us)
 		if (apierrors.IsConflict(err) || apierrors.IsAlreadyExists(err)) && attempt < 3 {
 			continue
 		}

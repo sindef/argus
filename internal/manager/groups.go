@@ -2,7 +2,6 @@ package manager
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -10,7 +9,7 @@ import (
 	"slices"
 	"sort"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"argus/internal/auth"
 )
 
 type Group struct {
@@ -53,15 +52,9 @@ func (c *Manager) Groups(ctx context.Context, org string) ([]Group, error) {
 }
 
 func (c *Manager) loadGroups(ctx context.Context, org string) ([]Group, string, error) {
-	data, rv, err := c.store.Get(ctx, groupsKey(org))
-	if apierrors.IsNotFound(err) {
-		return nil, "", nil
-	}
-	if err != nil {
-		return nil, "", err
-	}
 	var gs []Group
-	return gs, rv, json.Unmarshal(data["groups"], &gs)
+	rv, err := auth.LoadJSON(ctx, c.store, groupsKey(org), "groups", &gs)
+	return gs, rv, err
 }
 
 func (c *Manager) updateGroups(ctx context.Context, org string, fn func([]Group, []Node) ([]Group, error)) error {
@@ -93,15 +86,7 @@ func (c *Manager) updateGroups(ctx context.Context, org string, fn func([]Group,
 			return err
 		}
 	}
-	b, err := json.Marshal(gs)
-	if err != nil {
-		return err
-	}
-	data := map[string][]byte{"groups": b}
-	if rv == "" {
-		return c.store.Create(ctx, groupsKey(org), "Opaque", data)
-	}
-	return c.store.Update(ctx, groupsKey(org), rv, data)
+	return auth.SaveJSON(ctx, c.store, groupsKey(org), "groups", rv, gs)
 }
 
 func addGroup(gs []Group, dc, cl string) []Group {

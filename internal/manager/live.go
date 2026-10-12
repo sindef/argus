@@ -3,7 +3,6 @@ package manager
 import (
 	"context"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -14,9 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"argus/internal/auth"
 	"argus/internal/kube"
-
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const settingsKey = "argus-settings"
@@ -29,14 +27,8 @@ type MigrationSettings struct {
 
 func (c *Manager) MigrationSettings(ctx context.Context) (MigrationSettings, error) {
 	var m MigrationSettings
-	data, _, err := c.store.Get(ctx, settingsKey)
-	if apierrors.IsNotFound(err) {
-		return m, nil
-	}
-	if err != nil {
-		return m, err
-	}
-	return m, json.Unmarshal(data["migration"], &m)
+	_, err := auth.LoadJSON(ctx, c.store, settingsKey, "migration", &m)
+	return m, err
 }
 
 func (c *Manager) SetMigrationSettings(ctx context.Context, m MigrationSettings) error {
@@ -58,18 +50,7 @@ func (c *Manager) SetMigrationSettings(ctx context.Context, m MigrationSettings)
 }
 
 func (c *Manager) saveMigrationSettings(ctx context.Context, m MigrationSettings, push bool) error {
-	b, err := json.Marshal(m)
-	if err != nil {
-		return err
-	}
-	data := map[string][]byte{"migration": b}
-	_, rv, err := c.store.Get(ctx, settingsKey)
-	switch {
-	case apierrors.IsNotFound(err):
-		err = c.store.Create(ctx, settingsKey, "Opaque", data)
-	case err == nil:
-		err = c.store.Update(ctx, settingsKey, rv, data)
-	}
+	err := auth.PutJSON(ctx, c.store, settingsKey, "migration", m)
 	if err != nil || !push {
 		return err
 	}

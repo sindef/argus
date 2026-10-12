@@ -6,11 +6,8 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
-	"encoding/json"
 	"sort"
 	"time"
-
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const tokenSecret = "argus-tokens"
@@ -30,27 +27,13 @@ const (
 )
 
 func (s *Store) tokens(ctx context.Context) ([]Token, string, error) {
-	data, rv, err := s.secrets.Get(ctx, tokenSecret)
-	if apierrors.IsNotFound(err) {
-		return nil, "", nil
-	}
-	if err != nil {
-		return nil, "", err
-	}
 	var ts []Token
-	return ts, rv, json.Unmarshal(data[secretKey], &ts)
+	rv, err := LoadJSON(ctx, s.secrets, tokenSecret, secretKey, &ts)
+	return ts, rv, err
 }
 
 func (s *Store) saveTokens(ctx context.Context, ts []Token, rv string) error {
-	b, err := json.Marshal(ts)
-	if err != nil {
-		return err
-	}
-	data := map[string][]byte{secretKey: b}
-	if rv == "" {
-		return s.secrets.Create(ctx, tokenSecret, "Opaque", data)
-	}
-	return s.secrets.Update(ctx, tokenSecret, rv, data)
+	return SaveJSON(ctx, s.secrets, tokenSecret, secretKey, rv, ts)
 }
 
 func (s *Store) Tokens(ctx context.Context) ([]Token, error) {

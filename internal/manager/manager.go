@@ -23,7 +23,6 @@ import (
 	"argus/internal/tlscert"
 
 	"github.com/gorilla/websocket"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -103,28 +102,14 @@ func (c *Manager) Node(ctx context.Context, name string) (Node, error) {
 }
 
 func (c *Manager) load(ctx context.Context) ([]Node, string, error) {
-	data, rv, err := c.store.Get(ctx, nodesKey)
-	if apierrors.IsNotFound(err) {
-		return nil, "", nil
-	}
-	if err != nil {
-		return nil, "", err
-	}
 	var ns []Node
-	return ns, rv, json.Unmarshal(data["nodes"], &ns)
+	rv, err := auth.LoadJSON(ctx, c.store, nodesKey, "nodes", &ns)
+	return ns, rv, err
 }
 
 func (c *Manager) save(ctx context.Context, ns []Node, rv string) error {
 	sort.Slice(ns, func(i, j int) bool { return ns[i].Name < ns[j].Name })
-	b, err := json.Marshal(ns)
-	if err != nil {
-		return err
-	}
-	data := map[string][]byte{"nodes": b}
-	if rv == "" {
-		return c.store.Create(ctx, nodesKey, "Opaque", data)
-	}
-	return c.store.Update(ctx, nodesKey, rv, data)
+	return auth.SaveJSON(ctx, c.store, nodesKey, "nodes", rv, ns)
 }
 
 func (c *Manager) AddNode(ctx context.Context, org, name, url, token, fingerprint, datacenter, cluster string) error {

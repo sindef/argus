@@ -12,7 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"argus/internal/auth"
 )
 
 const (
@@ -97,13 +97,11 @@ func auditResult(aw *auditWriter, h http.Header) (bool, string) {
 func (s *Server) auditLoop() {
 	store := s.auth.Secrets()
 	ctx := context.Background()
-	if data, _, err := store.Get(ctx, auditKey); err == nil {
-		var es []AuditEntry
-		if json.Unmarshal(data["entries"], &es) == nil {
-			s.auditLog.mu.Lock()
-			s.auditLog.entries = append(es, s.auditLog.entries...)
-			s.auditLog.mu.Unlock()
-		}
+	var es []AuditEntry
+	if _, err := auth.LoadJSON(ctx, store, auditKey, "entries", &es); err == nil {
+		s.auditLog.mu.Lock()
+		s.auditLog.entries = append(es, s.auditLog.entries...)
+		s.auditLog.mu.Unlock()
 	}
 	for range time.Tick(10 * time.Second) {
 		s.auditLog.mu.Lock()
@@ -117,15 +115,7 @@ func (s *Server) auditLoop() {
 		if err != nil {
 			continue
 		}
-		data := map[string][]byte{"entries": b}
-		_, rv, err := store.Get(ctx, auditKey)
-		switch {
-		case apierrors.IsNotFound(err):
-			err = store.Create(ctx, auditKey, "Opaque", data)
-		case err == nil:
-			err = store.Update(ctx, auditKey, rv, data)
-		}
-		if err != nil {
+		if err := auth.PutJSON(ctx, store, auditKey, "entries", json.RawMessage(b)); err != nil {
 			log.Printf("audit: save: %v", err)
 			s.auditLog.mu.Lock()
 			s.auditLog.dirty = true

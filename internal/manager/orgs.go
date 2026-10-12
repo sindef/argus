@@ -2,12 +2,11 @@ package manager
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"argus/internal/auth"
 )
 
 const (
@@ -49,15 +48,9 @@ func (m *Manager) Org(ctx context.Context, id string) (Org, error) {
 }
 
 func (m *Manager) loadOrgs(ctx context.Context) ([]Org, string, error) {
-	data, rv, err := m.store.Get(ctx, orgsKey)
-	if apierrors.IsNotFound(err) {
-		return nil, "", nil
-	}
-	if err != nil {
-		return nil, "", err
-	}
 	var os []Org
-	return os, rv, json.Unmarshal(data["orgs"], &os)
+	rv, err := auth.LoadJSON(ctx, m.store, orgsKey, "orgs", &os)
+	return os, rv, err
 }
 
 func (m *Manager) updateOrgs(ctx context.Context, fn func([]Org) ([]Org, error)) error {
@@ -71,15 +64,7 @@ func (m *Manager) updateOrgs(ctx context.Context, fn func([]Org) ([]Org, error))
 		return err
 	}
 	sort.Slice(os, func(i, j int) bool { return os[i].Name < os[j].Name })
-	b, err := json.Marshal(os)
-	if err != nil {
-		return err
-	}
-	data := map[string][]byte{"orgs": b}
-	if rv == "" {
-		return m.store.Create(ctx, orgsKey, "Opaque", data)
-	}
-	return m.store.Update(ctx, orgsKey, rv, data)
+	return auth.SaveJSON(ctx, m.store, orgsKey, "orgs", rv, os)
 }
 
 func (m *Manager) EnsureDefaultOrg(ctx context.Context) error {

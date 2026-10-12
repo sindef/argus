@@ -2,11 +2,10 @@ package manager
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"argus/internal/auth"
 )
 
 type Network struct {
@@ -34,15 +33,9 @@ func (m *Manager) Networks(ctx context.Context, org string) ([]Network, error) {
 }
 
 func (m *Manager) loadNetworks(ctx context.Context, org string) ([]Network, string, error) {
-	data, rv, err := m.store.Get(ctx, networksKey(org))
-	if apierrors.IsNotFound(err) {
-		return nil, "", nil
-	}
-	if err != nil {
-		return nil, "", err
-	}
 	var ns []Network
-	return ns, rv, json.Unmarshal(data["networks"], &ns)
+	rv, err := auth.LoadJSON(ctx, m.store, networksKey(org), "networks", &ns)
+	return ns, rv, err
 }
 
 func (m *Manager) updateNetworks(ctx context.Context, org string, fn func([]Network) ([]Network, error)) error {
@@ -56,15 +49,7 @@ func (m *Manager) updateNetworks(ctx context.Context, org string, fn func([]Netw
 		return err
 	}
 	sort.Slice(ns, func(i, j int) bool { return ns[i].Name < ns[j].Name })
-	b, err := json.Marshal(ns)
-	if err != nil {
-		return err
-	}
-	data := map[string][]byte{"networks": b}
-	if rv == "" {
-		return m.store.Create(ctx, networksKey(org), "Opaque", data)
-	}
-	return m.store.Update(ctx, networksKey(org), rv, data)
+	return auth.SaveJSON(ctx, m.store, networksKey(org), "networks", rv, ns)
 }
 
 func (m *Manager) SaveNetwork(ctx context.Context, org string, n Network, replace bool) error {

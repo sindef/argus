@@ -12,9 +12,8 @@ import (
 	"slices"
 	"time"
 
+	"argus/internal/auth"
 	"argus/internal/kube"
-
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const (
@@ -120,14 +119,7 @@ func (c *Manager) saveJobs() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	data := map[string][]byte{"jobs": b}
-	_, rv, err := c.store.Get(ctx, jobsKey)
-	switch {
-	case apierrors.IsNotFound(err):
-		err = c.store.Create(ctx, jobsKey, "Opaque", data)
-	case err == nil:
-		err = c.store.Update(ctx, jobsKey, rv, data)
-	}
+	err = auth.PutJSON(ctx, c.store, jobsKey, "jobs", json.RawMessage(b))
 	if err != nil {
 		log.Printf("jobs: save: %v", err)
 	}

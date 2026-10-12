@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -29,8 +28,6 @@ import (
 	"argus/internal/netguard"
 	"argus/internal/registry"
 	"argus/internal/tlscert"
-
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const (
@@ -82,23 +79,11 @@ func secretKey(parts ...string) string {
 }
 
 func (s *Server) loadJSON(ctx context.Context, key string, v any) (string, error) {
-	data, rv, err := s.auth.Secrets().Get(ctx, key)
-	if apierrors.IsNotFound(err) {
-		return "", nil
-	}
-	if err != nil {
-		return "", err
-	}
-	return rv, json.Unmarshal(data["config"], v)
+	return auth.LoadJSON(ctx, s.auth.Secrets(), key, "config", v)
 }
 
 func (s *Server) saveJSON(ctx context.Context, key, rv string, v any) error {
-	b, _ := json.Marshal(v)
-	data := map[string][]byte{"config": b}
-	if rv == "" {
-		return s.auth.Secrets().Create(ctx, key, "Opaque", data)
-	}
-	return s.auth.Secrets().Update(ctx, key, rv, data)
+	return auth.SaveJSON(ctx, s.auth.Secrets(), key, "config", rv, v)
 }
 
 func (s *Server) startRegistry(ctx context.Context) error {
