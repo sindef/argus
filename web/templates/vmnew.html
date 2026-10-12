@@ -66,7 +66,7 @@
     <label>OVA file <input name="ova" type="file" accept=".ova" required></label>
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Import</button></div>
   </form>
-  <form class="form import-esxi" hx-post="{{.Base}}/vms/import/esxi" hx-target="#import-vm-error" hx-disabled-elt="find button[type=submit]">
+  <form class="form import-esxi" hx-post="{{.Base}}/vms/import/esxi" hx-encoding="multipart/form-data" hx-target="#import-vm-error" hx-disabled-elt="find button[type=submit]">
     {{template "import-common" .}}
     <div class="row">
       <label>ESXi or vCenter host <input name="host" placeholder="esxi01.example" required></label>

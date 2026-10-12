@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -41,36 +40,12 @@ func (s *Server) poolChoices(ctx context.Context) []kube.Pool {
 }
 
 func (s *Server) poolsPage(w http.ResponseWriter, r *http.Request) {
-	data := map[string]any{"Nav": "pools"}
-	if s.hostd == nil {
-		data["Error"] = "host helper not available"
-		s.render(w, r, "pools.html", "layout", data)
-		return
-	}
-	hp, err := s.hostd.Pools(r.Context())
-	kp, _ := s.kube.Pools(r.Context())
-	classes, _ := s.kube.PoolClasses(r.Context())
-	var rows []poolRow
-	for _, p := range hp.Pools {
-		row := poolRow{Pool: p, Class: classes[p.Name]}
-		if row.Class == "" && !p.System {
-			if cerr := s.kube.EnsurePoolClass(r.Context(), p.Name); cerr == nil {
-				row.Class = p.Name
-			}
-		}
-		for _, k := range kp {
-			if k.Name == p.Name {
-				row.Provisioned, row.Volumes = k.Provisioned, k.Volumes
-			}
-		}
-		rows = append(rows, row)
-	}
-	data["Pools"], data["Importable"], data["Error"] = rows, hp.Importable, errText(err)
-	s.render(w, r, "pools.html", "layout", data)
+	pv, err := s.ops(r).Pools(r.Context())
+	s.render(w, r, "pools.html", "layout", map[string]any{"Nav": "pools", "Pools": pv.Pools, "Importable": pv.Importable, "Error": errText(err)})
 }
 
 func (s *Server) poolModal(w http.ResponseWriter, r *http.Request) {
-	disks, err := s.hostd.Disks(r.Context())
+	disks, err := s.ops(r).Disks(r.Context())
 	free := slices.DeleteFunc(disks, func(d hostd.Disk) bool { return !d.Free() })
 	s.render(w, r, "pools.html", "pool-modal", map[string]any{"Disks": free, "Pool": r.PathValue("name"), "Error": errText(err)})
 }
@@ -106,7 +81,7 @@ func (s *Server) poolSpec(r *http.Request) (hostd.PoolSpec, error) {
 	if spec.Special, err = vdevs(r.FormValue("special_type"), 0, r.Form["special_disks"]); err != nil {
 		return spec, err
 	}
-	disks, err := s.hostd.Disks(r.Context())
+	disks, err := s.ops(r).Disks(r.Context())
 	if err != nil {
 		return spec, err
 	}
@@ -125,33 +100,19 @@ func (s *Server) poolSpec(r *http.Request) (hostd.PoolSpec, error) {
 
 func (s *Server) poolAction(w http.ResponseWriter, r *http.Request) {
 	name, op := r.PathValue("name"), r.PathValue("op")
+	req := poolOpReq{Confirm: r.FormValue("confirm")}
+	if req.Confirm == "" {
+		req.Confirm = r.Header.Get("HX-Prompt")
+	}
 	var err error
-	switch op {
-	case "create", "add":
-		var spec hostd.PoolSpec
-		if spec, err = s.poolSpec(r); err != nil {
-			break
+	if op == "create" || op == "add" {
+		req.Spec, err = s.poolSpec(r)
+		if op == "create" {
+			name = req.Spec.Name
 		}
-		if op == "add" {
-			err = s.hostd.AddToPool(r.Context(), name, spec)
-		} else if err = s.hostd.CreatePool(r.Context(), spec); err == nil {
-			name = spec.Name
-			err = s.kube.EnsurePoolClass(r.Context(), name)
-		}
-	case "import", "force-import":
-		if err = s.hostd.ImportPool(r.Context(), name, op == "force-import"); err == nil {
-			err = s.kube.EnsurePoolClass(r.Context(), name)
-		}
-	case "export", "destroy":
-		confirm := r.FormValue("confirm")
-		if confirm == "" {
-			confirm = r.Header.Get("HX-Prompt")
-		}
-		if err = s.hostd.ReleasePool(r.Context(), name, op, confirm); err == nil {
-			err = s.kube.DeletePoolClass(r.Context(), name)
-		}
-	default:
-		err = errors.New("unknown pool operation")
+	}
+	if err == nil {
+		err = s.ops(r).PoolOp(r.Context(), name, op, req)
 	}
 	if err != nil {
 		flash(w, r, err)

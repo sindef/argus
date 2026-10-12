@@ -14,13 +14,13 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"regexp"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -83,11 +83,7 @@ func ovfBytes(n int64, units string) int64 {
 	return n
 }
 
-func (s *Server) importOVA(r *http.Request) (string, error) {
-	mr, err := r.MultipartReader()
-	if err != nil {
-		return "", err
-	}
+func (s *Server) importOVA(ctx context.Context, mr *multipart.Reader) (string, error) {
 	fields := map[string]string{}
 	for {
 		part, err := mr.NextPart()
@@ -99,7 +95,7 @@ func (s *Server) importOVA(r *http.Request) (string, error) {
 			fields[part.FormName()] = strings.TrimSpace(string(b))
 			continue
 		}
-		return s.streamOVA(r.Context(), fields, part)
+		return s.streamOVA(ctx, fields, part)
 	}
 }
 
@@ -454,19 +450,12 @@ func (s *Server) serveESXi(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) importModal(w http.ResponseWriter, r *http.Request) {
-	nets, _ := s.kube.ListNetworks(r.Context())
-	imgs, _ := s.kube.ListImages(r.Context())
-	s.render(w, r, "vmnew.html", "import-modal", map[string]any{"Networks": nets, "Pools": s.poolChoices(r.Context()), "Images": imgs, "Arch": runtime.GOARCH})
+	f, _ := s.ops(r).VMForm(r.Context())
+	s.render(w, r, "vmnew.html", "import-modal", map[string]any{"Networks": f.Networks, "Pools": f.Pools, "Images": f.Images, "Arch": f.Arch})
 }
 
 func (s *Server) importVM(w http.ResponseWriter, r *http.Request) {
-	var name string
-	var err error
-	if r.PathValue("source") == "ova" {
-		name, err = s.importOVA(r)
-	} else {
-		name, err = s.importESXi(r.Context(), r.FormValue)
-	}
+	name, err := s.ops(r).Import(r.Context(), r.PathValue("source"), r.Header.Get("Content-Type"), r.Body)
 	if err != nil {
 		flash(w, r, err)
 		return

@@ -344,13 +344,15 @@ func (n Node) streaming() *http.Client {
 	return &http.Client{Transport: n.client().Transport, CheckRedirect: n.client().CheckRedirect}
 }
 
-func (n Node) open(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
+func (n Node) Open(ctx context.Context, method, path, contentType string, body io.Reader) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, n.URL+path, body)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+n.Token)
-	req.Header.Set("Content-Type", "application/octet-stream")
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
 	resp, err := n.streaming().Do(req)
 	if err != nil {
 		return nil, err

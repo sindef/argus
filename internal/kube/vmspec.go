@@ -173,8 +173,10 @@ func cdromBus() string {
 	return "sata"
 }
 
-func Firmwares() []string {
-	if runtime.GOARCH == "arm64" {
+func Firmwares() []string { return FirmwaresFor(runtime.GOARCH) }
+
+func FirmwaresFor(arch string) []string {
+	if arch == "arm64" {
 		return []string{"uefi"}
 	}
 	return []string{"bios", "uefi", "uefi-secure"}

@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"io"
 	"log"
-	"mime"
 	"net/http"
 	"slices"
 	"sort"
@@ -20,85 +18,6 @@ import (
 )
 
 var hostTabs = []struct{ Path, Label, Icon string }{{"dashboard", "Summary", "gauge"}, {"pools", "Pools", "database"}, {"disks", "Disks", "hard-drive"}, {"network/host", "Network", "cable"}}
-
-func (s *Server) managerHostUI(w http.ResponseWriter, r *http.Request) {
-	n, err := s.orgNode(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-	role, ok := hostRouteRole(r.Method, "/"+r.PathValue("path"))
-	if !ok {
-		http.NotFound(w, r)
-		return
-	}
-	if !session(r).Role.Can(role) {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return
-	}
-	if r.Method == http.MethodGet && strings.HasSuffix(r.PathValue("path"), "/download") {
-		s.record(s.auditUser(session(r).Org, session(r).User), "download "+n.Name+"/"+r.PathValue("path"), true, "")
-	}
-	path := "/api/ui/" + r.PathValue("path")
-	if r.URL.RawQuery != "" {
-		path += "?" + r.URL.RawQuery
-	}
-	h := http.Header{}
-	for _, k := range []string{"Content-Type", "HX-Request", "HX-Prompt", "HX-Target"} {
-		if v := r.Header.Get(k); v != "" {
-			h.Set(k, v)
-		}
-	}
-	h.Set(BaseHeader, "/hosts/"+n.Name)
-	resp, err := n.Proxy(r.Context(), r.Method, path, r.Body, h)
-	if err != nil {
-		flash(w, r, fmt.Errorf("%s: %w", n.Name, err))
-		return
-	}
-	defer resp.Body.Close()
-	base := "/hosts/" + n.Name
-	ct, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))
-	binary := ct == "application/json" || ct == "application/gzip" || ct == "application/octet-stream"
-	isHTML := r.Header.Get("HX-Request") != "" || !binary
-	page := r.Method == http.MethodGet && r.Header.Get("HX-Request") == "" && resp.StatusCode == http.StatusOK && isHTML
-	if !page {
-		for _, k := range []string{"Hx-Refresh", "Hx-Retarget", "Hx-Reswap"} {
-			if v := resp.Header.Get(k); v != "" {
-				w.Header().Set(k, v)
-			}
-		}
-		for _, k := range []string{"Hx-Redirect", "Hx-Location", "Hx-Push-Url", "Hx-Replace-Url"} {
-			if v := resp.Header.Get(k); v != "" && safeRedirect(v, n.Name) {
-				w.Header().Set(k, v)
-			}
-		}
-		if !isHTML {
-			for _, k := range []string{"Content-Type", "Content-Length", "Content-Disposition"} {
-				if v := resp.Header.Get(k); v != "" {
-					w.Header().Set(k, v)
-				}
-			}
-			if w.Header().Get("Content-Type") == "" {
-				w.Header().Set("Content-Type", "application/octet-stream")
-			}
-			w.WriteHeader(resp.StatusCode)
-			io.Copy(w, resp.Body)
-			return
-		}
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(resp.StatusCode)
-		w.Write(sanitizeHTML(body, base))
-		return
-	}
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-	if err != nil {
-		flash(w, r, err)
-		return
-	}
-	body := sanitizeHTML(raw, base)
-	s.render(w, r, "remote.html", "layout", map[string]any{"Nav": "host:" + n.Name, "Host": n.Name, "Node": n, "Tabs": hostTabs, "Tab": r.PathValue("path"), "Body": template.HTML(body)})
-}
 
 type hostNetRow struct {
 	Node    manager.Node
@@ -217,10 +136,7 @@ func (s *Server) rolloutBridge(ctx context.Context, n manager.Node, spec hostd.B
 }
 
 func (s *Server) managerNewVM(w http.ResponseWriter, r *http.Request) {
-	host, path := r.FormValue("host"), "vms/new"
-	if r.FormValue("what") == "import" {
-		path = "vms/import"
-	}
+	host := r.FormValue("host")
 	if host == "" {
 		data := s.managerData(r)
 		data["What"] = r.FormValue("what")
@@ -235,8 +151,14 @@ func (s *Server) managerNewVM(w http.ResponseWriter, r *http.Request) {
 		}
 		host = n.Name
 	}
-	r.SetPathValue("node", host)
-	r.SetPathValue("path", path)
-	r.URL.RawQuery = ""
-	s.managerHostUI(w, r)
+	n, err := s.nodeIn(r, host)
+	if err != nil {
+		flash(w, r, err)
+		return
+	}
+	if r.FormValue("what") == "import" {
+		s.importModal(w, onHost(r, n))
+		return
+	}
+	s.newVM(w, onHost(r, n))
 }

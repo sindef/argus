@@ -43,7 +43,7 @@
 </header>
 <div class="shell">
   {{if not .Session.MustChange}}<aside class="sidebar">{{if .Manager}}{{template "manager-nav" .}}{{else}}{{template "node-nav" .}}{{end}}</aside>{{end}}
-  <main class="content"{{if .Session.MustChange}} style="margin-left:0"{{end}}>{{template "net-banner" .}}{{template "content" .}}</main>
+  <main class="content"{{if .Session.MustChange}} style="margin-left:0"{{end}}>{{template "net-banner" .}}{{if .HostShell}}{{template "host-shell" .}}{{else}}{{template "content" .}}{{end}}</main>
   <p id="flash" class="error toast" role="alert"></p>
   <aside id="drawer" class="drawer"></aside>
   <dialog id="modal" class="card wide"></dialog>
@@ -75,7 +75,16 @@
 
 {{define "net-banner"}}{{with .NetPending}}<div class="net-banner">{{template "icon" "triangle-alert"}}<span>Network change “{{.Description}}” rolls back at {{.Deadline.Local.Format "15:04:05"}} unless confirmed.</span><button class="btn sm primary" hx-post="{{$.Base}}/network/host/confirm" hx-target="#flash">Keep it</button><button class="btn sm" hx-post="{{$.Base}}/network/host/rollback" hx-target="#flash">Roll back now</button></div>{{end}}{{end}}
 
-{{define "remote"}}{{template "scripts" .}}{{template "net-banner" .}}{{template "content" .}}{{end}}
+{{define "host-shell"}}
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-server"/></svg>
+  <div><h1>{{.Host}}</h1><div class="crumbs">{{with .Node.Datacenter}}{{.}} / {{end}}{{with .Node.Cluster}}{{.}} / {{end}}{{.Host}}</div></div>
+</div>
+<div class="panes static wide">
+<nav class="panes-nav">{{range .Tabs}}<a href="/hosts/{{$.Host}}/{{.Path}}"{{if eq $.Tab .Path}} class="active"{{end}}>{{template "icon" .Icon}}{{.Label}}</a>{{end}}</nav>
+<div class="panes-body remote">{{template "content" .}}</div>
+</div>
+{{end}}
 
 {{define "node-nav"}}
 <a class="nav-link{{if eq .Nav "dashboard"}} active{{end}}" href="/dashboard">{{template "icon" "gauge"}}Dashboard</a>

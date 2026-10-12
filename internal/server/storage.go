@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"argus/internal/auth"
-	"argus/internal/hostd"
 	"argus/internal/kube"
 )
 
@@ -141,20 +140,12 @@ func (s *Server) apiRemoveDisk(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) disksPage(w http.ResponseWriter, r *http.Request) {
-	var ds []hostd.Disk
-	err := errors.New("host helper not available")
-	if s.hostd != nil {
-		ds, err = s.hostd.Disks(r.Context())
-	}
+	ds, err := s.ops(r).Disks(r.Context())
 	s.render(w, r, "disks.html", "layout", map[string]any{"Nav": "disks", "Disks": ds, "Error": errText(err)})
 }
 
 func (s *Server) diskModal(w http.ResponseWriter, r *http.Request) {
-	if s.hostd == nil {
-		flash(w, r, errors.New("host helper not available"))
-		return
-	}
-	dd, err := s.hostd.Disk(r.Context(), r.PathValue("name"))
+	dd, err := s.ops(r).Disk(r.Context(), r.PathValue("name"))
 	if err != nil {
 		flash(w, r, err)
 		return
@@ -168,7 +159,7 @@ func (s *Server) diskAction(w http.ResponseWriter, r *http.Request) {
 	if confirm == "" {
 		confirm = r.Header.Get("HX-Prompt")
 	}
-	if err := s.hostd.DiskAction(r.Context(), name, action, confirm, r.FormValue("test")); err != nil {
+	if err := s.ops(r).DiskAction(r.Context(), name, action, confirm, r.FormValue("test")); err != nil {
 		flash(w, r, err)
 		return
 	}
@@ -181,26 +172,12 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) dashboardStats(w http.ResponseWriter, r *http.Request) {
-	if s.hostd == nil {
-		http.Error(w, "host helper not available", http.StatusServiceUnavailable)
-		return
-	}
-	st, err := s.hostd.Stats(r.Context())
+	st, err := s.ops(r).DashStats(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	vms, _ := s.kube.ListVMs(r.Context())
-	var running, cores int
-	var mem int64
-	for _, v := range vms {
-		if v.Running {
-			running++
-			cores += int(v.Cores)
-			mem += quantityBytes(v.Memory)
-		}
-	}
-	writeJSON(w, map[string]any{"host": st, "vms": len(vms), "running": running, "vcpus": cores, "vmMem": mem})
+	writeJSON(w, st)
 }
 
 func (s *Server) moveDisk(ctx context.Context, ns, name, disk, pool string) error {

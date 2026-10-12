@@ -46,7 +46,6 @@ type Server struct {
 	pages       map[string]*template.Template
 	limiter     *loginLimiter
 	mux         *http.ServeMux
-	ui          *http.ServeMux
 	backups     backupState
 	certs       *tlscert.Holder
 	dataDir     string
@@ -76,7 +75,7 @@ type reqAuth struct {
 }
 
 func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
-	s := &Server{kube: k, auth: a, banner: o.Banner, runDir: o.RunDir, releaseFile: o.ReleaseFile, caPEM: o.CAPEM, nodeName: o.NodeName, manager: o.Manager, certs: o.Certs, dataDir: o.DataDir, pages: map[string]*template.Template{}, mux: http.NewServeMux(), ui: http.NewServeMux(), limiter: newLoginLimiter()}
+	s := &Server{kube: k, auth: a, banner: o.Banner, runDir: o.RunDir, releaseFile: o.ReleaseFile, caPEM: o.CAPEM, nodeName: o.NodeName, manager: o.Manager, certs: o.Certs, dataDir: o.DataDir, pages: map[string]*template.Template{}, mux: http.NewServeMux(), limiter: newLoginLimiter()}
 	if k != nil {
 		k.Guard = s.maintenance
 	}
@@ -85,7 +84,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	}
 	s.version = readEnv(o.ReleaseFile)["KAIROS_VERSION"]
 	s.sso.m = map[string]ssoFlow{}
-	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html", "hostnet.html", "dashboard.html", "remote.html", "hostnets.html", "profile.html", "manager-images.html", "audit.html", "groups.html"} {
+	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html", "hostnet.html", "dashboard.html", "hostnets.html", "profile.html", "manager-images.html", "audit.html", "groups.html"} {
 		t, err := template.New(p).Funcs(funcs).ParseFS(web.FS, "templates/layout.html", "templates/manager-nav.html", "templates/"+p)
 		if err != nil {
 			return nil, err
@@ -164,8 +163,6 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("POST /hosts/{node}/delete", s.requireOrg(auth.Admin, s.managerRemoveNode))
 		s.mux.HandleFunc("POST /hosts/{node}/access", s.requireOrg(auth.Admin, s.managerNodeAccess))
 		s.mux.HandleFunc("POST /hosts/{node}/rotate-token", s.requireOrg(auth.Admin, s.managerRotateToken))
-		s.mux.HandleFunc("GET /hosts/{node}/{path...}", s.require(auth.ReadOnly, s.managerHostUI))
-		s.mux.HandleFunc("POST /hosts/{node}/{path...}", s.require(auth.ReadOnly, s.managerHostUI))
 		s.mux.HandleFunc("GET /network/hosts", s.requireOrg(auth.Admin, s.managerHostNets))
 		s.mux.HandleFunc("GET /vm-new", s.require(auth.Operator, s.managerNewVM))
 		s.mux.HandleFunc("GET /images", s.require(auth.ReadOnly, s.managerImages))
@@ -184,11 +181,13 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("POST /settings/ha", s.requireOrg(auth.Admin, s.managerHASettings))
 		s.mux.HandleFunc("POST /ha/failover", s.require(auth.Admin, s.managerFailover))
 		s.mux.HandleFunc("POST /settings/migration", s.requireOrg(auth.Admin, s.managerMigrationSettings))
-		return s, nil
 	}
 	for _, hr := range hostRoutes {
 		h := hr.h
 		s.hostRoute(hr.pattern, hr.role, func(w http.ResponseWriter, r *http.Request) { h(s, w, r) })
+	}
+	if s.manager != nil {
+		return s, nil
 	}
 	s.mux.HandleFunc("GET /events", s.require(auth.ReadOnly, s.eventsPage))
 	s.mux.HandleFunc("GET /volumes", s.require(auth.ReadOnly, s.volumesPage))
@@ -212,7 +211,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("GET /esxi-import/{disk}", s.serveESXi)
 	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/backups", s.require(auth.Admin, s.apiVMBackups))
 	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/backups/{op}", s.require(auth.Admin, s.apiVMBackupOp))
-	s.mux.HandleFunc("/api/ui/", s.require(auth.Admin, s.serveUI))
+	s.hostAPIRoutes()
 	s.mux.HandleFunc("GET /api/host/network", s.require(auth.Admin, s.apiHostNetwork))
 	s.mux.HandleFunc("GET /api/host/status", s.require(auth.Admin, s.apiHostStatus))
 	s.mux.HandleFunc("GET /api/images", s.require(auth.Admin, s.apiImages))
@@ -227,7 +226,6 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /api/tokens/retire", s.require(auth.Admin, s.apiRetireToken))
 	s.mux.HandleFunc("POST /api/host/backup-targets/{op}", s.require(auth.Admin, s.apiBackupTargetOp))
 	s.mux.HandleFunc("POST /api/host/power/{action}", s.require(auth.Admin, s.apiHostRequest))
-	s.mux.HandleFunc("POST /api/host/network/{op}", s.require(auth.Admin, s.apiHostNetworkOp))
 	s.mux.HandleFunc("GET /api/node", s.require(auth.Admin, s.apiNode))
 	s.mux.HandleFunc("GET /api/vms", s.require(auth.Admin, s.apiVMs))
 	s.mux.HandleFunc("GET /api/metrics", s.require(auth.Admin, s.apiMetrics))
@@ -371,51 +369,40 @@ var hostRoutes = []hostRouteDef{
 	{"GET /vms/{ns}/{name}/disks/{disk}/download", auth.Operator, (*Server).downloadDisk},
 }
 
-var hostPolicy, hostRoles = func() (*http.ServeMux, map[string]auth.Role) {
-	mux, roles := http.NewServeMux(), map[string]auth.Role{}
-	for _, hr := range hostRoutes {
-		mux.HandleFunc(hr.pattern, func(http.ResponseWriter, *http.Request) {})
-		roles[hr.pattern] = hr.role
-	}
-	return mux, roles
-}()
-
-func hostRouteRole(method, path string) (auth.Role, bool) {
-	_, pattern := hostPolicy.Handler(&http.Request{Method: method, URL: &url.URL{Path: path}})
-	role, ok := hostRoles[pattern]
-	return role, ok
-}
-
 func (s *Server) hostRoute(pattern string, min auth.Role, h http.HandlerFunc) {
-	s.mux.HandleFunc(pattern, s.require(min, h))
-	s.ui.HandleFunc(pattern, h)
+	if s.manager == nil {
+		s.mux.HandleFunc(pattern, s.require(min, h))
+		return
+	}
+	method, path, _ := strings.Cut(pattern, " ")
+	s.mux.HandleFunc(method+" /hosts/{node}"+path, s.require(min, func(w http.ResponseWriter, r *http.Request) {
+		n, err := s.orgNode(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		h(w, onHost(r, n))
+	}))
 }
 
-const BaseHeader = "X-Argus-Base"
-
-var validBase = regexp.MustCompile(`^/hosts/[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
+func onHost(r *http.Request, n manager.Node) *http.Request {
+	ctx := context.WithValue(r.Context(), baseKey{}, "/hosts/"+n.Name)
+	ctx = context.WithValue(ctx, opsKey{}, remoteOps{n})
+	return r.WithContext(context.WithValue(ctx, hostNodeKey{}, n))
+}
 
 type baseKey struct{}
 
-func (s *Server) serveUI(w http.ResponseWriter, r *http.Request) {
-	base := r.Header.Get(BaseHeader)
-	if !validBase.MatchString(base) {
-		http.Error(w, "invalid base", http.StatusBadRequest)
-		return
-	}
-	r2 := r.Clone(context.WithValue(r.Context(), baseKey{}, base))
-	r2.URL.Path, r2.URL.RawPath = strings.TrimPrefix(r.URL.Path, "/api/ui"), ""
-	s.ui.ServeHTTP(w, r2)
-}
+type hostNodeKey struct{}
 
 func (s *Server) render(w http.ResponseWriter, r *http.Request, page, tmpl string, data map[string]any) {
 	if data == nil {
 		data = map[string]any{}
 	}
-	base, remote := r.Context().Value(baseKey{}).(string)
-	data["Base"] = base
-	if remote && tmpl == "layout" {
-		tmpl = "remote"
+	data["Base"], _ = r.Context().Value(baseKey{}).(string)
+	if n, ok := r.Context().Value(hostNodeKey{}).(manager.Node); ok && tmpl == "layout" {
+		data["HostShell"], data["Host"], data["Node"], data["Tabs"], data["Nav"] = true, n.Name, n, hostTabs, "host:"+n.Name
+		data["Tab"] = strings.TrimPrefix(r.URL.Path, "/hosts/"+n.Name+"/")
 	}
 	if w.Header().Get("Content-Type") == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")

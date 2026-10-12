@@ -264,19 +264,13 @@ func pipe(dst, src *websocket.Conn, done chan<- struct{}) {
 }
 
 func (s *Server) newVM(w http.ResponseWriter, r *http.Request) {
-	imgs, err := s.kube.ListImages(r.Context())
-	nets, nerr := s.kube.ListNetworks(r.Context())
-	if err == nil {
-		err = nerr
-	}
+	f, err := s.ops(r).VMForm(r.Context())
 	tmpl := "layout"
 	if r.Header.Get("HX-Request") != "" {
 		tmpl = "modal"
 	}
-	tpls, _ := s.kube.Templates(r.Context())
-	pools := s.poolChoices(r.Context())
-	slices.SortStableFunc(pools, func(a, b kube.Pool) int { return cmp.Compare(b.Free, a.Free) })
-	s.render(w, r, "vmnew.html", tmpl, map[string]any{"Images": imgs, "Templates": tpls, "Networks": nets, "Pools": pools, "Error": errText(err)})
+	slices.SortStableFunc(f.Pools, func(a, b kube.Pool) int { return cmp.Compare(b.Free, a.Free) })
+	s.render(w, r, "vmnew.html", tmpl, map[string]any{"Images": f.Images, "Templates": f.Templates, "Networks": f.Networks, "Pools": f.Pools, "Error": errText(err)})
 }
 
 func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {
@@ -315,22 +309,7 @@ func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {
 		err = errors.New("network required")
 	}
 	if err == nil {
-		spec.StorageClass, err = s.poolClass(r.Context(), r.FormValue("pool"))
-	}
-	if tpl, ok := strings.CutPrefix(spec.Image, "tpl:"); ok && err == nil {
-		err = fmt.Errorf("template %s not found", tpl)
-		tpls, _ := s.kube.Templates(r.Context())
-		for _, t := range tpls {
-			if t.Name == tpl {
-				spec.Image, err = t.Root, nil
-				if int64(spec.DiskGiB) < t.DiskGiB {
-					err = fmt.Errorf("disk must be at least %d GiB for template %s", t.DiskGiB, tpl)
-				}
-			}
-		}
-	}
-	if err == nil {
-		err = s.kube.CreateVM(r.Context(), spec)
+		err = s.ops(r).CreateVM(r.Context(), createVMReq{Spec: spec, Pool: r.FormValue("pool")})
 	}
 	if err != nil {
 		flash(w, r, err)
@@ -521,44 +500,33 @@ func (s *Server) apiSetTags(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) hardwareModal(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
-	hw, err := s.kube.Hardware(r.Context(), ns, name)
+	hw, err := s.ops(r).Hardware(r.Context(), ns, name)
 	if err != nil {
 		flash(w, r, err)
 		return
 	}
-	imgs, _ := s.kube.ListImages(r.Context())
-	nets, _ := s.kube.ListNetworks(r.Context())
-	s.render(w, r, "vms.html", "hardware-modal", map[string]any{"HW": hw, "NS": ns, "Name": name, "Images": imgs, "Networks": nets, "Firmwares": kube.Firmwares()})
+	f, _ := s.ops(r).VMForm(r.Context())
+	s.render(w, r, "vms.html", "hardware-modal", map[string]any{"HW": hw, "NS": ns, "Name": name, "Images": f.Images, "Networks": f.Networks, "Firmwares": kube.FirmwaresFor(f.Arch)})
 }
 
 func (s *Server) hardwareAction(w http.ResponseWriter, r *http.Request) {
-	ns, name := r.PathValue("ns"), r.PathValue("name")
+	ns, name, op := r.PathValue("ns"), r.PathValue("name"), r.PathValue("op")
+	req := hwOpReq{Hardware: kube.Hardware{Firmware: r.FormValue("firmware"), TPM: r.FormValue("tpm") != "", CDROM: r.FormValue("cdrom")}, Network: r.FormValue("network"), NIC: r.FormValue("nic"), Disk: r.FormValue("disk")}
 	var err error
-	switch r.PathValue("op") {
+	switch op {
 	case "save":
-		hw := kube.Hardware{Firmware: r.FormValue("firmware"), TPM: r.FormValue("tpm") != "", CDROM: r.FormValue("cdrom")}
 		var cores, mem int
 		if err = intField(r, "cores", 1, 64, &cores); err == nil {
 			err = intField(r, "memory", 128, 262144, &mem)
 		}
-		if err == nil && !slices.Contains(kube.Firmwares(), hw.Firmware) {
-			err = errors.New("invalid firmware")
-		}
-		if err == nil {
-			hw.Cores, hw.MemoryMiB = int64(cores), int64(mem)
-			err = s.kube.SetHardware(r.Context(), ns, name, hw)
-		}
-	case "nic-add":
-		err = s.kube.AddNIC(r.Context(), ns, name, r.FormValue("network"))
-	case "nic-remove":
-		err = s.kube.RemoveNIC(r.Context(), ns, name, r.FormValue("nic"))
+		req.Hardware.Cores, req.Hardware.MemoryMiB = int64(cores), int64(mem)
 	case "resize":
 		var size int
-		if err = intField(r, "size", 1, 65536, &size); err == nil {
-			err = s.kube.ResizeDisk(r.Context(), ns, name, r.FormValue("disk"), int64(size))
-		}
-	default:
-		err = errors.New("unknown operation")
+		err = intField(r, "size", 1, 65536, &size)
+		req.SizeGiB = int64(size)
+	}
+	if err == nil {
+		err = s.ops(r).HardwareOp(r.Context(), ns, name, op, req)
 	}
 	if err != nil {
 		flash(w, r, err)
