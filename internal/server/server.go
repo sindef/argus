@@ -295,6 +295,11 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Referrer-Policy", "same-origin")
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
+	if s.certs != nil && r.TLS != nil && r.TLS.ServerName != "" && r.TLS.ServerName != tlscert.InternalName && s.certs.Custom() != nil {
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000")
+	}
 	if s.registry != nil && strings.HasPrefix(r.URL.Path, "/v2/") {
 		s.serveRegistry(w, r)
 		return

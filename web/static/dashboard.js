@@ -44,10 +44,19 @@
       $("dash-vms-detail").textContent = "running, " + d.vcpus + " vCPUs in use";
       const up = Math.floor(h.uptime / 86400), hrs = Math.floor(h.uptime % 86400 / 3600);
       $("dash-uptime").textContent = "· up " + (up ? up + "d " : "") + hrs + "h";
-      $("dash-pools").innerHTML = (h.pools || []).map((p) => {
+      $("dash-pools").replaceChildren(...(h.pools || []).map((p) => {
         const u = Math.round(p.alloc / p.size * 100);
-        return `<div><div class="between"><b>${p.name}</b><span class="muted">${p.health}</span></div><div class="detail">${human(p.alloc)} of ${human(p.size)} (${u}%)</div><div class="bar${u >= 90 ? " bad" : u >= 80 ? " warn" : ""}"><span style="width:${u}%"></span></div></div>`;
-      }).join("");
+        const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+        const row = el("div", "between");
+        row.append(el("b", "", p.name), el("span", "muted", p.health));
+        const bar = el("div", "bar" + (u >= 90 ? " bad" : u >= 80 ? " warn" : ""));
+        const fill = el("span");
+        fill.style.width = u + "%";
+        bar.append(fill);
+        const item = el("div");
+        item.append(row, el("div", "detail", human(p.alloc) + " of " + human(p.size) + " (" + u + "%)"), bar);
+        return item;
+      }));
       if (prev) {
         const dt = (h.t - prev.t) / 1000;
         const busy = 100 * (1 - (h.cpuIdle - prev.cpuIdle) / Math.max(h.cpuTotal - prev.cpuTotal, 1));

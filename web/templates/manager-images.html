@@ -99,7 +99,7 @@
 </dialog>
 {{if .CanOperate}}
 <dialog id="library-add" class="card">
-  <form id="library-form" hx-post="/images/library-add" hx-target="#library-error" hx-encoding="multipart/form-data" hx-disabled-elt="find button[type=submit]" class="form library-form">
+  <form id="library-form" data-progress="library-progress" hx-post="/images/library-add" hx-target="#library-error" hx-encoding="multipart/form-data" hx-disabled-elt="find button[type=submit]" class="form library-form">
     <h2>Add image</h2>
     <p id="library-error" class="error form-error"></p>
     <div class="seg"><label><input type="radio" name="via" value="file" checked>Upload</label><label><input type="radio" name="via" value="url">From URL</label></div>
@@ -181,13 +181,6 @@
   </form>
 </dialog>
 {{end}}
-<script>
-document.getElementById("library-form")?.addEventListener("htmx:xhr:progress", (e) => {
-  const p = document.getElementById("library-progress");
-  p.hidden = false;
-  p.value = e.detail.loaded / e.detail.total * 100;
-});
-</script>
 {{end}}
 
 {{define "host-picks"}}<div class="table-wrap picks"><table><tbody>{{range .HostNames}}{{$a := index $.HostArch .}}<tr><td><label class="check"><input type="checkbox" name="hosts" value="{{.}}" data-arch="{{$a}}"> {{.}}{{if ne $a "amd64"}} <span class="muted">· {{$a}}</span>{{end}}</label></td></tr>{{end}}</tbody></table></div>{{end}}

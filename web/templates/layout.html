@@ -6,6 +6,7 @@
 <title>{{if .Manager}}Argus Manager{{else}}Argus{{end}}</title>
 <link rel="icon" href="/static/logo.svg">
 <link rel="stylesheet" href="/static/argus.css">
+<meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"includeIndicatorStyles":false}'>
 <script src="/static/vendor/htmx/htmx.min.js"></script>
 <script src="/static/argus.js"></script>
 {{block "scripts" .}}{{end}}
@@ -43,7 +44,7 @@
 <div class="shell">
   {{if not .Session.MustChange}}<aside class="sidebar">{{if .Manager}}{{template "manager-nav" .}}{{else}}{{template "node-nav" .}}{{end}}</aside>{{end}}
   <main class="content"{{if .Session.MustChange}} style="margin-left:0"{{end}}>{{template "net-banner" .}}{{template "content" .}}</main>
-  <p id="flash" class="error toast" role="alert" hx-on::after-swap="clearTimeout(this.t); this.t = setTimeout(() => this.innerHTML = '', 8000)"></p>
+  <p id="flash" class="error toast" role="alert"></p>
   <aside id="drawer" class="drawer"></aside>
   <dialog id="modal" class="card wide"></dialog>
   <dialog id="confirm" class="card">

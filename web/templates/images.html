@@ -23,7 +23,7 @@
     </form>
 </dialog>
 <dialog id="upload-image" class="card">
-  <form id="upload-form" hx-post="/images/upload" hx-target="#upload-error" hx-encoding="multipart/form-data" class="form">
+  <form id="upload-form" data-progress="upload-progress" hx-post="/images/upload" hx-target="#upload-error" hx-encoding="multipart/form-data" class="form">
     <h2>Upload image</h2>
     <p id="upload-error" class="error form-error"></p>
       <div class="row">
@@ -35,13 +35,6 @@
       <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Upload</button></div>
     </form>
 </dialog>
-<script>
-document.getElementById("upload-form").addEventListener("htmx:xhr:progress", (e) => {
-  const p = document.getElementById("upload-progress");
-  p.hidden = false;
-  p.value = e.detail.loaded / e.detail.total * 100;
-});
-</script>
 {{end}}
 {{end}}
 

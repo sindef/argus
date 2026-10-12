@@ -80,6 +80,7 @@
       return;
     }
     if (e.target.closest("[data-close-dialog]")) { e.target.closest("dialog").close(); return; }
+    if (e.target.closest("[data-reload]")) { location.reload(); return; }
     const close = e.target.closest("[data-close-drawer]");
     if (close) {
       document.getElementById("drawer").innerHTML = "";
@@ -123,6 +124,20 @@
   document.addEventListener("htmx:afterRequest", (e) => {
     const d = e.target.closest("dialog");
     if (d && !d.contains(e.detail.target)) d.close();
+  });
+  document.addEventListener("htmx:xhr:progress", (e) => {
+    const id = e.target.closest("[data-progress]")?.dataset.progress;
+    const p = id && document.getElementById(id);
+    if (p && e.detail.total) { p.hidden = false; p.value = e.detail.loaded / e.detail.total * 100; }
+  });
+  document.addEventListener("htmx:afterRequest", (e) => {
+    if (e.target.matches("[data-opens-drawer]")) document.querySelector(".content").classList.add("with-drawer");
+  });
+  document.addEventListener("htmx:afterSwap", (e) => {
+    if (e.target.id === "flash") {
+      clearTimeout(e.target.clearAfter);
+      e.target.clearAfter = setTimeout(() => { e.target.textContent = ""; }, 8000);
+    }
   });
   document.addEventListener("htmx:afterSwap", (e) => {
     if (e.target.id === "modal" && e.target.innerHTML.trim()) e.target.showModal();

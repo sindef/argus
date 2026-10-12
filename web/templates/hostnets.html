@@ -35,7 +35,7 @@
     <div class="field">Hosts <span class="help" title="Applied one host at a time. Each host is confirmed only once Argus Manager can still reach it; the rollout stops at the first failure.">?</span></div>
     <div class="table-wrap picks"><table><tbody>{{range .Rows}}<tr><td><label class="check"><input type="checkbox" name="hosts" value="{{.Node.Name}}"{{if .Error}} disabled{{else if index $.Pre .Node.Name}} checked{{end}}> {{.Node.Name}}</label></td><td class="muted">{{range .Bridges}}{{.Name}} {{end}}</td></tr>{{end}}</tbody></table></div>
     <pre id="rollout-result" class="log"></pre>
-    <div class="actions"><button class="btn" type="button" onclick="location.reload()">Close</button><button class="btn primary" type="submit">Create</button></div>
+    <div class="actions"><button class="btn" type="button" data-reload>Close</button><button class="btn primary" type="submit">Create</button></div>
   </form>
 </dialog>
 {{end}}

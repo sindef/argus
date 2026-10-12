@@ -44,7 +44,7 @@
   {{if .CanOperate}}<div class="actions"><button class="btn" hx-get="/vms/import" hx-target="#modal">{{template "icon" "download"}}Import</button><button class="btn primary" hx-get="/vms/new" hx-target="#modal">{{template "icon" "plus"}}Create VM</button></div>{{end}}
 </div>
 {{end}}
-{{with .Open}}<div hx-get="/vms/{{.Namespace}}/{{.Name}}/drawer" hx-target="#drawer" hx-trigger="load" hx-on::after-request="document.querySelector('.content').classList.add('with-drawer')"></div>{{end}}
+{{with .Open}}<div hx-get="/vms/{{.Namespace}}/{{.Name}}/drawer" hx-target="#drawer" hx-trigger="load" data-opens-drawer></div>{{end}}
 {{end}}
 
 {{define "table"}}
