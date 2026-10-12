@@ -137,7 +137,7 @@ func (s *Server) applyClusterNetworks(r *http.Request, dc, cl string) error {
 	}
 	errs := fanOut(r.Context(), members, func(ctx context.Context, n manager.Node) error {
 		for _, d := range networksFor(defs, n) {
-			if err := n.Call(ctx, http.MethodPost, "/api/networks/create", networkReq{Name: d.Name, VLAN: d.VLAN, Bridge: d.Bridge}, nil); err != nil {
+			if err := n.Call(ctx, http.MethodPost, "/api/networks/create", netReq(d), nil); err != nil {
 				return err
 			}
 		}

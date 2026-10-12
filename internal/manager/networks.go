@@ -16,6 +16,8 @@ type Network struct {
 	Description string   `json:"description"`
 	Bridge      string   `json:"bridge,omitempty"`
 	Scopes      []string `json:"scopes,omitempty"`
+	SpoofCheck  bool     `json:"spoofCheck,omitempty"`
+	RateMbps    int      `json:"rateMbps,omitempty"`
 }
 
 func (n Network) BridgeName() string {

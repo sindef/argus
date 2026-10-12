@@ -13,6 +13,7 @@ import (
 
 	"argus/internal/auth"
 	"argus/internal/hostd"
+	"argus/internal/kube"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
@@ -35,16 +36,25 @@ func (s *Server) networks(w http.ResponseWriter, r *http.Request) {
 }
 
 type networkReq struct {
-	Name   string `json:"name"`
-	VLAN   int    `json:"vlan"`
-	Bridge string `json:"bridge"`
+	Name       string `json:"name"`
+	VLAN       int    `json:"vlan"`
+	Bridge     string `json:"bridge"`
+	SpoofCheck bool   `json:"spoofCheck"`
+	RateMbps   int    `json:"rateMbps"`
+}
+
+func (n networkReq) kube() kube.Network {
+	return kube.Network{Name: n.Name, VLAN: n.VLAN, Bridge: n.Bridge, SpoofCheck: n.SpoofCheck, RateMbps: n.RateMbps}
 }
 
 func parseNetwork(r *http.Request) (networkReq, error) {
-	n := networkReq{Name: r.FormValue("name"), Bridge: r.FormValue("bridge")}
+	n := networkReq{Name: r.FormValue("name"), Bridge: r.FormValue("bridge"), SpoofCheck: r.FormValue("spoofcheck") != ""}
 	var err error
 	if v := r.FormValue("vlan"); v != "" {
 		n.VLAN, err = strconv.Atoi(v)
+	}
+	if v := r.FormValue("rate"); v != "" && err == nil {
+		n.RateMbps, err = strconv.Atoi(v)
 	}
 	return n, err
 }
@@ -55,6 +65,9 @@ func validNetwork(n networkReq) error {
 	}
 	if !validObject.MatchString(n.Name) {
 		return errors.New("invalid name")
+	}
+	if n.RateMbps < 0 || n.RateMbps > 100000 {
+		return errors.New("bandwidth limit must be 0-100000 Mbit/s")
 	}
 	return nil
 }
@@ -69,9 +82,9 @@ func (s *Server) createNetwork(w http.ResponseWriter, r *http.Request) {
 		err = fmt.Errorf("bridge %s not found", n.Bridge)
 	}
 	if err == nil && r.FormValue("edit") != "" {
-		err = s.kube.UpdateNetwork(r.Context(), name, vlan, n.Bridge)
+		err = s.kube.UpdateNetwork(r.Context(), n.kube())
 	} else if err == nil {
-		err = s.kube.CreateNetwork(r.Context(), name, vlan, n.Bridge)
+		err = s.kube.CreateNetwork(r.Context(), n.kube())
 	}
 	if err != nil {
 		flash(w, r, err)
@@ -106,9 +119,9 @@ func (s *Server) apiNetworkOp(w http.ResponseWriter, r *http.Request) {
 	} else if n.Bridge != "" && !slices.Contains(s.bridges(r.Context()), n.Bridge) {
 		err = fmt.Errorf("bridge %s not found on %s", n.Bridge, s.nodeName)
 	} else if r.PathValue("op") == "update" {
-		err = s.kube.UpdateNetwork(r.Context(), n.Name, n.VLAN, n.Bridge)
+		err = s.kube.UpdateNetwork(r.Context(), n.kube())
 	} else {
-		err = s.kube.CreateNetwork(r.Context(), n.Name, n.VLAN, n.Bridge)
+		err = s.kube.CreateNetwork(r.Context(), n.kube())
 	}
 	if apierrors.IsAlreadyExists(err) || apierrors.IsNotFound(err) {
 		err = nil

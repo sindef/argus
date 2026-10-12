@@ -165,7 +165,7 @@ func networksFor(defs []manager.Network, n manager.Node) []manager.Network {
 
 func (s *Server) pushNetwork(r *http.Request, op string, n manager.Network) string {
 	return fanOut(r.Context(), s.inventory(r), func(ctx context.Context, node manager.Node) error {
-		req := networkReq{Name: n.Name, VLAN: n.VLAN, Bridge: n.Bridge}
+		req := netReq(n)
 		if op == "delete" || inScope(n.Scopes, node) {
 			return node.Call(ctx, http.MethodPost, "/api/networks/"+op, req, nil)
 		}
@@ -182,7 +182,7 @@ func (s *Server) managerAddNetwork(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		err = validNetwork(req)
 	}
-	n := manager.Network{Name: req.Name, VLAN: req.VLAN, Bridge: req.Bridge, CIDR: strings.TrimSpace(r.FormValue("cidr")), Gateway: strings.TrimSpace(r.FormValue("gateway")), Description: strings.TrimSpace(r.FormValue("description")), Scopes: scopeList(r.FormValue("scopes"))}
+	n := manager.Network{Name: req.Name, VLAN: req.VLAN, Bridge: req.Bridge, SpoofCheck: req.SpoofCheck, RateMbps: req.RateMbps, CIDR: strings.TrimSpace(r.FormValue("cidr")), Gateway: strings.TrimSpace(r.FormValue("gateway")), Description: strings.TrimSpace(r.FormValue("description")), Scopes: scopeList(r.FormValue("scopes"))}
 	if _, _, cerr := net.ParseCIDR(n.CIDR); err == nil && n.CIDR != "" && cerr != nil {
 		err = errors.New("invalid CIDR")
 	}
@@ -242,4 +242,8 @@ func (s *Server) managerNetworkOp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Refresh", "true")
+}
+
+func netReq(n manager.Network) networkReq {
+	return networkReq{Name: n.Name, VLAN: n.VLAN, Bridge: n.Bridge, SpoofCheck: n.SpoofCheck, RateMbps: n.RateMbps}
 }

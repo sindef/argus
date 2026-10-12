@@ -13,14 +13,14 @@
   <thead><tr><th>Name</th><th>VLAN</th><th>Bridge</th><th>Attached VMs</th><th></th></tr></thead>
   <tbody>
   {{range .Networks}}
-  <tr{{if $.CanEdit}} class="clickable" data-dialog="edit-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.Bridge}}"}'{{end}}>
+  <tr{{if $.CanEdit}} class="clickable" data-dialog="edit-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.Bridge}}","rate":"{{if .RateMbps}}{{.RateMbps}}{{end}}","spoofcheck":[{{if .SpoofCheck}}"on"{{end}}]}'{{end}}>
     <td>{{template "icon" "network"}}{{.Name}}</td>
     <td>{{if .VLAN}}{{.VLAN}}{{else}}<span class="muted">untagged</span>{{end}}</td>
     <td>{{.Bridge}}</td>
     <td>{{index $.Attached .Name}}</td>
     <td class="row-actions">{{if $.CanEdit}}<div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
       <div class="menu-list" hidden hx-target="#flash">
-        <button data-dialog="edit-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.Bridge}}"}'>{{template "icon" "pencil"}}Edit…</button>
+        <button data-dialog="edit-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.Bridge}}","rate":"{{if .RateMbps}}{{.RateMbps}}{{end}}","spoofcheck":[{{if .SpoofCheck}}"on"{{end}}]}'>{{template "icon" "pencil"}}Edit…</button>
         <hr><button class="danger" hx-post="/networks/{{.Name}}/delete" hx-confirm="Delete network {{.Name}}?">{{template "icon" "trash-2"}}Delete</button>
       </div></div>{{end}}</td>
   </tr>
@@ -39,6 +39,8 @@
       <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
       <label>VLAN <input name="vlan" type="number" min="1" max="4094" placeholder="untagged"></label>
       {{with .Bridges}}<label>Bridge <select name="bridge">{{range .}}<option>{{.}}</option>{{end}}</select></label>{{end}}
+      <label>Bandwidth limit (Mbit/s) <span class="help" title="Per VM network adapter, each direction. Empty for no limit.">?</span><input name="rate" type="number" min="1" max="100000" placeholder="none" class="num"></label>
+      <label class="check"><input type="checkbox" name="spoofcheck" value="on"> Block MAC spoofing <span class="help" title="Drops frames from a VM that use a MAC address other than its own.">?</span></label>
     </div>
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">{{template "icon" "plus"}}Add network</button></div>
   </form>
@@ -52,6 +54,8 @@
       <label>Name <input name="name" readonly></label>
       <label>VLAN <input name="vlan" type="number" min="1" max="4094" placeholder="untagged"></label>
       {{with .Bridges}}<label>Bridge <select name="bridge">{{range .}}<option>{{.}}</option>{{end}}</select></label>{{end}}
+      <label>Bandwidth limit (Mbit/s) <span class="help" title="Per VM network adapter, each direction. Empty for no limit.">?</span><input name="rate" type="number" min="1" max="100000" placeholder="none" class="num"></label>
+      <label class="check"><input type="checkbox" name="spoofcheck" value="on"> Block MAC spoofing <span class="help" title="Drops frames from a VM that use a MAC address other than its own.">?</span></label>
     </div>
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Save</button></div>
   </form>
@@ -67,7 +71,7 @@
 <div class="table-wrap">
 <table>
   <thead><tr><th>Name</th><th>VLAN</th><th>Bridge</th><th>Scope</th><th>CIDR</th><th>Gateway</th><th>Applied</th><th>Attached VMs</th><th></th></tr></thead>
-  <tbody>{{range .Rows}}<tr{{if $.CanEdit}} class="clickable" data-dialog="{{if .Defined}}edit-network{{else}}new-network{{end}}" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.BridgeName}}","cidr":"{{.CIDR}}","gateway":"{{.Gateway}}","description":"{{.Description}}","scopes":"{{join .Scopes ", "}}"}'{{end}}>
+  <tbody>{{range .Rows}}<tr{{if $.CanEdit}} class="clickable" data-dialog="{{if .Defined}}edit-network{{else}}new-network{{end}}" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.BridgeName}}","cidr":"{{.CIDR}}","gateway":"{{.Gateway}}","description":"{{.Description}}","scopes":"{{join .Scopes ", "}}","rate":"{{if .RateMbps}}{{.RateMbps}}{{end}}","spoofcheck":[{{if .SpoofCheck}}"on"{{end}}]}'{{end}}>
     <td>{{template "icon" "network"}}{{.Name}}{{with .Description}} <span class="muted">{{.}}</span>{{end}}{{if not .Defined}} <span class="badge" title="Exists on a host but is not defined in Argus Manager">host only</span>{{end}}</td>
     <td>{{if .VLAN}}{{.VLAN}}{{else}}<span class="muted">untagged</span>{{end}}</td>
     <td class="mono">{{.BridgeName}}</td>
@@ -78,7 +82,7 @@
     <td>{{.Attached}}</td>
     <td class="row-actions">{{if $.CanEdit}}<div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
       <div class="menu-list" hidden hx-target="#flash">
-        {{if .Defined}}<button data-dialog="edit-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.BridgeName}}","cidr":"{{.CIDR}}","gateway":"{{.Gateway}}","description":"{{.Description}}","scopes":"{{join .Scopes ", "}}"}'>{{template "icon" "pencil"}}Edit…</button>{{else}}<button data-dialog="new-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.BridgeName}}","cidr":"{{.CIDR}}","gateway":"{{.Gateway}}","description":"{{.Description}}","scopes":"{{join .Scopes ", "}}"}'>{{template "icon" "plus"}}Define…</button>{{end}}
+        {{if .Defined}}<button data-dialog="edit-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.BridgeName}}","cidr":"{{.CIDR}}","gateway":"{{.Gateway}}","description":"{{.Description}}","scopes":"{{join .Scopes ", "}}","rate":"{{if .RateMbps}}{{.RateMbps}}{{end}}","spoofcheck":[{{if .SpoofCheck}}"on"{{end}}]}'>{{template "icon" "pencil"}}Edit…</button>{{else}}<button data-dialog="new-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.BridgeName}}","cidr":"{{.CIDR}}","gateway":"{{.Gateway}}","description":"{{.Description}}","scopes":"{{join .Scopes ", "}}","rate":"{{if .RateMbps}}{{.RateMbps}}{{end}}","spoofcheck":[{{if .SpoofCheck}}"on"{{end}}]}'>{{template "icon" "plus"}}Define…</button>{{end}}
         {{if and .Defined (ne .Applied .InScope)}}<button hx-post="/networks/{{.Name}}/apply">{{template "icon" "refresh-cw"}}Apply to hosts in scope</button>{{end}}
         <hr><button class="danger" hx-post="/networks/{{.Name}}/delete" hx-confirm="Delete {{.Name}} from all hosts?">{{template "icon" "trash-2"}}Delete</button>
       </div></div>{{end}}</td>
@@ -110,6 +114,8 @@
       <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
       <label>VLAN <input name="vlan" type="number" min="1" max="4094" placeholder="untagged"></label>
       <label>Bridge <span class="help" title="Must exist on every host. Create it under Host networks first.">?</span><input name="bridge" placeholder="br0" list="bridge-names"></label>
+      <label>Bandwidth limit (Mbit/s) <span class="help" title="Per VM network adapter, each direction. Empty for no limit.">?</span><input name="rate" type="number" min="1" max="100000" placeholder="none" class="num"></label>
+      <label class="check"><input type="checkbox" name="spoofcheck" value="on"> Block MAC spoofing <span class="help" title="Drops frames from a VM that use a MAC address other than its own.">?</span></label>
     </div>
     <datalist id="bridge-names">{{range $.AllBridges}}<option>{{.}}</option>{{end}}</datalist>
     <div class="row">
