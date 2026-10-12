@@ -189,7 +189,19 @@ func randomMAC() string {
 
 func (c *Client) DeleteVM(ctx context.Context, ns, name string) error {
 	fg := metav1.DeletePropagationForeground
-	return c.dyn.Resource(vmGVR).Namespace(ns).Delete(ctx, name, metav1.DeleteOptions{PropagationPolicy: &fg})
+	if err := c.dyn.Resource(vmGVR).Namespace(ns).Delete(ctx, name, metav1.DeleteOptions{PropagationPolicy: &fg}); err != nil {
+		return err
+	}
+	snaps, err := c.ListSnapshots(ctx, ns, name)
+	if err != nil {
+		return err
+	}
+	for _, sn := range snaps {
+		if err := c.DeleteSnapshot(ctx, ns, sn.Name); err != nil && !apierrors.IsNotFound(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *Client) AddDisk(ctx context.Context, ns, name string, sizeGiB int, class string) error {
