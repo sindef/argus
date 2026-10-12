@@ -56,7 +56,11 @@ func main() {
 		log.Fatal(err)
 	}
 	if pw != "" {
-		log.Printf("initial login: admin / %s", pw)
+		f := filepath.Join(data, "initial-admin-password")
+		if err := os.WriteFile(f, []byte(pw+"\n"), 0o600); err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("initial login: admin, password in %s (delete it after signing in)", f)
 	}
 	pki, err := tlscert.Load(ctx, fs, nil)
 	if err != nil {
