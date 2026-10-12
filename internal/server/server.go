@@ -359,6 +359,7 @@ var hostRoutes = []hostRouteDef{
 	{"POST /vms/import/{source}", auth.Operator, (*Server).importVM},
 	{"GET /vms/{ns}/{name}/hardware", auth.Operator, (*Server).hardwareModal},
 	{"POST /vms/{ns}/{name}/hardware/{op}", auth.Operator, (*Server).hardwareAction},
+	{"POST /vms/{ns}/{name}/disks/{disk}/download", auth.Operator, (*Server).downloadLink},
 	{"GET /vms/{ns}/{name}/disks/{disk}/download", auth.Operator, (*Server).downloadDisk},
 }
 

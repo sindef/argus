@@ -80,6 +80,12 @@ type backupState struct {
 	last     map[string]string
 	lastCopy map[string]time.Time
 	restores map[string]restoreJob
+	links    map[string]downloadGrant
+}
+
+type downloadGrant struct {
+	path    string
+	expires time.Time
 }
 
 type restoreJob struct {
@@ -679,8 +685,34 @@ func (s *Server) vmBackupForm(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("HX-Refresh", "true")
 }
 
+func (s *Server) downloadLink(w http.ResponseWriter, r *http.Request) {
+	tok := newToken()
+	path := strings.TrimSuffix(r.URL.Path, "/download")
+	s.backups.mu.Lock()
+	if s.backups.links == nil {
+		s.backups.links = map[string]downloadGrant{}
+	}
+	for k, g := range s.backups.links {
+		if time.Now().After(g.expires) {
+			delete(s.backups.links, k)
+		}
+	}
+	s.backups.links[tok] = downloadGrant{path: path, expires: time.Now().Add(5 * time.Minute)}
+	s.backups.mu.Unlock()
+	base, _ := r.Context().Value(baseKey{}).(string)
+	w.Header().Set("HX-Redirect", base+"/vms/"+r.PathValue("ns")+"/"+r.PathValue("name")+"/disks/"+r.PathValue("disk")+"/download?t="+tok)
+}
+
 func (s *Server) downloadDisk(w http.ResponseWriter, r *http.Request) {
 	ns, name, disk := r.PathValue("ns"), r.PathValue("name"), r.PathValue("disk")
+	s.backups.mu.Lock()
+	g, ok := s.backups.links[r.URL.Query().Get("t")]
+	delete(s.backups.links, r.URL.Query().Get("t"))
+	s.backups.mu.Unlock()
+	if !ok || time.Now().After(g.expires) || g.path != strings.TrimSuffix(r.URL.Path, "/download") {
+		http.Error(w, "this download link has expired; start the download again", http.StatusForbidden)
+		return
+	}
 	hw, err := s.kube.Hardware(r.Context(), ns, name)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
