@@ -10,13 +10,13 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"argus/internal/auth"
 	"argus/internal/kube"
+	"argus/internal/netguard"
 	"argus/internal/registry"
 )
 
@@ -45,8 +45,8 @@ func (s *Server) importImage(w http.ResponseWriter, r *http.Request) {
 	if err == nil && !validObject.MatchString(name) {
 		err = errors.New("invalid name")
 	}
-	if u, perr := url.Parse(src); err == nil && (perr != nil || (u.Scheme != "http" && u.Scheme != "https")) {
-		err = errors.New("URL must be http or https")
+	if err == nil {
+		err = netguard.CheckURL(r.Context(), src)
 	}
 	if err == nil {
 		err = s.kube.CreateImage(r.Context(), name, size, src)
@@ -152,9 +152,14 @@ func (s *Server) apiImportImage(w http.ResponseWriter, r *http.Request) {
 	case req.Export != nil:
 		err = s.kube.ImportImage(r.Context(), req.Name, req.Size, *req.Export)
 	case req.Registry != nil && req.Registry.Image != "":
-		err = s.kube.ImportRegistryImage(r.Context(), req.Name, req.Size, *req.Registry)
+		host, _, _ := strings.Cut(req.Registry.Image, "/")
+		if err = netguard.CheckHost(r.Context(), host); err == nil {
+			err = s.kube.ImportRegistryImage(r.Context(), req.Name, req.Size, *req.Registry)
+		}
 	case strings.HasPrefix(req.URL, "https://") || strings.HasPrefix(req.URL, "http://"):
-		err = s.kube.CreateImage(r.Context(), req.Name, req.Size, req.URL)
+		if err = netguard.CheckURL(r.Context(), req.URL); err == nil {
+			err = s.kube.CreateImage(r.Context(), req.Name, req.Size, req.URL)
+		}
 	default:
 		err = errors.New("url, export or registry required")
 	}

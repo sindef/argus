@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"argus/internal/kube"
+	"argus/internal/netguard"
 	"argus/internal/vsphere"
 )
 
@@ -40,6 +41,9 @@ func dialVCenter(ctx context.Context, f func(string) string) (*vsphere.Client, *
 	host := strings.TrimSpace(f("host"))
 	if host == "" {
 		return nil, nil, errors.New("vCenter host required")
+	}
+	if err := netguard.CheckHost(ctx, host); err != nil {
+		return nil, nil, err
 	}
 	tc, err := vcenterTLS(host, f("fingerprint"))
 	if err != nil {

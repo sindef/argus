@@ -26,6 +26,7 @@ import (
 	"argus/internal/auth"
 	"argus/internal/kube"
 	"argus/internal/manager"
+	"argus/internal/netguard"
 	"argus/internal/registry"
 	"argus/internal/tlscert"
 
@@ -345,7 +346,7 @@ func (s *Server) libraryAdd(r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := netguard.Client().Do(req)
 		if err != nil {
 			return err
 		}

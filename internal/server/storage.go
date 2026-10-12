@@ -6,11 +6,11 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"net/url"
 	"time"
 
 	"argus/internal/auth"
 	"argus/internal/kube"
+	"argus/internal/netguard"
 )
 
 type volumeReq struct {
@@ -44,8 +44,10 @@ func (s *Server) volumeOp(ctx context.Context, op string, q volumeReq) error {
 		if q.Size < 1 || q.Size > 4096 {
 			return errors.New("size must be 1-4096 GiB")
 		}
-		if u, err := url.Parse(q.URL); q.URL != "" && (err != nil || (u.Scheme != "http" && u.Scheme != "https")) {
-			return errors.New("URL must be http or https")
+		if q.URL != "" {
+			if err := netguard.CheckURL(ctx, q.URL); err != nil {
+				return err
+			}
 		}
 		class, err := s.poolClass(ctx, q.Pool)
 		if err != nil {

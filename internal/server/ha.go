@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"argus/internal/kube"
+	"argus/internal/netguard"
 )
 
 const (
@@ -64,6 +65,10 @@ func (s *Server) apiHeartbeat(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiProbe(w http.ResponseWriter, r *http.Request) {
+	if err := netguard.CheckURL(r.Context(), r.URL.Query().Get("url")); err != nil {
+		apiError(w, r, http.StatusBadRequest, err)
+		return
+	}
 	writeJSON(w, map[string]bool{"reachable": reachable(r.URL.Query().Get("url"))})
 }
 

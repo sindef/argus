@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"argus/internal/kube"
+	"argus/internal/netguard"
 )
 
 type ovfEnvelope struct {
@@ -294,6 +295,9 @@ func (s *Server) importESXi(ctx context.Context, f func(string) string) (string,
 	}
 	if e.Host == "" {
 		return "", errors.New("ESXi host required")
+	}
+	if err := netguard.CheckHost(ctx, e.Host); err != nil {
+		return "", err
 	}
 	if err := e.pinCert(); err != nil {
 		return "", err
