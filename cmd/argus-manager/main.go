@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -20,7 +21,7 @@ import (
 	"time"
 
 	"argus/internal/auth"
-	"argus/internal/filestore"
+	"argus/internal/dbstore"
 	"argus/internal/manager"
 	"argus/internal/sealed"
 	"argus/internal/server"
@@ -28,24 +29,31 @@ import (
 )
 
 func main() {
+	syscall.Umask(0o077)
 	addr := env("ARGUS_ADDR", ":8443")
 	data := env("ARGUS_DATA", "/var/lib/argus-manager")
+	keyFile := env("ARGUS_KEY_FILE", filepath.Join(data, "argus.key"))
 	restoreFile := flag.String("restore", "", "restore an encrypted configuration backup into ARGUS_DATA and exit; passphrase from ARGUS_BACKUP_PASSPHRASE")
 	force := flag.Bool("force", false, "with -restore, overwrite an existing configuration")
 	flag.Parse()
 	if *restoreFile != "" {
-		if err := restore(*restoreFile, data, os.Getenv("ARGUS_BACKUP_PASSPHRASE"), *force); err != nil {
+		if err := restore(*restoreFile, data, keyFile, os.Getenv("ARGUS_BACKUP_PASSPHRASE"), *force); err != nil {
 			log.Fatal(err)
 		}
 		log.Printf("configuration restored into %s", data)
 		return
 	}
-	fs, err := filestore.New(data)
+	fs, err := openStore(data, keyFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	if n, err := fs.ImportFiles(ctx, data); err != nil {
+		log.Fatal(err)
+	} else if n > 0 {
+		log.Printf("moved %d configuration files into the encrypted database", n)
+	}
 	mgr := manager.New(fs, filepath.Join(data, "metrics.gob"))
 	if err := mgr.EnsureDefaultOrg(ctx); err != nil {
 		log.Fatal(err)
@@ -101,12 +109,16 @@ func env(k, def string) string {
 	return def
 }
 
-func restore(file, data, passphrase string, force bool) error {
+func openStore(data, keyFile string) (*dbstore.Store, error) {
+	if err := os.MkdirAll(data, 0o700); err != nil {
+		return nil, err
+	}
+	return dbstore.Open(filepath.Join(data, "argus.db"), keyFile)
+}
+
+func restore(file, data, keyFile, passphrase string, force bool) error {
 	if passphrase == "" {
 		return errors.New("set ARGUS_BACKUP_PASSPHRASE")
-	}
-	if _, err := os.Stat(filepath.Join(data, "argus-nodes.json")); err == nil && !force {
-		return fmt.Errorf("%s already holds a configuration; stop Argus Manager and pass -force to overwrite it", data)
 	}
 	enc, err := os.ReadFile(file)
 	if err != nil {
@@ -120,14 +132,12 @@ func restore(file, data, passphrase string, force bool) error {
 	if err != nil {
 		return err
 	}
+	recs := map[string]dbstore.Record{}
 	tr := tar.NewReader(gz)
-	if err := os.MkdirAll(data, 0o700); err != nil {
-		return err
-	}
 	for {
 		h, err := tr.Next()
 		if err == io.EOF {
-			return nil
+			break
 		}
 		if err != nil {
 			return err
@@ -136,12 +146,22 @@ func restore(file, data, passphrase string, force bool) error {
 		if name != h.Name || !strings.HasSuffix(name, ".json") {
 			return fmt.Errorf("unexpected entry %q in backup", h.Name)
 		}
-		b, err := io.ReadAll(io.LimitReader(tr, 64<<20))
-		if err != nil {
-			return err
+		var rec dbstore.Record
+		if err := json.NewDecoder(io.LimitReader(tr, 64<<20)).Decode(&rec); err != nil {
+			return fmt.Errorf("%s: %w", name, err)
 		}
-		if err := os.WriteFile(filepath.Join(data, name), b, 0o600); err != nil {
-			return err
-		}
+		recs[strings.TrimSuffix(name, ".json")] = rec
 	}
+	st, err := openStore(data, keyFile)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	ctx := context.Background()
+	if empty, err := st.Empty(ctx); err != nil {
+		return err
+	} else if !empty && !force {
+		return fmt.Errorf("%s already holds a configuration; stop Argus Manager and pass -force to overwrite it", data)
+	}
+	return st.Replace(ctx, recs)
 }

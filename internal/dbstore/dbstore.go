@@ -1,0 +1,251 @@
+package dbstore
+
+import (
+	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	_ "modernc.org/sqlite"
+)
+
+var resource = schema.GroupResource{Resource: "secrets"}
+
+type Record struct {
+	Version int               `json:"version"`
+	Type    string            `json:"type"`
+	Data    map[string][]byte `json:"data"`
+}
+
+type Store struct {
+	db   *sql.DB
+	aead cipher.AEAD
+}
+
+func loadKey(path string) ([]byte, error) {
+	key, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		key = make([]byte, 32)
+		if _, err := rand.Read(key); err != nil {
+			return nil, err
+		}
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := f.Write(key); err != nil {
+			f.Close()
+			return nil, err
+		}
+		return key, f.Close()
+	}
+	if err != nil {
+		return nil, err
+	}
+	st, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if st.Mode().Perm()&0o077 != 0 {
+		return nil, fmt.Errorf("%s must not be readable by group or others (chmod 600)", path)
+	}
+	if len(key) != 32 {
+		return nil, fmt.Errorf("%s must hold a 32-byte key", path)
+	}
+	return key, nil
+}
+
+func Open(dbPath, keyPath string) (*Store, error) {
+	key, err := loadKey(keyPath)
+	if err != nil {
+		return nil, err
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("sqlite", "file:"+dbPath+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(FULL)")
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS records (name TEXT PRIMARY KEY, version INTEGER NOT NULL, type TEXT NOT NULL, data BLOB NOT NULL)`); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := os.Chmod(dbPath, 0o600); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return &Store{db: db, aead: aead}, nil
+}
+
+func (s *Store) Close() error { return s.db.Close() }
+
+func (s *Store) seal(name string, data map[string][]byte) ([]byte, error) {
+	plain, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+	nonce := make([]byte, s.aead.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, err
+	}
+	return s.aead.Seal(nonce, nonce, plain, []byte(name)), nil
+}
+
+func (s *Store) open(name string, blob []byte) (map[string][]byte, error) {
+	n := s.aead.NonceSize()
+	if len(blob) < n {
+		return nil, fmt.Errorf("record %s is corrupt", name)
+	}
+	plain, err := s.aead.Open(nil, blob[:n], blob[n:], []byte(name))
+	if err != nil {
+		return nil, fmt.Errorf("record %s cannot be decrypted with this key", name)
+	}
+	var data map[string][]byte
+	return data, json.Unmarshal(plain, &data)
+}
+
+func (s *Store) Get(ctx context.Context, name string) (map[string][]byte, string, error) {
+	var version int
+	var blob []byte
+	err := s.db.QueryRowContext(ctx, `SELECT version, data FROM records WHERE name = ?`, name).Scan(&version, &blob)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, "", apierrors.NewNotFound(resource, name)
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	data, err := s.open(name, blob)
+	return data, strconv.Itoa(version), err
+}
+
+func (s *Store) Create(ctx context.Context, name, typ string, data map[string][]byte) error {
+	blob, err := s.seal(name, data)
+	if err != nil {
+		return err
+	}
+	res, err := s.db.ExecContext(ctx, `INSERT INTO records (name, version, type, data) VALUES (?, 1, ?, ?) ON CONFLICT(name) DO NOTHING`, name, typ, blob)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return apierrors.NewAlreadyExists(resource, name)
+	}
+	return nil
+}
+
+func (s *Store) Update(ctx context.Context, name, resourceVersion string, data map[string][]byte) error {
+	version, err := strconv.Atoi(resourceVersion)
+	if err != nil {
+		return apierrors.NewConflict(resource, name, errors.New("invalid version"))
+	}
+	blob, err := s.seal(name, data)
+	if err != nil {
+		return err
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE records SET version = version + 1, data = ? WHERE name = ? AND version = ?`, blob, name, version)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		if _, _, err := s.Get(ctx, name); err != nil {
+			return err
+		}
+		return apierrors.NewConflict(resource, name, errors.New("modified"))
+	}
+	return nil
+}
+
+func (s *Store) Export(ctx context.Context) (map[string]Record, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT name, version, type, data FROM records ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]Record{}
+	for rows.Next() {
+		var name string
+		var rec Record
+		var blob []byte
+		if err := rows.Scan(&name, &rec.Version, &rec.Type, &blob); err != nil {
+			return nil, err
+		}
+		if rec.Data, err = s.open(name, blob); err != nil {
+			return nil, err
+		}
+		out[name] = rec
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) Empty(ctx context.Context) (bool, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM records`).Scan(&n)
+	return n == 0, err
+}
+
+func (s *Store) Replace(ctx context.Context, recs map[string]Record) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM records`); err != nil {
+		return err
+	}
+	for name, rec := range recs {
+		blob, err := s.seal(name, rec.Data)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO records (name, version, type, data) VALUES (?, ?, ?, ?)`, name, max(rec.Version, 1), rec.Type, blob); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) ImportFiles(ctx context.Context, dir string) (int, error) {
+	files, err := filepath.Glob(filepath.Join(dir, "*.json"))
+	if err != nil || len(files) == 0 {
+		return 0, err
+	}
+	recs := map[string]Record{}
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			return 0, err
+		}
+		var rec Record
+		if err := json.Unmarshal(b, &rec); err != nil {
+			return 0, fmt.Errorf("%s: %w", filepath.Base(f), err)
+		}
+		recs[strings.TrimSuffix(filepath.Base(f), ".json")] = rec
+	}
+	if err := s.Replace(ctx, recs); err != nil {
+		return 0, err
+	}
+	for _, f := range files {
+		if err := os.Remove(f); err != nil {
+			return 0, err
+		}
+	}
+	return len(files), nil
+}

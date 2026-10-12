@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"argus/internal/filestore"
+	"argus/internal/dbstore"
 )
 
 func TestUnprotectOnlyMatchesOwnHosts(t *testing.T) {
-	fs, err := filestore.New(t.TempDir())
+	fs, err := testStore(t)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestUnprotectOnlyMatchesOwnHosts(t *testing.T) {
 }
 
 func TestFailoverIsManualByDefault(t *testing.T) {
-	fs, _ := filestore.New(t.TempDir())
+	fs, _ := testStore(t)
 	c := New(fs, filepath.Join(t.TempDir(), "m.gob"))
 	ctx := context.Background()
 	c.save(ctx, []Node{{Name: "a1", Org: "o"}, {Name: "a2", Org: "o"}}, "")
@@ -54,4 +54,9 @@ func TestFailoverIsManualByDefault(t *testing.T) {
 	if ps, _ := c.Protected(ctx); ps[0].Owner != "a2" || ps[0].Replica != "a1" {
 		t.Fatalf("manual failover did not swap roles: %+v", ps[0])
 	}
+}
+
+func testStore(t *testing.T) (*dbstore.Store, error) {
+	dir := t.TempDir()
+	return dbstore.Open(filepath.Join(dir, "argus.db"), filepath.Join(dir, "argus.key"))
 }

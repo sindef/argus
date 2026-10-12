@@ -5,13 +5,13 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"argus/internal/auth"
+	"argus/internal/dbstore"
 	"argus/internal/kube"
 	"argus/internal/manager"
 	"argus/internal/sealed"
@@ -943,7 +944,14 @@ func (s *Server) managerBackup(w http.ResponseWriter, r *http.Request) {
 		s.renderSettings(w, r, "", errors.New("backup passphrase must be at least 12 characters"))
 		return
 	}
-	files, err := filepath.Glob(filepath.Join(s.dataDir, "*.json"))
+	ex, ok := s.auth.Secrets().(interface {
+		Export(context.Context) (map[string]dbstore.Record, error)
+	})
+	if !ok {
+		s.renderSettings(w, r, "", errors.New("this store cannot be exported"))
+		return
+	}
+	recs, err := ex.Export(r.Context())
 	if err != nil {
 		s.renderSettings(w, r, "", err)
 		return
@@ -951,17 +959,13 @@ func (s *Server) managerBackup(w http.ResponseWriter, r *http.Request) {
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)
-	sort.Strings(files)
-	for _, f := range files {
-		if filepath.Base(f) == "argus-sessions.json" {
+	names := slices.Sorted(maps.Keys(recs))
+	for _, name := range names {
+		if name == "argus-sessions" {
 			continue
 		}
-		b, err := os.ReadFile(f)
-		if err != nil {
-			s.renderSettings(w, r, "", fmt.Errorf("cannot read %s: %w", filepath.Base(f), err))
-			return
-		}
-		tw.WriteHeader(&tar.Header{Name: filepath.Base(f), Mode: 0o600, Size: int64(len(b)), ModTime: time.Now()})
+		b, _ := json.Marshal(recs[name])
+		tw.WriteHeader(&tar.Header{Name: name + ".json", Mode: 0o600, Size: int64(len(b)), ModTime: time.Now()})
 		tw.Write(b)
 	}
 	tw.Close()

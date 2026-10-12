@@ -6,12 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"argus/internal/filestore"
 )
 
 func TestInterruptedJobKeepsLocks(t *testing.T) {
-	fs, _ := filestore.New(t.TempDir())
+	fs, _ := testStore(t)
 	ctx := context.Background()
 	b, _ := json.Marshal([]*Job{{ID: "j1", VM: "web", From: "a1", To: "a2", Status: "Copying", Live: true}})
 	fs.Create(ctx, jobsKey, "Opaque", map[string][]byte{"jobs": b})
