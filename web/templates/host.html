@@ -48,6 +48,7 @@
   <h3>NFS <span class="help" title="NFS export for VM backups, shown above as nfs. Tested for write access before saving. Leave empty to remove.">?</span></h3>
   <form hx-post="/host/settings" hx-target="#flash" class="form inline">
     <input name="backup" value="{{.Backup}}" placeholder="nas.example:/backups/argus" aria-label="NFS export">
+    <input name="passphrase" type="password" autocomplete="new-password" placeholder="{{if .BackupEncrypted}}Encrypted; passphrase unchanged{{else}}Encryption passphrase (optional){{end}}" aria-label="Encryption passphrase"><span class="help" title="Backups are encrypted with AES-256-GCM. Keep the passphrase safe: backups cannot be restored without it, and changing it leaves older backups needing the old one.">?</span>
     <button class="btn primary" type="submit">Save</button>
   </form>
 </section>

@@ -20,7 +20,29 @@ import (
 	"argus/internal/sealed"
 )
 
-const targetsKey = "argus-backup-targets"
+const (
+	targetsKey = "argus-backup-targets"
+	nfsKey     = "argus-backup-nfs"
+)
+
+type nfsSettings struct {
+	Passphrase string `json:"passphrase"`
+}
+
+func (s *Server) nfsPassphrase(ctx context.Context) string {
+	var n nfsSettings
+	s.loadJSON(ctx, nfsKey, &n)
+	return n.Passphrase
+}
+
+func (s *Server) setNFSPassphrase(ctx context.Context, pass string) error {
+	var n nfsSettings
+	rv, err := s.loadJSON(ctx, nfsKey, &n)
+	if err != nil {
+		return err
+	}
+	return s.saveJSON(ctx, nfsKey, rv, nfsSettings{pass})
+}
 
 var stampRE = regexp.MustCompile(`^[0-9]{8}-[0-9]{6}$`)
 
@@ -59,7 +81,7 @@ func (s *Server) backupTargets(ctx context.Context) ([]BackupTarget, error) {
 			return nil, err
 		}
 		if st.Backup != "" {
-			out = append(out, BackupTarget{Name: "nfs", Kind: "nfs", Endpoint: st.Backup})
+			out = append(out, BackupTarget{Name: "nfs", Kind: "nfs", Endpoint: st.Backup, Passphrase: s.nfsPassphrase(ctx)})
 		}
 	}
 	var extra []BackupTarget
@@ -82,18 +104,18 @@ func (s *Server) store(ctx context.Context, name string) (backupStore, error) {
 }
 
 func (t BackupTarget) open(h *hostd.Client) backupStore {
+	var st backupStore = hostdStore{h}
 	if t.Kind == "s3" {
 		prefix := strings.Trim(t.Prefix, "/")
 		if prefix != "" {
 			prefix += "/"
 		}
-		var st backupStore = s3Store{c: &s3.Client{Endpoint: t.Endpoint, Region: t.Region, Bucket: t.Bucket, AccessKey: t.AccessKey, SecretKey: t.SecretKey, LockDays: t.LockDays}, prefix: prefix}
-		if t.Passphrase != "" {
-			st = encryptedStore{st, t.Passphrase}
-		}
-		return st
+		st = s3Store{c: &s3.Client{Endpoint: t.Endpoint, Region: t.Region, Bucket: t.Bucket, AccessKey: t.AccessKey, SecretKey: t.SecretKey, LockDays: t.LockDays}, prefix: prefix}
 	}
-	return hostdStore{h}
+	if t.Passphrase != "" {
+		st = encryptedStore{st, t.Passphrase}
+	}
+	return st
 }
 
 type encryptedStore struct {

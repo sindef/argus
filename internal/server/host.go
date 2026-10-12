@@ -221,11 +221,13 @@ type HostSettings struct {
 	hostd.Settings
 	MigrationBridge string   `json:"migrationBridge"`
 	Bridges         []string `json:"bridges"`
+	BackupEncrypted bool     `json:"backupEncrypted"`
 }
 
 type HostSettingsUpdate struct {
 	hostd.SettingsUpdate
-	MigrationBridge *string `json:"migrationBridge,omitempty"`
+	MigrationBridge  *string `json:"migrationBridge,omitempty"`
+	BackupPassphrase *string `json:"backupPassphrase,omitempty"`
 }
 
 func (s *Server) hostSettings(ctx context.Context) (HostSettings, error) {
@@ -233,7 +235,7 @@ func (s *Server) hostSettings(ctx context.Context) (HostSettings, error) {
 		return HostSettings{}, errors.New("host helper not available")
 	}
 	st, err := s.hostd.Settings(ctx)
-	return HostSettings{Settings: st, MigrationBridge: s.kube.MigrationBridge(ctx), Bridges: s.bridges(ctx)}, err
+	return HostSettings{Settings: st, MigrationBridge: s.kube.MigrationBridge(ctx), Bridges: s.bridges(ctx), BackupEncrypted: s.nfsPassphrase(ctx) != ""}, err
 }
 
 func (s *Server) applyHostSettings(ctx context.Context, u HostSettingsUpdate) error {
@@ -242,6 +244,11 @@ func (s *Server) applyHostSettings(ctx context.Context, u HostSettingsUpdate) er
 	}
 	if err := s.hostd.ApplySettings(ctx, u.SettingsUpdate); err != nil {
 		return err
+	}
+	if u.BackupPassphrase != nil && *u.BackupPassphrase != "" {
+		if err := s.setNFSPassphrase(ctx, *u.BackupPassphrase); err != nil {
+			return err
+		}
 	}
 	if u.MigrationBridge != nil && *u.MigrationBridge != s.kube.MigrationBridge(ctx) {
 		if !slices.Contains(s.bridges(ctx), *u.MigrationBridge) {
@@ -289,8 +296,8 @@ func (s *Server) hostSettingsForm(w http.ResponseWriter, r *http.Request) {
 		u.Unsigned = &unsigned
 	}
 	if _, ok := r.Form["backup"]; ok {
-		backup := strings.TrimSpace(r.FormValue("backup"))
-		u.Backup = &backup
+		backup, pass := strings.TrimSpace(r.FormValue("backup")), r.FormValue("passphrase")
+		u.Backup, u.BackupPassphrase = &backup, &pass
 	}
 	if err := s.applyHostSettings(r.Context(), u); err != nil {
 		flash(w, r, err)
