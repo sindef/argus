@@ -146,6 +146,21 @@ func (s *Server) disksPage(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "disks.html", "layout", map[string]any{"Nav": "disks", "Disks": ds, "Error": errText(err)})
 }
 
+func (s *Server) devicesPage(w http.ResponseWriter, r *http.Request) {
+	devs, err := s.ops(r).Devices(r.Context())
+	s.render(w, r, "devices.html", "layout", map[string]any{"Nav": "devices", "D": devs, "Error": errText(err)})
+}
+
+func (s *Server) deviceAction(w http.ResponseWriter, r *http.Request) {
+	req := deviceReq{Kind: r.FormValue("kind"), ID: r.FormValue("id"), On: r.FormValue("on") == "true"}
+	if err := s.ops(r).DeviceOp(r.Context(), req); err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: passthrough %s %s %v", session(r).User, req.Kind, req.ID, req.On)
+	w.Header().Set("HX-Refresh", "true")
+}
+
 func (s *Server) diskModal(w http.ResponseWriter, r *http.Request) {
 	dd, err := s.ops(r).Disk(r.Context(), r.PathValue("name"))
 	if err != nil {

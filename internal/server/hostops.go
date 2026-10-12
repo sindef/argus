@@ -1,6 +1,7 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -69,6 +70,7 @@ type hwOpReq struct {
 	NIC      string        `json:"nic"`
 	Disk     string        `json:"disk"`
 	SizeGiB  int64         `json:"sizeGiB"`
+	Device   string        `json:"device"`
 }
 
 type hostOps interface {
@@ -88,6 +90,14 @@ type hostOps interface {
 	VCenterVMs(ctx context.Context, fields map[string]string) ([]vsphere.VM, error)
 	DownloadDisk(w http.ResponseWriter, r *http.Request, ns, name, disk string)
 	OVF(ctx context.Context, ns, name string) (string, error)
+	Devices(ctx context.Context) (hostd.Devices, error)
+	DeviceOp(ctx context.Context, req deviceReq) error
+}
+
+type deviceReq struct {
+	Kind string `json:"kind"`
+	ID   string `json:"id"`
+	On   bool   `json:"on"`
 }
 
 type opsKey struct{}
@@ -291,7 +301,60 @@ func (l localOps) CreateVM(ctx context.Context, req createVMReq) error {
 }
 
 func (l localOps) Hardware(ctx context.Context, ns, name string) (kube.Hardware, error) {
-	return l.s.kube.Hardware(ctx, ns, name)
+	hw, err := l.s.kube.Hardware(ctx, ns, name)
+	if err != nil || l.s.hostd == nil {
+		return hw, err
+	}
+	if devs, err := l.s.hostd.Devices(ctx); err == nil {
+		labels := deviceLabels(devs)
+		for i, c := range hw.DeviceChoices {
+			hw.DeviceChoices[i].Label = cmp.Or(labels[c.Name], c.Name)
+		}
+	}
+	return hw, nil
+}
+
+func deviceLabels(devs hostd.Devices) map[string]string {
+	labels := map[string]string{}
+	for _, d := range devs.PCI {
+		labels[kube.PCIResource(d.Vendor, d.Device)] = cmp.Or(d.Name, "PCI "+d.Vendor+":"+d.Device)
+	}
+	for _, u := range devs.USB {
+		labels[kube.USBResource(u.Vendor, u.Product)] = cmp.Or(u.Name, "USB "+u.Vendor+":"+u.Product)
+	}
+	return labels
+}
+
+func (l localOps) Devices(ctx context.Context) (hostd.Devices, error) {
+	if l.s.hostd == nil {
+		return hostd.Devices{}, errNoHostd
+	}
+	return l.s.hostd.Devices(ctx)
+}
+
+func (l localOps) DeviceOp(ctx context.Context, req deviceReq) error {
+	if l.s.hostd == nil {
+		return errNoHostd
+	}
+	if err := l.s.hostd.SetPassthrough(ctx, req.Kind, req.ID, req.On); err != nil {
+		return err
+	}
+	devs, err := l.s.hostd.Devices(ctx)
+	if err != nil {
+		return err
+	}
+	var pci, usb [][2]string
+	for _, d := range devs.PCI {
+		if k := [2]string{d.Vendor, d.Device}; d.Passthrough && !slices.Contains(pci, k) {
+			pci = append(pci, k)
+		}
+	}
+	for _, u := range devs.USB {
+		if k := [2]string{u.Vendor, u.Product}; u.Passthrough && !slices.Contains(usb, k) {
+			usb = append(usb, k)
+		}
+	}
+	return l.s.kube.SetPermittedDevices(ctx, pci, usb)
 }
 
 func (l localOps) HardwareOp(ctx context.Context, ns, name, op string, req hwOpReq) error {
@@ -308,6 +371,10 @@ func (l localOps) HardwareOp(ctx context.Context, ns, name, op string, req hwOpR
 		return k.RemoveNIC(ctx, ns, name, req.NIC)
 	case "resize":
 		return k.ResizeDisk(ctx, ns, name, req.Disk, req.SizeGiB)
+	case "device-add":
+		return k.AddHostDevice(ctx, ns, name, req.Device)
+	case "device-remove":
+		return k.RemoveHostDevice(ctx, ns, name, req.Device)
 	}
 	return errors.New("unknown operation")
 }
@@ -359,6 +426,15 @@ func (o remoteOps) post(ctx context.Context, path string, in any) error {
 func (o remoteOps) DashStats(ctx context.Context) (dashStats, error) {
 	var out dashStats
 	return out, o.get(ctx, "/api/host/dashboard", &out)
+}
+
+func (o remoteOps) Devices(ctx context.Context) (hostd.Devices, error) {
+	var out hostd.Devices
+	return out, o.get(ctx, "/api/host/devices", &out)
+}
+
+func (o remoteOps) DeviceOp(ctx context.Context, req deviceReq) error {
+	return o.post(ctx, "/api/host/devices", req)
 }
 
 func (o remoteOps) Disks(ctx context.Context) ([]hostd.Disk, error) {
@@ -478,6 +554,13 @@ func (s *Server) hostAPIRoutes() {
 	routes := map[string]http.HandlerFunc{
 		"GET /api/host/dashboard": func(w http.ResponseWriter, r *http.Request) {
 			s.apiOp(w, r, nil, func() (any, error) { return l.DashStats(r.Context()) })
+		},
+		"GET /api/host/devices": func(w http.ResponseWriter, r *http.Request) {
+			s.apiOp(w, r, nil, func() (any, error) { return l.Devices(r.Context()) })
+		},
+		"POST /api/host/devices": func(w http.ResponseWriter, r *http.Request) {
+			var req deviceReq
+			s.apiOp(w, r, &req, func() (any, error) { return nil, l.DeviceOp(r.Context(), req) })
 		},
 		"GET /api/host/disks": func(w http.ResponseWriter, r *http.Request) {
 			s.apiOp(w, r, nil, func() (any, error) { return l.Disks(r.Context()) })

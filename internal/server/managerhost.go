@@ -17,7 +17,7 @@ import (
 	"argus/internal/manager"
 )
 
-var hostTabs = []struct{ Path, Label, Icon string }{{"dashboard", "Summary", "gauge"}, {"pools", "Pools", "database"}, {"disks", "Disks", "hard-drive"}, {"network/host", "Network", "cable"}}
+var hostTabs = []struct{ Path, Label, Icon string }{{"dashboard", "Summary", "gauge"}, {"pools", "Pools", "database"}, {"disks", "Disks", "hard-drive"}, {"network/host", "Network", "cable"}, {"devices", "Devices", "cpu"}}
 
 type hostNetRow struct {
 	Node    manager.Node

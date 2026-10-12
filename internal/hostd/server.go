@@ -140,6 +140,22 @@ func NewServer() *Server {
 		log.Printf("set teaming %s %+v: %v", r.PathValue("name"), t, err)
 		reply(w, nil, err)
 	}))
+	s.mux.HandleFunc("GET /devices", func(w http.ResponseWriter, r *http.Request) {
+		devs, err := ListDevices(r.Context())
+		reply(w, devs, err)
+	})
+	s.mux.HandleFunc("POST /devices", s.locked(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Kind, ID string
+			On       bool
+		}
+		err := decode(r, &req)
+		if err == nil {
+			err = SetPassthrough(r.Context(), req.Kind, req.ID, req.On)
+		}
+		log.Printf("passthrough %s %s %v: %v", req.Kind, req.ID, req.On, err)
+		reply(w, nil, err)
+	}))
 	s.mux.HandleFunc("GET /network/bridges/{name}/ports", func(w http.ResponseWriter, r *http.Request) {
 		ports, err := BridgePorts(r.Context(), r.PathValue("name"))
 		reply(w, ports, err)

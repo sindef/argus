@@ -26,7 +26,14 @@ func main() {
 	idle := flag.Duration("idle", time.Minute, "exit after this long without requests")
 	rollback := flag.Bool("rollback", false, "roll back an unconfirmed network change and exit")
 	firewall := flag.Bool("firewall", false, "load the management firewall and exit")
+	passthrough := flag.Bool("passthrough", false, "bind passthrough PCI devices to vfio-pci and exit")
 	flag.Parse()
+	if *passthrough {
+		if err := hostd.ApplyPassthrough(context.Background()); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	if *firewall {
 		if err := hostd.LoadFirewall(context.Background()); err != nil {
 			log.Fatal(err)

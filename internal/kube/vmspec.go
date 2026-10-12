@@ -473,6 +473,12 @@ type Hardware struct {
 	CDROM          string
 	Disks          []HardwareDisk
 	NICs           []NIC
+	HostDevices    []HostDevice
+	DeviceChoices  []DeviceResource
+}
+
+type HostDevice struct {
+	Name, Device string
 }
 
 type HardwareDisk struct {
@@ -529,6 +535,11 @@ func (c *Client) Hardware(ctx context.Context, ns, name string) (Hardware, error
 		hw.Disks = append(hw.Disks, d)
 	}
 	hw.NICs = toVM(vm, nil).NICs
+	devs, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "domain", "devices", "hostDevices")
+	for _, d := range devs {
+		hw.HostDevices = append(hw.HostDevices, HostDevice{asStr(asObj(d)["name"]), asStr(asObj(d)["deviceName"])})
+	}
+	hw.DeviceChoices, _ = c.DeviceResources(ctx)
 	return hw, nil
 }
 

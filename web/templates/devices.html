@@ -1,0 +1,40 @@
+{{define "content"}}
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-cpu"/></svg>
+  <div><h1>Devices</h1><div class="crumbs">Storage / Devices</div></div>
+</div>
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+{{if and (not .Error) (not .D.IOMMU)}}<p class="error">IOMMU is off. Enable VT-d or AMD-Vi in the firmware to pass PCI devices through.</p>{{end}}
+<div class="panes wide">
+<section class="pane" id="s-pci" data-icon="cpu">
+  <header><h2>PCI</h2><span class="help" title="Enabled devices are bound to vfio-pci and can be added to powered-off VMs on this host. The host loses use of them.">?</span></header>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Address</th><th>Device</th><th>ID</th><th>Driver</th><th>IOMMU group</th><th></th></tr></thead>
+  <tbody>{{range .D.PCI}}<tr>
+    <td class="mono">{{.Address}}</td>
+    <td>{{with .Name}}{{.}}{{else}}<span class="muted">Class {{.Class}}</span>{{end}}</td>
+    <td class="mono">{{.Vendor}}:{{.Device}}</td>
+    <td>{{with .Driver}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
+    <td>{{with .IOMMUGroup}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
+    <td class="row-actions">{{if .Passthrough}}<button class="btn sm" hx-post="{{$.Base}}/devices" hx-vals='{"kind":"pci","id":"{{.Address}}","on":"false"}' hx-target="#flash" hx-confirm="Return {{.Address}} to the host?">Disable passthrough</button>{{else if .Blocked}}<span class="muted" title="{{.Blocked}}">Unavailable</span>{{else}}<button class="btn sm" hx-post="{{$.Base}}/devices" hx-vals='{"kind":"pci","id":"{{.Address}}","on":"true"}' hx-target="#flash" hx-confirm="Detach {{.Address}} from the host for passthrough?">Enable passthrough</button>{{end}}</td>
+  </tr>{{else}}<tr><td colspan="6" class="muted">No PCI devices.</td></tr>{{end}}</tbody>
+</table>
+</div>
+</section>
+<section class="pane" id="s-usb" data-icon="cpu">
+  <header><h2>USB</h2></header>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Port</th><th>Device</th><th>ID</th><th></th></tr></thead>
+  <tbody>{{range .D.USB}}<tr>
+    <td class="mono">{{.Port}}</td>
+    <td>{{with .Name}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
+    <td class="mono">{{.Vendor}}:{{.Product}}</td>
+    <td class="row-actions"><button class="btn sm" hx-post="{{$.Base}}/devices" hx-vals='{"kind":"usb","id":"{{.Vendor}}:{{.Product}}","on":"{{not .Passthrough}}"}' hx-target="#flash">{{if .Passthrough}}Disable{{else}}Enable{{end}} passthrough</button></td>
+  </tr>{{else}}<tr><td colspan="4" class="muted">No USB devices.</td></tr>{{end}}</tbody>
+</table>
+</div>
+</section>
+</div>
+{{end}}

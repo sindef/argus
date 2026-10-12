@@ -238,6 +238,15 @@ func (c *Client) BridgePorts(ctx context.Context, name string) ([]BridgePort, er
 	return out, c.do(ctx, http.MethodGet, "/network/bridges/"+name+"/ports", nil, &out)
 }
 
+func (c *Client) Devices(ctx context.Context) (Devices, error) {
+	var out Devices
+	return out, c.do(ctx, http.MethodGet, "/devices", nil, &out)
+}
+
+func (c *Client) SetPassthrough(ctx context.Context, kind, id string, on bool) error {
+	return c.do(ctx, http.MethodPost, "/devices", map[string]any{"kind": kind, "id": id, "on": on}, nil)
+}
+
 func (c *Client) SetAddress(ctx context.Context, a AddressSpec) error {
 	return c.do(ctx, http.MethodPost, "/network/address", a, nil)
 }

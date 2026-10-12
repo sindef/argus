@@ -1,0 +1,13 @@
+[Unit]
+Description=Argus PCI passthrough
+ConditionPathExists=/usr/local/argus/passthrough.json
+After=local-fs.target systemd-modules-load.service
+Before=k3s.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/argus-hostd -passthrough
+
+[Install]
+WantedBy=multi-user.target

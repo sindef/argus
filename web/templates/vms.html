@@ -234,6 +234,13 @@
   <select name="network">{{range $.Networks}}<option value="{{.Name}}">{{.Name}}{{if .VLAN}} (VLAN {{.VLAN}}){{end}}</option>{{end}}</select>
   <button class="btn" type="submit">{{template "icon" "plus"}}Add adapter</button>
 </form>
+{{if or .HostDevices .DeviceChoices}}<div class="field spaced">Host devices <span class="help" title="PCI, GPU or USB devices enabled for passthrough on this host. The VM must be powered off, and cannot migrate while a device is attached.">?</span></div>
+<div class="table-wrap"><table><tbody>{{range .HostDevices}}<tr><td>{{.Name}}</td><td>{{$d := .Device}}{{range $.HW.DeviceChoices}}{{if eq .Name $d}}{{$d = .Label}}{{end}}{{end}}{{$d}}</td>
+  <td class="row-actions"><button class="link danger" hx-post="{{$p}}/device-remove" hx-vals='{"device":"{{.Name}}"}' hx-target="#hw-error" hx-confirm="Remove {{.Name}}?">Remove</button></td></tr>{{end}}</tbody></table></div>
+{{with .DeviceChoices}}<form hx-post="{{$p}}/device-add" hx-target="#hw-error" class="inline spaced">
+  <select name="device">{{range .}}<option value="{{.Name}}">{{.Label}} ({{.Count}} on host)</option>{{end}}</select>
+  <button class="btn" type="submit">{{template "icon" "plus"}}Add device</button>
+</form>{{end}}{{end}}
 <div class="field spaced">Disks</div>
 <div class="table-wrap"><table><tbody>{{range .Disks}}<tr><td>{{.Name}}</td><td>{{.SizeGiB}} GiB</td>
   <td class="row-actions"><form hx-post="{{$p}}/resize" hx-target="#hw-error" class="inline"><input type="hidden" name="disk" value="{{.Name}}"><input name="size" type="number" min="{{add64 .SizeGiB 1}}" value="{{add64 .SizeGiB 10}}" class="num" aria-label="New size in GiB"><button class="btn sm" type="submit">Grow</button></form></td></tr>{{end}}</tbody></table></div>
