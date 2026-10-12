@@ -21,6 +21,7 @@ import (
 	"path"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -46,11 +47,16 @@ type ovfEnvelope struct {
 			Type     int    `xml:"ResourceType"`
 			Quantity int64  `xml:"VirtualQuantity"`
 			Units    string `xml:"AllocationUnits"`
+			Address  string `xml:"Address"`
 		} `xml:"VirtualHardwareSection>Item"`
 		Config []struct {
 			Key   string `xml:"key,attr"`
 			Value string `xml:"value,attr"`
 		} `xml:"VirtualHardwareSection>Config"`
+		OS struct {
+			Type        string `xml:"osType,attr"`
+			Description string `xml:"Description"`
+		} `xml:"OperatingSystemSection"`
 	} `xml:"VirtualSystem"`
 }
 
@@ -58,6 +64,16 @@ var (
 	unitPower = regexp.MustCompile(`2\s*\^\s*(\d+)`)
 	nonName   = regexp.MustCompile(`[^a-zA-Z0-9-]+`)
 )
+
+func compatDrivers(choice, guest string) bool {
+	switch choice {
+	case "virtio":
+		return false
+	case "compat":
+		return true
+	}
+	return strings.Contains(strings.ToLower(guest), "windows")
+}
 
 func ovfBytes(n int64, units string) int64 {
 	if m := unitPower.FindStringSubmatch(units); m != nil {
@@ -101,7 +117,8 @@ func (s *Server) streamOVA(ctx context.Context, fields map[string]string, body i
 	if err != nil {
 		return "", err
 	}
-	v := kube.ImportedVM{Name: fields["name"], Network: fields["network"], Class: class, Cores: 1, MemoryMiB: 1024}
+	v := kube.ImportedVM{Name: fields["name"], Network: fields["network"], Class: class, Cores: 1, MemoryMiB: 1024, CDROM: fields["cdrom"],
+		Compat: compatDrivers(fields["drivers"], env.System.OS.Type+" "+env.System.OS.Description)}
 	if v.Name == "" {
 		v.Name = strings.Trim(strings.ToLower(nonName.ReplaceAllString(env.System.Name, "-")), "-")
 	}
@@ -114,6 +131,8 @@ func (s *Server) streamOVA(ctx context.Context, fields map[string]string, body i
 			v.Cores = it.Quantity
 		case 4:
 			v.MemoryMiB = ovfBytes(it.Quantity, it.Units) >> 20
+		case 10:
+			v.MACs = append(v.MACs, it.Address)
 		}
 	}
 	for _, c := range env.System.Config {
@@ -176,6 +195,7 @@ type esxiStream struct {
 var (
 	vmxPath = regexp.MustCompile(`^\[([^\]]+)\]\s*(.+\.vmx)$`)
 	vmxDisk = regexp.MustCompile(`^((?:scsi|sata|nvme|ide)\d+:\d+)\.filename$`)
+	vmxNIC  = regexp.MustCompile(`^ethernet(\d+)\.present$`)
 	extent  = regexp.MustCompile(`^RW\s+(\d+)\s+(?:VMFS|FLAT)\s+"([^"]+)"`)
 )
 
@@ -296,7 +316,8 @@ func (s *Server) importESXi(ctx context.Context, f func(string) string) (string,
 	if err != nil {
 		return "", err
 	}
-	v := kube.ImportedVM{Name: f("name"), Network: f("network"), Class: class, Cores: 1, MemoryMiB: 1024, Firmware: kv["firmware"]}
+	v := kube.ImportedVM{Name: f("name"), Network: f("network"), Class: class, Cores: 1, MemoryMiB: 1024, Firmware: kv["firmware"], CDROM: f("cdrom"),
+		Compat: compatDrivers(f("drivers"), kv["guestos"])}
 	if v.Name == "" {
 		v.Name = strings.Trim(strings.ToLower(nonName.ReplaceAllString(kv["displayname"], "-")), "-")
 	}
@@ -308,6 +329,22 @@ func (s *Server) importESXi(ctx context.Context, f func(string) string) (string,
 	}
 	if n, err := strconv.ParseInt(kv["memsize"], 10, 64); err == nil {
 		v.MemoryMiB = n
+	}
+	var nics []int
+	for k := range kv {
+		if nm := vmxNIC.FindStringSubmatch(k); nm != nil && strings.EqualFold(kv[k], "true") {
+			n, _ := strconv.Atoi(nm[1])
+			nics = append(nics, n)
+		}
+	}
+	slices.Sort(nics)
+	for _, n := range nics {
+		p := fmt.Sprintf("ethernet%d.", n)
+		mac := kv[p+"generatedaddress"]
+		if strings.EqualFold(kv[p+"addresstype"], "static") {
+			mac = kv[p+"address"]
+		}
+		v.MACs = append(v.MACs, mac)
 	}
 	var slots []string
 	for k := range kv {
@@ -418,7 +455,8 @@ func (s *Server) serveESXi(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) importModal(w http.ResponseWriter, r *http.Request) {
 	nets, _ := s.kube.ListNetworks(r.Context())
-	s.render(w, r, "vmnew.html", "import-modal", map[string]any{"Networks": nets, "Pools": s.poolChoices(r.Context()), "Arch": runtime.GOARCH})
+	imgs, _ := s.kube.ListImages(r.Context())
+	s.render(w, r, "vmnew.html", "import-modal", map[string]any{"Networks": nets, "Pools": s.poolChoices(r.Context()), "Images": imgs, "Arch": runtime.GOARCH})
 }
 
 func (s *Server) importVM(w http.ResponseWriter, r *http.Request) {

@@ -589,6 +589,9 @@ type ImportedVM struct {
 	Network   string
 	Class     string
 	Disks     []ImportedDisk
+	MACs      []string
+	Compat    bool
+	CDROM     string
 }
 
 type ImportedDisk struct {
@@ -603,7 +606,11 @@ func (c *Client) CreateImportedVM(ctx context.Context, v ImportedVM) ([]string, 
 	if len(v.Disks) == 0 {
 		return nil, errors.New("no disks to import")
 	}
-	var templates, disks, volumes []any
+	bus, model := "virtio", "virtio"
+	if v.Compat {
+		bus, model = "sata", "e1000e"
+	}
+	var templates, disks, volumes, ifaces, networks []any
 	var dvs []string
 	for i, d := range v.Disks {
 		disk := "root"
@@ -613,7 +620,7 @@ func (c *Client) CreateImportedVM(ctx context.Context, v ImportedVM) ([]string, 
 		dv := v.Name + "-" + disk
 		gib := int((d.SizeBytes + 1<<30 - 1) >> 30)
 		templates = append(templates, obj{"metadata": obj{"name": dv}, "spec": obj{"source": d.Source, "storage": storageSpec(gib, v.Class)}})
-		dk := obj{"name": disk, "disk": obj{"bus": "virtio"}}
+		dk := obj{"name": disk, "disk": obj{"bus": bus}}
 		if i == 0 {
 			dk["bootOrder"] = int64(1)
 		}
@@ -621,13 +628,31 @@ func (c *Client) CreateImportedVM(ctx context.Context, v ImportedVM) ([]string, 
 		volumes = append(volumes, obj{"name": disk, "dataVolume": obj{"name": dv}})
 		dvs = append(dvs, dv)
 	}
+	if v.CDROM != "" {
+		disks = append(disks, obj{"name": "cdrom", "cdrom": obj{"bus": cdromBus()}})
+		volumes = append(volumes, obj{"name": "cdrom", "persistentVolumeClaim": obj{"claimName": v.CDROM, "readOnly": true}})
+	}
+	macs := v.MACs
+	if len(macs) == 0 {
+		macs = []string{""}
+	}
+	for i, mac := range macs {
+		if hw, err := net.ParseMAC(mac); err == nil && len(hw) == 6 && hw[0]&1 == 0 {
+			mac = hw.String()
+		} else {
+			mac = randomMAC()
+		}
+		nic := fmt.Sprintf("nic%d", i)
+		ifaces = append(ifaces, obj{"name": nic, "model": model, "bridge": obj{}, "macAddress": mac})
+		networks = append(networks, obj{"name": nic, "multus": obj{"networkName": v.Network}})
+	}
 	domain := obj{
 		"cpu":    obj{"cores": v.Cores},
 		"memory": obj{"guest": fmt.Sprintf("%dMi", v.MemoryMiB)},
 		"devices": obj{
 			"autoattachPodInterface": false,
 			"disks":                  disks,
-			"interfaces":             []any{obj{"name": "nic0", "model": "virtio", "bridge": obj{}, "macAddress": randomMAC()}},
+			"interfaces":             ifaces,
 		},
 	}
 	if v.Firmware == "efi" {
@@ -644,7 +669,7 @@ func (c *Client) CreateImportedVM(ctx context.Context, v ImportedVM) ([]string, 
 				"metadata": obj{"labels": obj{"kubevirt.io/vm": v.Name}},
 				"spec": obj{
 					"domain":   domain,
-					"networks": []any{obj{"name": "nic0", "multus": obj{"networkName": v.Network}}},
+					"networks": networks,
 					"volumes":  volumes,
 				},
 			},
