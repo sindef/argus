@@ -3,6 +3,7 @@
 <div class="page-head">
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-{{if .Cluster}}layers{{else if .DC}}building-2{{else}}layers{{end}}"/></svg>
   <div><h1>{{if .Cluster}}{{.Cluster}}{{else if .DC}}{{.DC}}{{else}}Infrastructure{{end}}</h1><div class="crumbs">{{if .Cluster}}{{.DC}} / {{.Cluster}}{{else if .DC}}Datacenter{{else}}All datacenters{{end}}</div></div>
+  {{if and .DC .OrgAdmin}}<div class="actions"><div class="menu"><button class="btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button><div class="menu-list" hidden hx-target="#flash">{{if .Cluster}}{{template "cluster-menu" (dict "DC" .DC "Cluster" .Cluster)}}{{else}}{{template "dc-menu" (dict "DC" .DC)}}{{end}}</div></div></div>{{end}}
   {{if and (eq .Tab "vms") .CanOperate}}<div class="actions"><button class="btn" hx-get="/vm-new?what=import" hx-target="#modal">{{template "icon" "download"}}Import</button><button class="btn primary" hx-get="/vm-new" hx-target="#modal">{{template "icon" "plus"}}New VM</button></div>{{end}}
 </div>
 <div class="panes static wide">
@@ -122,23 +123,10 @@
   {{if .OrgAdmin}}<div class="menu-list" hidden hx-target="#flash"><button hx-get="/groups/modal/add-datacenter" hx-target="#modal">{{template "icon" "plus"}}New datacenter</button><a href="/hosts#add-host">{{template "icon" "server"}}Add host</a></div>{{end}}
   {{range .Tree}}{{$dc := .Name}}
   <li data-id="dc:{{.Name}}"><span class="row{{if eq $.Nav (printf "dc:%s" .Name)}} active{{end}}"{{if $.OrgAdmin}} data-context{{end}}>{{template "twisty"}}<a href="/datacenters/{{.Name}}">{{template "icon" "building-2"}}{{.Name}}</a>
-    {{if $.OrgAdmin}}<span class="menu-list" hidden hx-target="#flash">{{if ne .Name "Unassigned"}}
-      <button hx-get="/groups/modal/add-cluster?dc={{.Name}}" hx-target="#modal">{{template "icon" "plus"}}New cluster</button>
-      <button hx-get="/groups/modal/rename-datacenter?dc={{.Name}}" hx-target="#modal">{{template "icon" "pencil"}}Rename</button>
-      <hr><button class="danger" hx-post="/groups/delete-datacenter" hx-vals='{"dc":"{{.Name}}"}' hx-confirm="Delete datacenter {{.Name}}?">{{template "icon" "trash-2"}}Delete</button>
-    {{else}}<button hx-get="/groups/modal/add-datacenter" hx-target="#modal">{{template "icon" "plus"}}New datacenter</button>{{end}}</span>{{end}}</span>
+    {{if $.OrgAdmin}}<span class="menu-list" hidden hx-target="#flash">{{template "dc-menu" (dict "DC" .Name)}}</span>{{end}}</span>
     <ul>{{range .Clusters}}{{$c := .}}
     <li data-id="cl:{{.Name}}"><span class="row{{if eq $.Nav (printf "cl:%s/%s" $dc .Name)}} active{{end}}"{{if $.OrgAdmin}} data-context{{end}}>{{template "twisty"}}<a href="/datacenters/{{$dc}}/clusters/{{.Name}}">{{template "icon" "layers"}}{{.Name}}</a>
-      {{if $.OrgAdmin}}<span class="menu-list" hidden hx-target="#flash">
-        <a href="/hosts?dc={{$dc}}&cluster={{.Name}}#add-host">{{template "icon" "server"}}Add host</a>
-        <button hx-post="/groups/apply-networks" hx-vals='{"dc":"{{$dc}}","cluster":"{{.Name}}"}' hx-confirm="Create all Argus Manager networks on the hosts in {{.Name}}?">{{template "icon" "network"}}Apply networks</button>
-        <a href="/network/hosts?dc={{$dc}}&cluster={{.Name}}#rollout">{{template "icon" "cable"}}Create bridge on hosts</a>
-        <button hx-get="/groups/modal/rolling-update?dc={{$dc}}&cluster={{.Name}}" hx-target="#modal">{{template "icon" "refresh-cw"}}Rolling update…</button>
-        {{if ne .Name "Unassigned"}}<a href="/profile?dc={{$dc}}&cluster={{.Name}}">{{template "icon" "shield-check"}}Host profile</a>
-        <hr>
-        <button hx-get="/groups/modal/rename-cluster?dc={{$dc}}&cluster={{.Name}}" hx-target="#modal">{{template "icon" "pencil"}}Rename</button>
-        <button class="danger" hx-post="/groups/delete-cluster" hx-vals='{"dc":"{{$dc}}","cluster":"{{.Name}}"}' hx-confirm="Delete cluster {{.Name}}?">{{template "icon" "trash-2"}}Delete</button>{{end}}
-      </span>{{end}}</span>
+      {{if $.OrgAdmin}}<span class="menu-list" hidden hx-target="#flash">{{template "cluster-menu" (dict "DC" $dc "Cluster" .Name)}}</span>{{end}}</span>
       <ul>{{range .Hosts}}{{$h := .}}
       <li data-id="h:{{.Node.Name}}"><span class="row{{if eq $.Nav (printf "host:%s" .Node.Name)}} active{{end}}" title="{{.Error}}"{{if $.IsAdmin}} data-context{{end}}>{{template "twisty"}}<a href="/hosts/{{.Node.Name}}/dashboard">{{template "icon" "server"}}<span class="dot {{.Status}}"></span>{{.Node.Name}}</a>
         {{if $.IsAdmin}}<span class="menu-list" hidden hx-target="#flash">
@@ -189,4 +177,21 @@
   {{end}}
   <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Save</button></div>
 </form>
+{{end}}
+
+{{define "dc-menu"}}{{if ne .DC "Unassigned"}}
+      <button hx-get="/groups/modal/add-cluster?dc={{.DC}}" hx-target="#modal">{{template "icon" "plus"}}New cluster</button>
+      <button hx-get="/groups/modal/rename-datacenter?dc={{.DC}}" hx-target="#modal">{{template "icon" "pencil"}}Rename</button>
+      <hr><button class="danger" hx-post="/groups/delete-datacenter" hx-vals='{"dc":"{{.DC}}"}' hx-confirm="Delete datacenter {{.DC}}?">{{template "icon" "trash-2"}}Delete</button>
+    {{else}}<button hx-get="/groups/modal/add-datacenter" hx-target="#modal">{{template "icon" "plus"}}New datacenter</button>{{end}}{{end}}
+
+{{define "cluster-menu"}}
+        <a href="/hosts?dc={{.DC}}&cluster={{.Cluster}}#add-host">{{template "icon" "server"}}Add host</a>
+        <button hx-post="/groups/apply-networks" hx-vals='{"dc":"{{.DC}}","cluster":"{{.Cluster}}"}' hx-confirm="Create all Argus Manager networks on the hosts in {{.Cluster}}?">{{template "icon" "network"}}Apply networks</button>
+        <a href="/network/hosts?dc={{.DC}}&cluster={{.Cluster}}#rollout">{{template "icon" "cable"}}Create bridge on hosts</a>
+        <button hx-get="/groups/modal/rolling-update?dc={{.DC}}&cluster={{.Cluster}}" hx-target="#modal">{{template "icon" "refresh-cw"}}Rolling update…</button>
+        {{if ne .Cluster "Unassigned"}}<a href="/profile?dc={{.DC}}&cluster={{.Cluster}}">{{template "icon" "shield-check"}}Host profile</a>
+        <hr>
+        <button hx-get="/groups/modal/rename-cluster?dc={{.DC}}&cluster={{.Cluster}}" hx-target="#modal">{{template "icon" "pencil"}}Rename</button>
+        <button class="danger" hx-post="/groups/delete-cluster" hx-vals='{"dc":"{{.DC}}","cluster":"{{.Cluster}}"}' hx-confirm="Delete cluster {{.Cluster}}?">{{template "icon" "trash-2"}}Delete</button>{{end}}
 {{end}}

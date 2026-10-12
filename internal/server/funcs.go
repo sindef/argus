@@ -52,6 +52,13 @@ var funcs = template.FuncMap{
 	"min100": func(v int) int { return min(v, 100) },
 	"list":   func(v ...string) []string { return v },
 	"join":   strings.Join,
+	"dict": func(kv ...any) map[string]any {
+		m := map[string]any{}
+		for i := 0; i+1 < len(kv); i += 2 {
+			m[kv[i].(string)] = kv[i+1]
+		}
+		return m
+	},
 	"stamp": func(s string) string {
 		t, err := time.Parse("20060102-150405", s)
 		if err != nil {
