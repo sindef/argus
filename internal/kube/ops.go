@@ -53,7 +53,7 @@ func (c *Client) Clone(ctx context.Context, ns, name, target string, template bo
 	macs := obj{}
 	ifaces, _, _ := unstructured.NestedSlice(vm.Object, "spec", "template", "spec", "domain", "devices", "interfaces")
 	for _, i := range ifaces {
-		if n, ok := i.(obj)["name"].(string); ok {
+		if n := asStr(asObj(i)["name"]); n != "" {
 			macs[n] = strings.ReplaceAll(randomMAC(), ":", "-")
 		}
 	}

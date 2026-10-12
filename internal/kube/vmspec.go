@@ -209,7 +209,7 @@ func (c *Client) AddDisk(ctx context.Context, ns, name string, sizeGiB int, clas
 		disks, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "domain", "devices", "disks")
 		used := map[string]bool{}
 		for _, d := range disks {
-			used[d.(obj)["name"].(string)] = true
+			used[asStr(asObj(d)["name"])] = true
 		}
 		n := 1
 		for used[fmt.Sprintf("disk%d", n)] {
@@ -332,14 +332,14 @@ func (c *Client) Templates(ctx context.Context) ([]Template, error) {
 		}
 		vols, _, _ := unstructured.NestedSlice(v.Object, "spec", "template", "spec", "volumes")
 		for _, vol := range vols {
-			if vol.(obj)["name"] == "root" {
-				t.Root, _, _ = unstructured.NestedString(vol.(obj), "dataVolume", "name")
+			if asObj(vol)["name"] == "root" {
+				t.Root, _, _ = unstructured.NestedString(asObj(vol), "dataVolume", "name")
 			}
 		}
 		tpls, _, _ := unstructured.NestedSlice(v.Object, "spec", "dataVolumeTemplates")
 		for _, d := range tpls {
-			if n, _, _ := unstructured.NestedString(d.(obj), "metadata", "name"); n == t.Root {
-				if s, ok, _ := unstructured.NestedString(d.(obj), "spec", "storage", "resources", "requests", "storage"); ok {
+			if n, _, _ := unstructured.NestedString(asObj(d), "metadata", "name"); n == t.Root {
+				if s, ok, _ := unstructured.NestedString(asObj(d), "spec", "storage", "resources", "requests", "storage"); ok {
 					if q, err := resource.ParseQuantity(s); err == nil {
 						t.DiskGiB = q.Value() >> 30
 					}
@@ -358,13 +358,13 @@ func (c *Client) MoveDisk(ctx context.Context, ns, name, disk, class string) (st
 	err := c.editStoppedVM(ctx, ns, name, func(o obj) error {
 		volumes, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")
 		templates, _, _ := unstructured.NestedSlice(o, "spec", "dataVolumeTemplates")
-		vi := slices.IndexFunc(volumes, func(v any) bool { return v.(obj)["name"] == disk })
+		vi := slices.IndexFunc(volumes, func(v any) bool { return asObj(v)["name"] == disk })
 		if vi < 0 {
 			return fmt.Errorf("disk %s not found", disk)
 		}
 		old, _, _ = unstructured.NestedString(volumes[vi].(obj), "dataVolume", "name")
 		ti := slices.IndexFunc(templates, func(t any) bool {
-			n, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
+			n, _, _ := unstructured.NestedString(asObj(t), "metadata", "name")
 			return old != "" && n == old
 		})
 		if ti < 0 {
@@ -382,7 +382,7 @@ func (c *Client) MoveDisk(ctx context.Context, ns, name, disk, class string) (st
 		rand.Read(b)
 		moved = fmt.Sprintf("%s-%s-%x", name, disk, b)
 		templates[ti] = obj{"metadata": obj{"name": moved}, "spec": obj{"source": obj{"pvc": obj{"namespace": ns, "name": old}}, "storage": storage}}
-		unstructured.SetNestedField(volumes[vi].(obj), moved, "dataVolume", "name")
+		unstructured.SetNestedField(asObj(volumes[vi]), moved, "dataVolume", "name")
 		if err := unstructured.SetNestedSlice(o, templates, "spec", "dataVolumeTemplates"); err != nil {
 			return err
 		}
@@ -448,7 +448,7 @@ func (c *Client) Hardware(ctx context.Context, ns, name string) (Hardware, error
 	_, hw.TPM, _ = unstructured.NestedMap(o, "spec", "template", "spec", "domain", "devices", "tpm")
 	vols, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")
 	for _, v := range vols {
-		vo := v.(obj)
+		vo := asObj(v)
 		if vo["name"] == "cdrom" {
 			hw.CDROM, _, _ = unstructured.NestedString(vo, "persistentVolumeClaim", "claimName")
 			continue
@@ -460,7 +460,7 @@ func (c *Client) Hardware(ctx context.Context, ns, name string) (Hardware, error
 		if pvc == "" {
 			continue
 		}
-		d := HardwareDisk{Name: vo["name"].(string), PVC: pvc}
+		d := HardwareDisk{Name: asStr(vo["name"]), PVC: pvc}
 		if p, err := c.dyn.Resource(pvcGVR).Namespace(ns).Get(ctx, pvc, metav1.GetOptions{}); err == nil {
 			if v, ok, _ := unstructured.NestedString(p.Object, "spec", "resources", "requests", "storage"); ok {
 				if q, err := resource.ParseQuantity(v); err == nil {
@@ -517,7 +517,7 @@ func (c *Client) AddNIC(ctx context.Context, ns, name, network string) error {
 		nets, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "networks")
 		used := map[string]bool{}
 		for _, i := range ifaces {
-			used[i.(obj)["name"].(string)] = true
+			used[asStr(asObj(i)["name"])] = true
 		}
 		n := 0
 		for used[fmt.Sprintf("nic%d", n)] {
@@ -572,8 +572,8 @@ func (c *Client) ResizeDisk(ctx context.Context, ns, name, disk string, sizeGiB 
 	}
 	templates, _, _ := unstructured.NestedSlice(vm.Object, "spec", "dataVolumeTemplates")
 	for _, t := range templates {
-		if n, _, _ := unstructured.NestedString(t.(obj), "metadata", "name"); n == hw.Disks[i].PVC {
-			unstructured.SetNestedField(t.(obj), size, "spec", "storage", "resources", "requests", "storage")
+		if n, _, _ := unstructured.NestedString(asObj(t), "metadata", "name"); n == hw.Disks[i].PVC {
+			unstructured.SetNestedField(asObj(t), size, "spec", "storage", "resources", "requests", "storage")
 		}
 	}
 	unstructured.SetNestedSlice(vm.Object, templates, "spec", "dataVolumeTemplates")

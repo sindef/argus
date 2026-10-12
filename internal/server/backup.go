@@ -146,24 +146,37 @@ func (b *backupState) status(key string) string {
 func (s *Server) backupLoop() {
 	s.resumeRestores()
 	for range time.Tick(time.Minute) {
-		ctx := context.Background()
-		vms, err := s.kube.ListVMs(ctx)
-		if err != nil {
+		recovering("backups", s.backupTick)
+	}
+}
+
+func (s *Server) backupTick() {
+	ctx := context.Background()
+	vms, err := s.kube.ListVMs(ctx)
+	if err != nil {
+		return
+	}
+	for _, vm := range vms {
+		p, ok := parsePolicy(vm.Backup)
+		if !ok {
 			continue
 		}
-		for _, vm := range vms {
-			p, ok := parsePolicy(vm.Backup)
-			if !ok {
-				continue
-			}
-			if p.SnapEvery > 0 {
-				s.snapshotDue(ctx, vm.Namespace, vm.Name, p)
-			}
-			if p.BackupEvery > 0 && time.Since(s.lastCopy(ctx, vm.Namespace, vm.Name, p.Target)) >= time.Duration(p.BackupEvery)*time.Hour {
-				s.startBackup(vm.Namespace, vm.Name, p)
-			}
+		if p.SnapEvery > 0 {
+			s.snapshotDue(ctx, vm.Namespace, vm.Name, p)
+		}
+		if p.BackupEvery > 0 && time.Since(s.lastCopy(ctx, vm.Namespace, vm.Name, p.Target)) >= time.Duration(p.BackupEvery)*time.Hour {
+			s.startBackup(vm.Namespace, vm.Name, p)
 		}
 	}
+}
+
+func recovering(name string, fn func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("%s: recovered from panic: %v", name, r)
+		}
+	}()
+	fn()
 }
 
 func (s *Server) snapshotDue(ctx context.Context, ns, name string, p BackupPolicy) {

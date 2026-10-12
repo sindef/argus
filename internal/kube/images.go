@@ -123,14 +123,14 @@ func (c *Client) imageInUse(ctx context.Context, name string) error {
 	for _, vm := range vms.Items {
 		vols, _, _ := unstructured.NestedSlice(vm.Object, "spec", "template", "spec", "volumes")
 		for _, v := range vols {
-			if claim, _, _ := unstructured.NestedString(v.(obj), "persistentVolumeClaim", "claimName"); claim == name {
+			if claim, _, _ := unstructured.NestedString(asObj(v), "persistentVolumeClaim", "claimName"); claim == name {
 				return fmt.Errorf("%s is attached as a CD-ROM to %s", name, vm.GetName())
 			}
 		}
 		templates, _, _ := unstructured.NestedSlice(vm.Object, "spec", "dataVolumeTemplates")
 		for _, t := range templates {
-			src, _, _ := unstructured.NestedString(t.(obj), "spec", "source", "pvc", "name")
-			dv, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
+			src, _, _ := unstructured.NestedString(asObj(t), "spec", "source", "pvc", "name")
+			dv, _, _ := unstructured.NestedString(asObj(t), "metadata", "name")
 			if src == name && !cloned[dv] {
 				return fmt.Errorf("%s has not finished cloning %s yet", vm.GetName(), name)
 			}

@@ -92,7 +92,7 @@ func (c *Client) export(ctx context.Context, ns, exp, baseURL, caPEM string, vm 
 	ex := Export{Spec: spec, Token: string(data["token"]), CA: caPEM}
 	templates, _, _ := unstructured.NestedSlice(spec, "dataVolumeTemplates")
 	for _, t := range templates {
-		dv, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
+		dv, _, _ := unstructured.NestedString(asObj(t), "metadata", "name")
 		ex.Disks = append(ex.Disks, ExportDisk{DataVolume: dv, URL: fmt.Sprintf("%s/export/%s/%s/%s", baseURL, ns, exp, dv)})
 	}
 	return ex, nil
@@ -118,15 +118,15 @@ func migratable(vm *unstructured.Unstructured) error {
 	owned := map[string]bool{}
 	templates, _, _ := unstructured.NestedSlice(vm.Object, "spec", "dataVolumeTemplates")
 	for _, t := range templates {
-		n, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
+		n, _, _ := unstructured.NestedString(asObj(t), "metadata", "name")
 		owned[n] = true
 	}
 	volumes, _, _ := unstructured.NestedSlice(vm.Object, "spec", "template", "spec", "volumes")
 	for _, v := range volumes {
-		if _, ok := v.(obj)["persistentVolumeClaim"]; ok {
+		if _, ok := asObj(v)["persistentVolumeClaim"]; ok {
 			return fmt.Errorf("eject the CD-ROM from %s first", vm.GetName())
 		}
-		if dv, ok := v.(obj)["dataVolume"].(obj); ok && !owned[dv["name"].(string)] {
+		if dv, ok := asObj(v)["dataVolume"].(obj); ok && !owned[asStr(dv["name"])] {
 			return fmt.Errorf("disk %v of %s cannot be migrated", dv["name"], vm.GetName())
 		}
 	}
@@ -163,13 +163,13 @@ func (c *Client) ExportSource(ctx context.Context, ns, export, volume string) (s
 	cert, _, _ := unstructured.NestedString(ve.Object, "status", "links", "internal", "cert")
 	vols, _, _ := unstructured.NestedSlice(ve.Object, "status", "links", "internal", "volumes")
 	for _, v := range vols {
-		if v.(obj)["name"] != volume {
+		if asObj(v)["name"] != volume {
 			continue
 		}
-		formats, _, _ := unstructured.NestedSlice(v.(obj), "formats")
+		formats, _, _ := unstructured.NestedSlice(asObj(v), "formats")
 		for _, f := range formats {
-			if f.(obj)["format"] == "gzip" {
-				return f.(obj)["url"].(string), cert, nil
+			if asObj(f)["format"] == "gzip" {
+				return asStr(asObj(f)["url"]), cert, nil
 			}
 		}
 	}
@@ -234,18 +234,18 @@ func (c *Client) createImportVM(ctx context.Context, ns, name, operation, src st
 	spec := ex.Spec
 	templates, _, _ := unstructured.NestedSlice(spec, "dataVolumeTemplates")
 	for _, t := range templates {
-		dv, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
+		dv, _, _ := unstructured.NestedString(asObj(t), "metadata", "name")
 		u, ok := urls[dv]
 		if !ok {
 			return fmt.Errorf("no export for disk %s", dv)
 		}
 		source := obj{"http": obj{"url": u, "certConfigMap": src, "secretExtraHeaders": []interface{}{src}}}
-		if err := unstructured.SetNestedMap(t.(obj), source, "spec", "source"); err != nil {
+		if err := unstructured.SetNestedMap(asObj(t), source, "spec", "source"); err != nil {
 			return err
 		}
-		unstructured.RemoveNestedField(t.(obj), "spec", "sourceRef")
+		unstructured.RemoveNestedField(asObj(t), "spec", "sourceRef")
 		if opts.StorageClass != "" {
-			unstructured.SetNestedField(t.(obj), opts.StorageClass, "spec", "storage", "storageClassName")
+			unstructured.SetNestedField(asObj(t), opts.StorageClass, "spec", "storage", "storageClassName")
 		}
 	}
 	if err := unstructured.SetNestedSlice(spec, templates, "dataVolumeTemplates"); err != nil {
@@ -284,7 +284,7 @@ func (c *Client) DiskStatus(ctx context.Context, ns, name string) ([]DiskStatus,
 	templates, _, _ := unstructured.NestedSlice(vm.Object, "spec", "dataVolumeTemplates")
 	var out []DiskStatus
 	for _, t := range templates {
-		n, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
+		n, _, _ := unstructured.NestedString(asObj(t), "metadata", "name")
 		st := DiskStatus{Name: n}
 		if dv, err := c.dyn.Resource(dvGVR).Namespace(ns).Get(ctx, n, metav1.GetOptions{}); err == nil {
 			st.Phase, _, _ = unstructured.NestedString(dv.Object, "status", "phase")
@@ -299,25 +299,25 @@ func RenameSpec(spec obj, from, to string) map[string]string {
 	names := map[string]string{}
 	templates, _, _ := unstructured.NestedSlice(spec, "dataVolumeTemplates")
 	for _, t := range templates {
-		dv, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
+		dv, _, _ := unstructured.NestedString(asObj(t), "metadata", "name")
 		n := to + "-" + dv
 		if strings.HasPrefix(dv, from) {
 			n = to + strings.TrimPrefix(dv, from)
 		}
 		names[dv] = n
-		unstructured.SetNestedField(t.(obj), n, "metadata", "name")
+		unstructured.SetNestedField(asObj(t), n, "metadata", "name")
 	}
 	unstructured.SetNestedSlice(spec, templates, "dataVolumeTemplates")
 	vols, _, _ := unstructured.NestedSlice(spec, "template", "spec", "volumes")
 	for _, v := range vols {
-		if dv, ok, _ := unstructured.NestedString(v.(obj), "dataVolume", "name"); ok && names[dv] != "" {
-			unstructured.SetNestedField(v.(obj), names[dv], "dataVolume", "name")
+		if dv, ok, _ := unstructured.NestedString(asObj(v), "dataVolume", "name"); ok && names[dv] != "" {
+			unstructured.SetNestedField(asObj(v), names[dv], "dataVolume", "name")
 		}
 	}
 	unstructured.SetNestedSlice(spec, vols, "template", "spec", "volumes")
 	ifaces, _, _ := unstructured.NestedSlice(spec, "template", "spec", "domain", "devices", "interfaces")
 	for _, i := range ifaces {
-		i.(obj)["macAddress"] = randomMAC()
+		asObj(i)["macAddress"] = randomMAC()
 	}
 	unstructured.SetNestedSlice(spec, ifaces, "template", "spec", "domain", "devices", "interfaces")
 	return names
@@ -327,12 +327,12 @@ func ValidateRestoreSpec(spec obj) error {
 	owned := map[string]bool{}
 	templates, _, _ := unstructured.NestedSlice(spec, "dataVolumeTemplates")
 	for _, t := range templates {
-		n, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
+		n, _, _ := unstructured.NestedString(asObj(t), "metadata", "name")
 		owned[n] = true
 	}
 	volumes, _, _ := unstructured.NestedSlice(spec, "template", "spec", "volumes")
 	for _, v := range volumes {
-		vo := v.(obj)
+		vo := asObj(v)
 		switch {
 		case vo["cloudInitNoCloud"] != nil:
 		case vo["persistentVolumeClaim"] != nil && vo["name"] == "cdrom":

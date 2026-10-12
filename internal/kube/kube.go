@@ -459,3 +459,15 @@ func (c *Client) RunningVMs(ctx context.Context) (int, error) {
 	}
 	return n, nil
 }
+
+func asObj(v any) obj {
+	if m, ok := v.(obj); ok {
+		return m
+	}
+	return obj{}
+}
+
+func asStr(v any) string {
+	s, _ := v.(string)
+	return s
+}

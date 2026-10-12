@@ -100,7 +100,7 @@ func (c *Client) Pools(ctx context.Context) ([]Pool, error) {
 	for _, n := range nodes.Items {
 		pools, _, _ := unstructured.NestedSlice(n.Object, "pools")
 		for _, p := range pools {
-			m := p.(obj)
+			m := asObj(p)
 			pool := Pool{Name: fmt.Sprint(m["name"]), StorageClass: classes[fmt.Sprint(m["name"])], Free: quantity(fmt.Sprint(m["free"])), Used: quantity(fmt.Sprint(m["used"])), Snapshots: len(snaps.Items)}
 			for _, v := range vols.Items {
 				if name, _, _ := unstructured.NestedString(v.Object, "spec", "poolName"); name == pool.Name {
@@ -132,7 +132,7 @@ func (c *Client) Volumes(ctx context.Context) ([]Volume, error) {
 	for _, vm := range vms.Items {
 		vols, _, _ := unstructured.NestedSlice(vm.Object, "spec", "template", "spec", "volumes")
 		for _, v := range vols {
-			if dv, ok := v.(obj)["dataVolume"].(obj); ok {
+			if dv, ok := asObj(v)["dataVolume"].(obj); ok {
 				usedBy[fmt.Sprint(dv["name"])] = vm.GetName()
 			}
 		}
@@ -220,7 +220,7 @@ func (c *Client) AttachVolume(ctx context.Context, ns, vm, volume string) error 
 		disks, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "domain", "devices", "disks")
 		used := map[string]bool{}
 		for _, d := range disks {
-			used[d.(obj)["name"].(string)] = true
+			used[asStr(asObj(d)["name"])] = true
 		}
 		n := 1
 		for used[fmt.Sprintf("disk%d", n)] {

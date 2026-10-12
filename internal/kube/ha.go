@@ -188,13 +188,13 @@ func (c *Client) CheckBackupable(ctx context.Context, ns, name string) error {
 	owned := map[string]bool{}
 	templates, _, _ := unstructured.NestedSlice(vm.Object, "spec", "dataVolumeTemplates")
 	for _, t := range templates {
-		n, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
+		n, _, _ := unstructured.NestedString(asObj(t), "metadata", "name")
 		owned[n] = true
 	}
 	volumes, _, _ := unstructured.NestedSlice(vm.Object, "spec", "template", "spec", "volumes")
 	for _, v := range volumes {
-		vo := v.(obj)
-		if dv, ok := vo["dataVolume"].(obj); ok && !owned[dv["name"].(string)] {
+		vo := asObj(v)
+		if dv, ok := vo["dataVolume"].(obj); ok && !owned[asStr(dv["name"])] {
 			return fmt.Errorf("disk %s is an attached volume, which backups do not include; detach it first", vo["name"])
 		}
 		if _, ok := vo["persistentVolumeClaim"]; ok && vo["name"] != "cdrom" {
@@ -224,8 +224,8 @@ func (c *Client) RefreshReplicaDisks(ctx context.Context, ns, vm string, ex Expo
 	sizes := map[string]any{}
 	templates, _, _ := unstructured.NestedSlice(ex.Spec, "dataVolumeTemplates")
 	for _, t := range templates {
-		n, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
-		sizes[n], _, _ = unstructured.NestedMap(t.(obj), "spec", "storage")
+		n, _, _ := unstructured.NestedString(asObj(t), "metadata", "name")
+		sizes[n], _, _ = unstructured.NestedMap(asObj(t), "spec", "storage")
 	}
 	stamp := strconv.FormatInt(time.Now().Unix(), 10)
 	mapping := map[string]string{}
@@ -274,13 +274,13 @@ func (c *Client) SwapReplica(ctx context.Context, ns, vm string, spec obj, mappi
 		old = old[:0]
 		templates, _, _ := unstructured.NestedSlice(o, "spec", "dataVolumeTemplates")
 		for _, t := range templates {
-			n, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
+			n, _, _ := unstructured.NestedString(asObj(t), "metadata", "name")
 			old = append(old, n)
 		}
 		next := runtime.DeepCopyJSON(spec)
 		tpls, _, _ := unstructured.NestedSlice(next, "dataVolumeTemplates")
 		for _, t := range tpls {
-			n, _, _ := unstructured.NestedString(t.(obj), "metadata", "name")
+			n, _, _ := unstructured.NestedString(asObj(t), "metadata", "name")
 			nn, ok := mapping[n]
 			if !ok {
 				return fmt.Errorf("no refreshed copy of disk %s", n)
@@ -290,14 +290,14 @@ func (c *Client) SwapReplica(ctx context.Context, ns, vm string, spec obj, mappi
 				return err
 			}
 			dvSpec, _, _ := unstructured.NestedMap(dv.Object, "spec")
-			unstructured.SetNestedField(t.(obj), nn, "metadata", "name")
-			unstructured.SetNestedMap(t.(obj), dvSpec, "spec")
+			unstructured.SetNestedField(asObj(t), nn, "metadata", "name")
+			unstructured.SetNestedMap(asObj(t), dvSpec, "spec")
 		}
 		unstructured.SetNestedSlice(next, tpls, "dataVolumeTemplates")
 		vols, _, _ := unstructured.NestedSlice(next, "template", "spec", "volumes")
 		for _, v := range vols {
-			if n, ok, _ := unstructured.NestedString(v.(obj), "dataVolume", "name"); ok && mapping[n] != "" {
-				unstructured.SetNestedField(v.(obj), mapping[n], "dataVolume", "name")
+			if n, ok, _ := unstructured.NestedString(asObj(v), "dataVolume", "name"); ok && mapping[n] != "" {
+				unstructured.SetNestedField(asObj(v), mapping[n], "dataVolume", "name")
 			}
 		}
 		unstructured.SetNestedSlice(next, vols, "template", "spec", "volumes")

@@ -123,61 +123,65 @@ func reachable(raw string) bool {
 
 func (s *Server) haLoop() {
 	for range time.Tick(haInterval) {
-		s.ha.mu.Lock()
-		last, owned, peers := s.ha.last, s.ha.owned, s.ha.peers
-		s.ha.mu.Unlock()
-		if last.IsZero() {
-			continue
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), haInterval)
-		vms, err := s.kube.HAVMs(ctx)
-		if err != nil {
-			cancel()
-			log.Printf("ha: %v", err)
-			continue
-		}
-		names := make([]string, 0, len(vms))
-		for _, vm := range vms {
-			names = append(names, vm.Name)
-		}
-		s.ha.mu.Lock()
-		s.ha.vms = names
-		s.ha.mu.Unlock()
-		s.writeFence()
-		fresh := time.Since(last) < heartbeatFresh
-		isolated := false
-		if !fresh {
-			isolated = true
-			for _, p := range peers {
-				if reachable(p) {
-					isolated = false
-					break
-				}
-			}
-		}
-		for _, vm := range vms {
-			want := vm.Running
-			switch {
-			case fresh:
-				want = owned[vm.Name] && !vm.UserStopped
-			case isolated:
-				want = false
-			}
-			if want == vm.Running {
-				continue
-			}
-			action := "stop"
-			if want {
-				action = "start"
-			}
-			if err := s.kube.Power(ctx, vm.Namespace, vm.Name, action); err != nil {
-				log.Printf("ha: %s %s: %v", action, vm.Name, err)
-				continue
-			}
-			log.Printf("ha: %s %s (fresh=%v isolated=%v)", action, vm.Name, fresh, isolated)
-		}
-		cancel()
+		recovering("ha", s.haTick)
 	}
+}
+
+func (s *Server) haTick() {
+	s.ha.mu.Lock()
+	last, owned, peers := s.ha.last, s.ha.owned, s.ha.peers
+	s.ha.mu.Unlock()
+	if last.IsZero() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), haInterval)
+	vms, err := s.kube.HAVMs(ctx)
+	if err != nil {
+		cancel()
+		log.Printf("ha: %v", err)
+		return
+	}
+	names := make([]string, 0, len(vms))
+	for _, vm := range vms {
+		names = append(names, vm.Name)
+	}
+	s.ha.mu.Lock()
+	s.ha.vms = names
+	s.ha.mu.Unlock()
+	s.writeFence()
+	fresh := time.Since(last) < heartbeatFresh
+	isolated := false
+	if !fresh {
+		isolated = true
+		for _, p := range peers {
+			if reachable(p) {
+				isolated = false
+				break
+			}
+		}
+	}
+	for _, vm := range vms {
+		want := vm.Running
+		switch {
+		case fresh:
+			want = owned[vm.Name] && !vm.UserStopped
+		case isolated:
+			want = false
+		}
+		if want == vm.Running {
+			continue
+		}
+		action := "stop"
+		if want {
+			action = "start"
+		}
+		if err := s.kube.Power(ctx, vm.Namespace, vm.Name, action); err != nil {
+			log.Printf("ha: %s %s: %v", action, vm.Name, err)
+			continue
+		}
+		log.Printf("ha: %s %s (fresh=%v isolated=%v)", action, vm.Name, fresh, isolated)
+	}
+	cancel()
 }
 
 type replicaReq struct {

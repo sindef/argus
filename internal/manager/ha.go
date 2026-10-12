@@ -142,15 +142,17 @@ func (c *Manager) Start() {
 	go c.pollLoop()
 	go func() {
 		for range time.Tick(heartbeatEvery) {
-			ctx, cancel := context.WithTimeout(context.Background(), heartbeatEvery)
-			c.heartbeat(ctx)
-			c.failover(ctx)
-			cancel()
+			recovering("heartbeat", func() {
+				ctx, cancel := context.WithTimeout(context.Background(), heartbeatEvery)
+				defer cancel()
+				c.heartbeat(ctx)
+				c.failover(ctx)
+			})
 		}
 	}()
 	go func() {
 		for range time.Tick(30 * time.Second) {
-			c.replicate()
+			recovering("replication", c.replicate)
 		}
 	}()
 }
@@ -443,4 +445,13 @@ func (c *Manager) firstReplica(ctx context.Context, p Protected, replica Node, e
 		case <-time.After(5 * time.Second):
 		}
 	}
+}
+
+func recovering(name string, fn func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("%s: recovered from panic: %v", name, r)
+		}
+	}()
+	fn()
 }

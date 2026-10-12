@@ -347,7 +347,7 @@ func (c *Client) Receive(ctx context.Context, ns, name, migrationID string, spec
 	}
 	templates, _, _ := unstructured.NestedSlice(spec, "dataVolumeTemplates")
 	for _, t := range templates {
-		m := t.(obj)
+		m := asObj(t)
 		unstructured.SetNestedField(m, "true", "metadata", "annotations", "cdi.kubevirt.io/storage.usePopulator")
 		unstructured.SetNestedMap(m, obj{"blank": obj{}}, "spec", "source")
 		unstructured.RemoveNestedField(m, "spec", "sourceRef")
