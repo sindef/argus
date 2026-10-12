@@ -94,17 +94,44 @@
   <header><h2>Virtual switches</h2></header>
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Virtual switch</th><th>Uplinks</th><th>Networks</th></tr></thead>
-  <tbody>{{range .Switches}}<tr>
-    <td>{{template "icon" "split"}}<span class="mono">{{.Name}}</span>{{with .Missing}}<div><span class="dot Warning" title="Networks on this switch cannot be applied to these hosts">Missing on {{range $i, $h := .}}{{if $i}}, {{end}}{{$h}}{{end}}</span></div>{{end}}</td>
-    <td>{{range .Uplinks}}<div>{{.Host}} <span class="mono muted">{{range .Ports}}{{.}} {{else}}no uplink{{end}}</span></div>{{end}}</td>
+  <thead><tr><th>Virtual switch</th><th>Uplinks</th><th>Teaming</th><th>Networks</th><th></th></tr></thead>
+  <tbody>{{range .Switches}}{{$sw := .Name}}<tr>
+    <td>{{template "icon" "split"}}<span class="mono">{{.Name}}</span>{{with .Missing}}<div><span class="dot Warning" title="Networks on this switch cannot be applied to these hosts">Missing on {{range $i, $h := .}}{{if $i}}, {{end}}{{$h}}{{end}}</span></div>{{end}}{{if .Mismatch}}<div><span class="dot Warning" title="Hosts use different teaming or MTU; set it again to align them">Teaming differs</span></div>{{end}}</td>
+    <td>{{range .Uplinks}}{{$u := .}}<div>{{.Host}} {{range .Ports}}<span class="dot {{if eq .State "up"}}Ready{{else}}Warning{{end}} mono" title="{{.State}}{{if gt .Speed 0}} · {{.Speed}} Mb/s{{end}}">{{.Name}}{{if eq .Name $u.Active}} (active){{end}}</span> {{else}}<span class="muted">no uplink</span>{{end}}</div>{{end}}</td>
+    <td>{{range .Uplinks}}<div>{{with .Mode}}{{.}}{{else}}<span class="muted">single</span>{{end}}{{with .Hash}} · {{.}}{{end}} <span class="muted">MTU {{.MTU}}</span></div>{{end}}</td>
     <td>{{range .Networks}}<div>{{.Name}} <span class="muted">{{if .VLAN}}VLAN {{.VLAN}}{{else}}untagged{{end}}</span></div>{{else}}<span class="muted">—</span>{{end}}</td>
-  </tr>{{else}}<tr><td colspan="3" class="muted">No reachable hosts.</td></tr>{{end}}</tbody>
+    <td class="row-actions"><div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
+      <div class="menu-list" hidden>
+        <button hx-get="/switches/{{.Name}}/ports" hx-target="#switch-ports-body" data-dialog="switch-ports">{{template "icon" "list"}}Ports…</button>
+        {{if $.CanEdit}}{{with index .Uplinks 0}}<button data-dialog="switch-teaming" data-fill='{"name":"{{$sw}}","mode":"{{or .Mode "active-backup"}}","hash":"{{.Hash}}","primary":"{{.Primary}}","mtu":"{{.MTU}}"}'>{{template "icon" "pencil"}}Teaming…</button>{{end}}{{end}}
+      </div></div></td>
+  </tr>{{else}}<tr><td colspan="5" class="muted">No reachable hosts.</td></tr>{{end}}</tbody>
 </table>
 </div>
 </section>
 </div>
+<dialog id="switch-ports" class="card wide">
+  <div id="switch-ports-body"><p class="muted">Loading…</p></div>
+  <div class="actions"><button class="btn" type="button" data-close-dialog>Close</button></div>
+</dialog>
 {{if .CanEdit}}
+<dialog id="switch-teaming" class="card">
+  <form class="form" hx-post="/switches/teaming" hx-target="#teaming-result" hx-disabled-elt="find button[type=submit]">
+    <h2>Uplink teaming</h2>
+    <input type="hidden" name="name">
+    <div class="row">
+      <label>Mode <span class="help" title="Applies to switches with two or more uplinks.">?</span><select name="mode"><option>active-backup</option><option>802.3ad</option><option>balance-alb</option><option>balance-tlb</option><option>balance-xor</option></select></label>
+      <label>Hash policy <span class="help" title="How 802.3ad, balance-xor, balance-tlb and balance-alb spread flows across uplinks.">?</span><select name="hash"><option value="">Default</option><option>layer2</option><option>layer2+3</option><option>layer3+4</option></select></label>
+    </div>
+    <div class="row">
+      <label>Primary uplink <span class="help" title="active-backup only. Port name, e.g. eth1; must exist on every host.">?</span><input name="primary" placeholder="none"></label>
+      <label>MTU <input name="mtu" type="number" min="1280" max="9216" placeholder="1500" class="num"></label>
+    </div>
+    <p class="muted">Hosts are changed one at a time; a host that loses its connection rolls back.</p>
+    <pre id="teaming-result" class="log"></pre>
+    <div class="actions"><button class="btn" type="button" data-reload>Close</button><button class="btn primary" type="submit">Apply</button></div>
+  </form>
+</dialog>
 <datalist id="net-scopes">{{range $.Scopes}}<option>{{.}}</option>{{end}}</datalist>
 <dialog id="new-network" class="card">
   <form class="form" hx-post="/networks" hx-target="#fleet-network-error">
@@ -148,4 +175,21 @@
   </form>
 </dialog>
 {{end}}
+{{end}}
+
+{{define "switch-ports"}}
+<h2>{{.Name}} ports</h2>
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+<div class="table-wrap"><table>
+  <thead><tr><th>Host</th><th>Port</th><th>VM</th><th>Network</th><th>VLAN</th><th>MAC</th><th>State</th><th class="num">Rx</th><th class="num">Tx</th><th class="num">Dropped <span class="help" title="Received / transmitted, counted at the switch port.">?</span></th></tr></thead>
+  <tbody>{{range .Ports}}<tr>
+    <td>{{.Host}}</td><td class="mono">{{.Name}}</td>
+    <td>{{if .Uplink}}<span class="badge">Uplink</span>{{else}}{{with .VM}}{{.}}{{else}}<span class="muted">—</span>{{end}}{{end}}</td>
+    <td>{{with .Network}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
+    <td>{{if .Uplink}}<span class="muted">trunk</span>{{else}}{{.VLAN}}{{end}}</td>
+    <td class="mono">{{range $i, $m := .MACs}}{{if $i}}, {{end}}{{$m}}{{else}}<span class="muted" title="No frames seen from the guest yet">—</span>{{end}}</td>
+    <td><span class="dot {{if eq .State "up"}}Ready{{else}}Warning{{end}}">{{.State}}</span></td>
+    <td class="num">{{bytes .RxBytes}}</td><td class="num">{{bytes .TxBytes}}</td><td class="num">{{.RxDropped}} / {{.TxDropped}}</td>
+  </tr>{{else}}<tr><td colspan="10" class="muted">No ports.</td></tr>{{end}}</tbody>
+</table></div>
 {{end}}

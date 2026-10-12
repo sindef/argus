@@ -28,6 +28,8 @@
     <div class="row">
       <label>Name <input name="name" pattern="[a-z][a-z0-9-]{0,14}" placeholder="br1" required></label>
       <label>Bond mode <span class="help" title="Two or more ports are bonded before bridging.">?</span><select name="bond_mode"><option>active-backup</option><option>802.3ad</option><option>balance-alb</option><option>balance-tlb</option><option>balance-xor</option></select></label>
+      <label>Hash policy <span class="help" title="How 802.3ad, balance-xor, balance-tlb and balance-alb spread flows across uplinks.">?</span><select name="hash"><option value="">Default</option><option>layer2</option><option>layer2+3</option><option>layer3+4</option></select></label>
+      <label>MTU <input name="mtu" type="number" min="1280" max="9216" placeholder="1500" class="num"></label>
     </div>
     <div class="field">Ports <span class="help" title="Unused physical ports: no address, not part of a bridge or bond, not the management interface. Each port must exist on every selected host.">?</span></div>
     {{with .Ports}}<div class="table-wrap picks"><table><tbody>{{range .}}<tr><td><label class="check"><input type="checkbox" name="ports" value="{{.Name}}"> <span class="mono">{{.Name}}</span></label></td><td class="muted">{{if eq (len .Hosts) $.HostCount}}All hosts{{else}}{{range $i, $h := .Hosts}}{{if $i}}, {{end}}{{$h}}{{end}}{{end}}</td></tr>{{end}}</tbody></table></div>

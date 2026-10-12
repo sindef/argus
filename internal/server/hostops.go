@@ -47,6 +47,7 @@ type netOpReq struct {
 	Iface      string            `json:"iface"`
 	Migration  bool              `json:"migration"`
 	Management bool              `json:"management"`
+	Teaming    hostd.Teaming     `json:"teaming"`
 }
 
 type vmForm struct {
@@ -228,6 +229,8 @@ func (l localOps) NetworkOp(ctx context.Context, op string, req netOpReq) error 
 		return s.hostd.DeleteBridge(ctx, req.Delete)
 	case "address":
 		return s.hostd.SetAddress(ctx, req.Address)
+	case "teaming":
+		return s.hostd.SetTeaming(ctx, req.Iface, req.Teaming)
 	case "roles":
 		return l.setRoles(ctx, req)
 	case "confirm", "rollback":
@@ -502,6 +505,14 @@ func (s *Server) hostAPIRoutes() {
 				in = &req.Bridge
 			}
 			s.apiOp(w, r, in, func() (any, error) { return nil, l.NetworkOp(accessCtx(r), r.PathValue("op"), req) })
+		},
+		"GET /api/host/network/bridges/{name}/ports": func(w http.ResponseWriter, r *http.Request) {
+			s.apiOp(w, r, nil, func() (any, error) {
+				if s.hostd == nil {
+					return nil, errNoHostd
+				}
+				return s.hostd.BridgePorts(r.Context(), r.PathValue("name"))
+			})
 		},
 		"POST /api/host/firewall": func(w http.ResponseWriter, r *http.Request) {
 			var vms []hostd.FWVM

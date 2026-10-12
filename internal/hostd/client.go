@@ -229,6 +229,15 @@ func (c *Client) DeleteBridge(ctx context.Context, name string) error {
 	return c.do(ctx, http.MethodPost, "/network/bridges/"+name+"/delete", nil, nil)
 }
 
+func (c *Client) SetTeaming(ctx context.Context, name string, t Teaming) error {
+	return c.do(ctx, http.MethodPost, "/network/bridges/"+name+"/teaming", t, nil)
+}
+
+func (c *Client) BridgePorts(ctx context.Context, name string) ([]BridgePort, error) {
+	var out []BridgePort
+	return out, c.do(ctx, http.MethodGet, "/network/bridges/"+name+"/ports", nil, &out)
+}
+
 func (c *Client) SetAddress(ctx context.Context, a AddressSpec) error {
 	return c.do(ctx, http.MethodPost, "/network/address", a, nil)
 }

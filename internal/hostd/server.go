@@ -131,6 +131,19 @@ func NewServer() *Server {
 	s.mux.HandleFunc("GET /stats", func(w http.ResponseWriter, r *http.Request) { reply(w, hostStats(r.Context()), nil) })
 	s.mux.HandleFunc("POST /network/bridges", s.locked(s.bridge))
 	s.mux.HandleFunc("POST /network/bridges/{name}/delete", s.locked(s.unbridge))
+	s.mux.HandleFunc("POST /network/bridges/{name}/teaming", s.locked(func(w http.ResponseWriter, r *http.Request) {
+		var t Teaming
+		err := decode(r, &t)
+		if err == nil {
+			err = s.setTeaming(r.Context(), r.PathValue("name"), t)
+		}
+		log.Printf("set teaming %s %+v: %v", r.PathValue("name"), t, err)
+		reply(w, nil, err)
+	}))
+	s.mux.HandleFunc("GET /network/bridges/{name}/ports", func(w http.ResponseWriter, r *http.Request) {
+		ports, err := BridgePorts(r.Context(), r.PathValue("name"))
+		reply(w, ports, err)
+	})
 	s.mux.HandleFunc("POST /network/address", s.locked(s.address))
 	s.mux.HandleFunc("POST /network/management", s.locked(s.management))
 	s.mux.HandleFunc("POST /network/confirm", s.locked(func(w http.ResponseWriter, r *http.Request) { reply(w, nil, Confirm(r.Context())) }))

@@ -32,6 +32,8 @@ var mgmtPorts = "22, 443, 6443, 10250"
 var (
 	validIface = regexp.MustCompile(`^[a-z][a-z0-9-]{0,14}$`)
 	bondModes  = []string{"active-backup", "802.3ad", "balance-alb", "balance-tlb", "balance-xor", "balance-rr", "broadcast"}
+	hashModes  = []string{"802.3ad", "balance-xor", "balance-tlb", "balance-alb"}
+	hashes     = []string{"layer2", "layer2+3", "layer3+4", "encap2+3", "encap3+4"}
 )
 
 type Iface struct {
@@ -52,6 +54,11 @@ type Iface struct {
 	Static6   string   `json:"static6"`
 	Gateway4  string   `json:"gateway4"`
 	Gateway6  string   `json:"gateway6"`
+	MTU       int      `json:"mtu"`
+	BondMode  string   `json:"bondMode,omitempty"`
+	Hash      string   `json:"hash,omitempty"`
+	Primary   string   `json:"primary,omitempty"`
+	Active    string   `json:"active,omitempty"`
 }
 
 type HostNet struct {
@@ -74,6 +81,27 @@ type BridgeSpec struct {
 	Ports    []string `json:"ports"`
 	Bond     string   `json:"bond"`
 	BondMode string   `json:"bondMode"`
+	Hash     string   `json:"hash"`
+	MTU      int      `json:"mtu"`
+}
+
+type Teaming struct {
+	Mode    string `json:"mode"`
+	Hash    string `json:"hash"`
+	Primary string `json:"primary"`
+	MTU     int    `json:"mtu"`
+}
+
+type BridgePort struct {
+	Name      string   `json:"name"`
+	Uplink    bool     `json:"uplink"`
+	State     string   `json:"state"`
+	MACs      []string `json:"macs"`
+	VLAN      int      `json:"vlan"`
+	RxBytes   int64    `json:"rxBytes"`
+	TxBytes   int64    `json:"txBytes"`
+	RxDropped int64    `json:"rxDropped"`
+	TxDropped int64    `json:"txDropped"`
 }
 
 type AddressSpec struct {
@@ -88,13 +116,26 @@ type AddressSpec struct {
 }
 
 type ipLink struct {
+	Ifindex   int    `json:"ifindex"`
+	LinkIndex int    `json:"link_index"`
+	NetnsID   *int   `json:"link_netnsid"`
 	Ifname    string `json:"ifname"`
 	Address   string `json:"address"`
 	Operstate string `json:"operstate"`
 	Master    string `json:"master"`
+	Mtu       int    `json:"mtu"`
 	Linkinfo  struct {
 		InfoKind string `json:"info_kind"`
+		InfoData struct {
+			Mode           string `json:"mode"`
+			XmitHashPolicy string `json:"xmit_hash_policy"`
+			Primary        string `json:"primary"`
+			ActiveSlave    string `json:"active_slave"`
+		} `json:"info_data"`
 	} `json:"linkinfo"`
+	Stats64 struct {
+		Rx, Tx struct{ Bytes, Dropped int64 }
+	} `json:"stats64"`
 	AddrInfo []struct {
 		Family    string `json:"family"`
 		Local     string `json:"local"`
@@ -181,7 +222,14 @@ func hostNet(ctx context.Context) (HostNet, error) {
 		default:
 			continue
 		}
-		i := &Iface{Name: l.Ifname, Kind: kind, MAC: l.Address, State: strings.ToLower(l.Operstate), Master: l.Master, Managed: managed[l.Ifname], Mgmt: protected[l.Ifname], Access: access[l.Ifname], V4: "off", V6: "off"}
+		i := &Iface{Name: l.Ifname, Kind: kind, MAC: l.Address, State: strings.ToLower(l.Operstate), Master: l.Master, Managed: managed[l.Ifname], Mgmt: protected[l.Ifname], Access: access[l.Ifname], V4: "off", V6: "off", MTU: l.Mtu}
+		if kind == "bond" {
+			d := l.Linkinfo.InfoData
+			i.BondMode, i.Primary, i.Active = d.Mode, d.Primary, d.ActiveSlave
+			if slices.Contains(hashModes, d.Mode) {
+				i.Hash = d.XmitHashPolicy
+			}
+		}
 		if b, err := os.ReadFile(filepath.Join("/sys/class/net", l.Ifname, "speed")); err == nil {
 			fmt.Sscanf(string(b), "%d", &i.Speed)
 		}
@@ -241,12 +289,53 @@ func unit(name, ext, body string) (string, string) {
 	return filepath.Join(networkDir, "01-argus-"+name+"."+ext), body
 }
 
-func portNetwork(port, master, kind string) (string, string) {
+func mtuLink(mtu int) string {
+	if mtu == 0 {
+		return ""
+	}
+	return fmt.Sprintf("\n[Link]\nMTUBytes=%d\n", mtu)
+}
+
+func portNetwork(port, master, kind string, mtu int, primary bool) (string, string) {
 	body := fmt.Sprintf("[Match]\nName=%s\n\n[Network]\n%s=%s\n", port, kind, master)
+	if primary {
+		body += "PrimarySlave=yes\n"
+	}
 	if kind == "Bridge" {
 		body += "\n[BridgeVLAN]\nVLAN=2-4094\n"
 	}
-	return unit(port, "network", body)
+	return unit(port, "network", body+mtuLink(mtu))
+}
+
+func bridgeNetwork(name string, mtu int) (string, string) {
+	return unit(name, "network", fmt.Sprintf("[Match]\nName=%s\n\n[Network]\nLinkLocalAddressing=no\nConfigureWithoutCarrier=yes\n", name)+mtuLink(mtu))
+}
+
+func bondNetdev(name string, t Teaming) (string, string) {
+	body := fmt.Sprintf("[NetDev]\nName=%s\nKind=bond\n\n[Bond]\nMode=%s\nMIIMonitorSec=100ms\n", name, t.Mode)
+	if t.Mode == "802.3ad" {
+		body += "LACPTransmitRate=fast\n"
+	}
+	if t.Hash != "" && slices.Contains(hashModes, t.Mode) {
+		body += "TransmitHashPolicy=" + t.Hash + "\n"
+	}
+	return unit(name, "netdev", body)
+}
+
+func (t Teaming) validate(bonded bool) error {
+	switch {
+	case t.MTU != 0 && (t.MTU < 1280 || t.MTU > 9216):
+		return errors.New("MTU must be 1280-9216")
+	case !bonded && (t.Hash != "" || t.Primary != ""):
+		return errors.New("teaming needs at least two uplinks")
+	case bonded && !slices.Contains(bondModes, t.Mode):
+		return errors.New("invalid teaming mode")
+	case t.Hash != "" && !slices.Contains(hashes, t.Hash):
+		return errors.New("invalid hash policy")
+	case t.Primary != "" && t.Mode != "active-backup":
+		return errors.New("a primary uplink applies to active-backup only")
+	}
+	return nil
 }
 
 func (s *Server) createBridge(ctx context.Context, spec BridgeSpec) error {
@@ -266,6 +355,9 @@ func (s *Server) createBridge(ctx context.Context, spec BridgeSpec) error {
 	}
 	if len(spec.Ports) == 0 {
 		return errors.New("select at least one network port")
+	}
+	if err := (Teaming{Mode: spec.BondMode, Hash: spec.Hash, MTU: spec.MTU}).validate(spec.Bond != ""); err != nil {
+		return err
 	}
 	taken := map[string]int{}
 	for _, p := range spec.Ports {
@@ -288,7 +380,7 @@ func (s *Server) createBridge(ctx context.Context, spec BridgeSpec) error {
 	files := map[string]string{}
 	add := func(path, body string) { files[path] = body }
 	add(unit(spec.Name, "netdev", fmt.Sprintf("[NetDev]\nName=%s\nKind=bridge\nMACAddress=%s\n\n[Bridge]\nVLANFiltering=yes\nDefaultPVID=1\n", spec.Name, exists[spec.Ports[0]].MAC)))
-	add(unit(spec.Name, "network", fmt.Sprintf("[Match]\nName=%s\n\n[Network]\nLinkLocalAddressing=no\nConfigureWithoutCarrier=yes\n", spec.Name)))
+	add(bridgeNetwork(spec.Name, spec.MTU))
 	created := []string{spec.Name}
 	if spec.Bond != "" {
 		if !validIface.MatchString(spec.Bond) || exists[spec.Bond].Name != "" {
@@ -297,18 +389,159 @@ func (s *Server) createBridge(ctx context.Context, spec BridgeSpec) error {
 		if len(spec.Ports) < 2 || !slices.Contains(bondModes, spec.BondMode) {
 			return errors.New("a bond needs at least two ports and a valid mode")
 		}
-		add(unit(spec.Bond, "netdev", fmt.Sprintf("[NetDev]\nName=%s\nKind=bond\n\n[Bond]\nMode=%s\nMIIMonitorSec=100ms\n", spec.Bond, spec.BondMode)))
-		add(portNetwork(spec.Bond, spec.Name, "Bridge"))
+		add(bondNetdev(spec.Bond, Teaming{Mode: spec.BondMode, Hash: spec.Hash}))
+		add(portNetwork(spec.Bond, spec.Name, "Bridge", spec.MTU, false))
 		for _, p := range spec.Ports {
-			add(portNetwork(p, spec.Bond, "Bond"))
+			add(portNetwork(p, spec.Bond, "Bond", spec.MTU, false))
 		}
 		created = append(created, spec.Bond)
 	} else {
 		for _, p := range spec.Ports {
-			add(portNetwork(p, spec.Name, "Bridge"))
+			add(portNetwork(p, spec.Name, "Bridge", spec.MTU, false))
 		}
 	}
 	return s.apply(ctx, "create bridge "+spec.Name, files, nil, created, slices.Concat(spec.Ports, created))
+}
+
+func (s *Server) setTeaming(ctx context.Context, name string, t Teaming) error {
+	hn, err := hostNet(ctx)
+	if err != nil {
+		return err
+	}
+	byName := map[string]Iface{}
+	for _, i := range hn.Ifaces {
+		byName[i.Name] = i
+	}
+	br, ok := byName[name]
+	switch {
+	case !ok || br.Kind != "bridge":
+		return fmt.Errorf("bridge %s not found", name)
+	case !br.Managed:
+		return fmt.Errorf("%s comes from the install configuration and cannot be changed here", name)
+	}
+	var bond *Iface
+	var uplinks []string
+	for _, p := range br.Ports {
+		if i := byName[p]; i.Kind == "bond" && i.Managed {
+			bond, uplinks = &i, i.Ports
+		} else if i.Kind == "ether" {
+			uplinks = append(uplinks, p)
+		}
+	}
+	if err := t.validate(bond != nil); err != nil {
+		return err
+	}
+	if t.Primary != "" && !slices.Contains(uplinks, t.Primary) {
+		return fmt.Errorf("%s is not an uplink of %s", t.Primary, name)
+	}
+	files := map[string]string{}
+	add := func(path, body string) { files[path] = body }
+	add(bridgeNetwork(name, t.MTU))
+	affected := slices.Concat([]string{name}, uplinks)
+	var recreate []string
+	if bond != nil {
+		add(bondNetdev(bond.Name, t))
+		add(portNetwork(bond.Name, name, "Bridge", t.MTU, false))
+		for _, p := range uplinks {
+			add(portNetwork(p, bond.Name, "Bond", t.MTU, p == t.Primary))
+		}
+		affected = append(affected, bond.Name)
+		if bond.BondMode != t.Mode || bond.Hash != t.Hash || bond.Primary != t.Primary {
+			recreate = []string{bond.Name}
+		}
+	} else {
+		for _, p := range uplinks {
+			add(portNetwork(p, name, "Bridge", t.MTU, false))
+		}
+	}
+	return s.apply(ctx, "set teaming of "+name, files, nil, recreate, affected)
+}
+
+func BridgePorts(ctx context.Context, name string) ([]BridgePort, error) {
+	if !validIface.MatchString(name) {
+		return nil, errors.New("invalid bridge name")
+	}
+	out, err := run(ctx, "ip", "-j", "-d", "-s", "link", "show", "master", name)
+	if err != nil {
+		return nil, err
+	}
+	var links []ipLink
+	if err := json.Unmarshal([]byte(out), &links); err != nil {
+		return nil, err
+	}
+	var fdb []struct{ MAC, Ifname, State string }
+	if out, err := run(ctx, "bridge", "-j", "fdb", "show", "br", name); err == nil {
+		json.Unmarshal([]byte(out), &fdb)
+	}
+	var vlans []struct {
+		Ifname string
+		Vlans  []struct {
+			Vlan  int
+			Flags []string
+		}
+	}
+	if out, err := run(ctx, "bridge", "-j", "vlan", "show"); err == nil {
+		json.Unmarshal([]byte(out), &vlans)
+	}
+	netns := map[int]string{}
+	if out, err := run(ctx, "ip", "-j", "netns", "list-id"); err == nil {
+		var ids []struct {
+			NSID int
+			Name string
+		}
+		json.Unmarshal([]byte(out), &ids)
+		for _, id := range ids {
+			netns[id.NSID] = id.Name
+		}
+	}
+	inNS := map[string][]ipLink{}
+	guestMAC := func(l ipLink) string {
+		if l.NetnsID == nil || netns[*l.NetnsID] == "" {
+			return ""
+		}
+		ns := netns[*l.NetnsID]
+		if _, ok := inNS[ns]; !ok {
+			out, _ := run(ctx, "ip", "-n", ns, "-j", "link", "show")
+			var ls []ipLink
+			json.Unmarshal([]byte(out), &ls)
+			inNS[ns] = ls
+		}
+		for _, peer := range inNS[ns] {
+			if hash, ok := strings.CutSuffix(peer.Ifname, "-nic"); ok && peer.Ifindex == l.LinkIndex {
+				for _, d := range inNS[ns] {
+					if d.Ifname == "pod"+hash {
+						return d.Address
+					}
+				}
+			}
+		}
+		return ""
+	}
+	var ports []BridgePort
+	for _, l := range links {
+		p := BridgePort{Name: l.Ifname, Uplink: l.Linkinfo.InfoKind == "bond" || physical(l.Ifname), State: strings.ToLower(l.Operstate),
+			RxBytes: l.Stats64.Rx.Bytes, TxBytes: l.Stats64.Tx.Bytes, RxDropped: l.Stats64.Rx.Dropped, TxDropped: l.Stats64.Tx.Dropped}
+		if m := guestMAC(l); m != "" {
+			p.MACs = append(p.MACs, m)
+		}
+		for _, f := range fdb {
+			if f.Ifname == l.Ifname && f.State != "permanent" && !slices.Contains(p.MACs, f.MAC) {
+				p.MACs = append(p.MACs, f.MAC)
+			}
+		}
+		for _, v := range vlans {
+			if v.Ifname != l.Ifname {
+				continue
+			}
+			for _, x := range v.Vlans {
+				if slices.Contains(x.Flags, "PVID") {
+					p.VLAN = x.Vlan
+				}
+			}
+		}
+		ports = append(ports, p)
+	}
+	return ports, nil
 }
 
 func (s *Server) deleteBridge(ctx context.Context, name string) error {
@@ -567,6 +800,9 @@ func (s *Server) apply(ctx context.Context, desc string, write map[string]string
 	if len(affected) == 0 {
 		return nil
 	}
+	for _, c := range created {
+		run(ctx, "ip", "link", "del", c)
+	}
 	return reloadNetwork(ctx, affected)
 }
 
@@ -574,7 +810,14 @@ func reloadNetwork(ctx context.Context, ifaces []string) error {
 	if _, err := run(ctx, "networkctl", "reload"); err != nil {
 		return err
 	}
+	deadline := time.Now().Add(10 * time.Second)
 	for _, i := range ifaces {
+		for time.Now().Before(deadline) {
+			if _, err := os.Stat(filepath.Join("/sys/class/net", i)); err == nil {
+				break
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
 		run(ctx, "networkctl", "reconfigure", i)
 	}
 	return nil

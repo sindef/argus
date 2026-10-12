@@ -107,7 +107,7 @@ func (s *Server) managerBridgeRollout(w http.ResponseWriter, r *http.Request) {
 	for i, name := range hosts {
 		n, err := s.nodeIn(r, name)
 		if err == nil {
-			err = s.rolloutBridge(r.Context(), n, spec)
+			err = s.rolloutHostNet(r.Context(), n, "/api/host/network/bridge", spec)
 		}
 		if err != nil {
 			out = append(out, name+": "+strings.TrimPrefix(err.Error(), name+": "))
@@ -121,8 +121,8 @@ func (s *Server) managerBridgeRollout(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) rolloutBridge(ctx context.Context, n manager.Node, spec hostd.BridgeSpec) error {
-	if err := n.Call(ctx, http.MethodPost, "/api/host/network/bridge", spec, nil); err != nil {
+func (s *Server) rolloutHostNet(ctx context.Context, n manager.Node, path string, body any) error {
+	if err := n.Call(ctx, http.MethodPost, path, body, nil); err != nil {
 		return err
 	}
 	time.Sleep(5 * time.Second)

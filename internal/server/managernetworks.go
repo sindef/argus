@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"sync"
 
 	"argus/internal/auth"
+	"argus/internal/hostd"
 	"argus/internal/kube"
 	"argus/internal/manager"
 )
@@ -21,11 +23,18 @@ type switchRow struct {
 	Uplinks  []switchUplink
 	Missing  []string
 	Networks []*netRow
+	Mismatch bool
 }
 
 type switchUplink struct {
-	Host  string
-	Ports []string
+	Host                        string
+	Ports                       []hostd.Iface
+	Mode, Hash, Primary, Active string
+	MTU                         int
+}
+
+func (u switchUplink) policy() string {
+	return fmt.Sprint(u.Mode, u.Hash, u.Primary, u.MTU)
 }
 
 func switches(hosts []hostNetRow, nets []*netRow) []switchRow {
@@ -36,11 +45,29 @@ func switches(hosts []hostNetRow, nets []*netRow) []switchRow {
 			continue
 		}
 		reachable = append(reachable, h.Node.Name)
+		ifaces := map[string]hostd.Iface{}
+		for _, i := range h.Info.Net.Ifaces {
+			ifaces[i.Name] = i
+		}
 		for _, b := range h.Bridges {
 			if byName[b.Name] == nil {
 				byName[b.Name] = &switchRow{Name: b.Name}
 			}
-			byName[b.Name].Uplinks = append(byName[b.Name].Uplinks, switchUplink{h.Node.Name, b.Ports})
+			up := switchUplink{Host: h.Node.Name, MTU: b.MTU}
+			for _, p := range b.Ports {
+				switch i := ifaces[p]; i.Kind {
+				case "bond":
+					up.Mode, up.Hash, up.Primary, up.Active = i.BondMode, i.Hash, i.Primary, i.Active
+					for _, q := range i.Ports {
+						up.Ports = append(up.Ports, ifaces[q])
+					}
+				case "ether":
+					up.Ports = append(up.Ports, i)
+				}
+			}
+			sw := byName[b.Name]
+			sw.Mismatch = sw.Mismatch || len(sw.Uplinks) > 0 && sw.Uplinks[0].policy() != up.policy()
+			sw.Uplinks = append(sw.Uplinks, up)
 		}
 	}
 	var out []switchRow

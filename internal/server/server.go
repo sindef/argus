@@ -187,6 +187,8 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("GET /template-data/{org}/{name}/{file}", s.serveTemplateData)
 		s.mux.HandleFunc("POST /images/{op}", s.need(auth.ImageConfig, s.managerImageOp))
 		s.mux.HandleFunc("POST /network/hosts/bridge", s.need(auth.HostConfig, s.managerBridgeRollout))
+		s.mux.HandleFunc("GET /switches/{name}/ports", s.need(auth.VMView, s.managerSwitchPorts))
+		s.mux.HandleFunc("POST /switches/teaming", s.need(auth.HostConfig, s.managerSwitchTeaming))
 		s.mux.HandleFunc("GET /settings", s.requireOrg(auth.Admin, s.managerSettings))
 		s.mux.HandleFunc("POST /settings/sso", s.requireOrg(auth.Admin, s.managerSSO))
 		s.mux.HandleFunc("POST /settings/ldap", s.requireOrg(auth.Admin, s.managerLDAP))
