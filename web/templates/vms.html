@@ -90,7 +90,8 @@
   {{if .Running}}
   <a class="btn sm" href="/vms/{{.Namespace}}/{{.Name}}/console">{{template "icon" "terminal"}}Console</a>
   <button class="btn sm" hx-post="/vms/{{.Namespace}}/{{.Name}}/restart" hx-confirm="Restart {{.Label}}?">{{template "icon" "rotate-cw"}}Restart</button>
-  <button class="btn sm" hx-post="/vms/{{.Namespace}}/{{.Name}}/stop" hx-confirm="Power off {{.Label}}?">{{template "icon" "power"}}Power off</button>
+  <button class="btn sm" hx-post="/vms/{{.Namespace}}/{{.Name}}/stop" hx-confirm="Shut down {{.Label}}?">{{template "icon" "power"}}Shut down</button>
+  <button class="btn sm danger" hx-post="/vms/{{.Namespace}}/{{.Name}}/poweroff" hx-confirm="Power off {{.Label}} without a guest shutdown?">{{template "icon" "power"}}Power off</button>
   {{else if eq .Status "Paused"}}
   <button class="btn sm" hx-post="/vms/{{.Namespace}}/{{.Name}}/unpause">{{template "icon" "play"}}Resume</button>
   {{else}}
@@ -111,6 +112,7 @@
   {{template "icon" "memory-stick"}}<dt>Memory</dt><dd>{{size .Memory}}</dd>
   {{template "icon" "database"}}<dt>Storage</dt><dd>{{bytes .StorageBytes}} (thin)</dd>
   {{template "icon" "disc-3"}}<dt>OS</dt><dd>{{with .OS}}{{.}}{{else}}<span class="muted" title="Reported by the guest agent">Unknown</span>{{end}}</dd>
+  {{template "icon" "cpu"}}<dt>Guest agent</dt><dd>{{if .Agent}}Connected{{else if .Running}}<span class="muted">Not running</span> <span class="help" title="Install qemu-guest-agent (Linux) or the virtio-win guest tools (Windows) for clean shutdowns, IP reporting and quiesced snapshots.">?</span>{{else}}<span class="muted">—</span>{{end}}</dd>
   {{template "icon" "clock"}}<dt>Running for</dt><dd>{{if .Running}}{{since .Started}}{{else}}<span class="muted">—</span>{{end}}</dd>
 </dl>
 {{else if eq $.Tab "hardware"}}
@@ -135,7 +137,7 @@
 <div class="table-wrap"><table>
   <thead><tr><th>Created</th><th>Status</th><th></th></tr></thead>
   <tbody>{{range .}}<tr><td title="{{.Name}}">{{.Created.Local.Format "2006-01-02 15:04"}}</td>
-    <td><span class="dot {{if .Ready}}Ready{{else}}{{.Phase}}{{end}}">{{if .Ready}}Ready{{else}}{{.Phase}}{{end}}</span></td>
+    <td><span class="dot {{if .Ready}}Ready{{else}}{{.Phase}}{{end}}">{{if .Ready}}Ready{{else}}{{.Phase}}{{end}}</span>{{if .Quiesced}} <span class="badge" title="The guest agent froze file systems, so applications saw a clean point in time.">Quiesced</span>{{end}}</td>
     <td class="row-actions">{{if $.CanOperate}}{{if not $.VM.Running}}<button class="link" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/snapshots/{{.Name}}/restore" hx-target="#flash" hx-confirm="Restore {{$.VM.Label}} to this snapshot? Current disk contents are lost.">Restore</button>{{end}}<button class="link danger" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/snapshots/{{.Name}}/delete" hx-target="#flash" hx-confirm="Delete this snapshot?">Delete</button>{{end}}</td></tr>{{end}}</tbody>
 </table></div>
 {{else}}<p class="muted">No snapshots.</p>{{end}}
@@ -180,6 +182,7 @@
   <hr>
   {{if .Running}}
   <button hx-post="{{$p}}/stop" hx-confirm="Shut down {{.Label}}?">{{template "icon" "power"}}Shut down</button>
+  <button class="danger" hx-post="{{$p}}/poweroff" hx-confirm="Power off {{.Label}} without a guest shutdown?">{{template "icon" "power"}}Power off</button>
   <button hx-post="{{$p}}/restart" hx-confirm="Restart {{.Label}}?">{{template "icon" "rotate-cw"}}Restart</button>
   <button hx-post="{{$p}}/pause">{{template "icon" "pause"}}Pause</button>
   <a href="{{$p}}/console">{{template "icon" "terminal"}}Open Console</a>
@@ -218,6 +221,7 @@
   <div class="row">
     <label>CD-ROM <select name="cdrom"><option value="">None</option>{{$cd := .CDROM}}{{range $.Images}}<option value="{{.Name}}"{{if eq .Name $cd}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
     <label class="check"><input type="checkbox" name="tpm"{{if .TPM}} checked{{end}}> Virtual TPM <span class="help" title="TPM 2.0 device. State is not kept across power cycles.">?</span></label>
+    <label class="check"><input type="checkbox" name="monitor"{{if .Monitor}} checked{{end}}> Restart if unresponsive <span class="help" title="Restarts the VM when the guest agent stops answering for 5 minutes. Needs the guest agent.">?</span></label>
   </div>
   <div class="actions"><button class="btn primary" type="submit">Save</button></div>
 </form>

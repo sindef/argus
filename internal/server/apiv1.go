@@ -40,11 +40,12 @@ type v1VM struct {
 	IPs          []string  `json:"ips,omitempty"`
 	Started      time.Time `json:"started,omitzero"`
 	Restart      bool      `json:"restartRequired"`
+	Agent        bool      `json:"agent"`
 }
 
 func toV1VM(host string, v kube.VM) v1VM {
 	return v1VM{Host: host, Name: v.Name, DisplayName: v.DisplayName, Status: v.Status, Running: v.Running, Cores: v.Cores, Memory: v.Memory,
-		StorageBytes: v.StorageBytes, Tags: v.Tags, Template: v.Template, OS: v.OS, IPs: v.IPs(), Started: v.Started, Restart: v.PendingRestart}
+		StorageBytes: v.StorageBytes, Tags: v.Tags, Template: v.Template, OS: v.OS, IPs: v.IPs(), Started: v.Started, Restart: v.PendingRestart, Agent: v.Agent}
 }
 
 type v1NewVM struct {
@@ -194,7 +195,7 @@ func (s *Server) v1Power(w http.ResponseWriter, r *http.Request) {
 		Action string `json:"action"`
 	}
 	if err := decodeJSON(r.Body, &req); err != nil || !kube.ValidAction(req.Action) {
-		apiError(w, r, http.StatusBadRequest, errors.New("action must be one of start, stop, restart, pause, unpause"))
+		apiError(w, r, http.StatusBadRequest, errors.New("action must be one of start, stop, poweroff, restart, pause, unpause"))
 		return
 	}
 	if n, ok := s.v1Node(w, r); ok {

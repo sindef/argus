@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -21,11 +22,12 @@ var (
 )
 
 type Snapshot struct {
-	Name    string
-	Created time.Time
-	Phase   string
-	Ready   bool
-	Auto    bool
+	Name     string
+	Created  time.Time
+	Phase    string
+	Ready    bool
+	Auto     bool
+	Quiesced bool
 }
 
 const (
@@ -46,6 +48,8 @@ func (c *Client) ListSnapshots(ctx context.Context, ns, vm string) ([]Snapshot, 
 		snap := Snapshot{Name: s.GetName(), Created: s.GetCreationTimestamp().Time, Auto: s.GetLabels()[autoLabel] == "true"}
 		snap.Phase, _, _ = unstructured.NestedString(s.Object, "status", "phase")
 		snap.Ready, _, _ = unstructured.NestedBool(s.Object, "status", "readyToUse")
+		ind, _, _ := unstructured.NestedStringSlice(s.Object, "status", "indications")
+		snap.Quiesced = slices.Contains(ind, "GuestAgent")
 		out = append(out, snap)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Created.After(out[j].Created) })

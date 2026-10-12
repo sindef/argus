@@ -66,6 +66,7 @@ type VM struct {
 	Disks          []Disk
 	NICs           []NIC
 	PendingRestart bool
+	Agent          bool
 }
 
 func (v VM) Label() string {
@@ -213,7 +214,7 @@ func (c *Client) GetVM(ctx context.Context, ns, name string) (VM, error) {
 
 func ValidAction(action string) bool {
 	switch action {
-	case "start", "stop", "restart", "pause", "unpause", "template", "untemplate":
+	case "start", "stop", "poweroff", "restart", "pause", "unpause", "template", "untemplate":
 		return true
 	}
 	return false
@@ -248,7 +249,7 @@ func (c *Client) Action(ctx context.Context, ns, name, action string) error {
 	if err := c.Power(ctx, ns, name, action); err != nil {
 		return err
 	}
-	if action != "start" && action != "stop" {
+	if action != "start" && action != "stop" && action != "poweroff" {
 		return nil
 	}
 	vm, err := c.dyn.Resource(vmGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
@@ -256,7 +257,7 @@ func (c *Client) Action(ctx context.Context, ns, name, action string) error {
 		return err
 	}
 	value := "null"
-	if action == "stop" {
+	if action != "start" {
 		value = `"true"`
 	}
 	patch := []byte(`{"metadata":{"annotations":{"` + haStoppedAnnotation + `":` + value + `}}}`)
@@ -276,6 +277,9 @@ func (c *Client) Power(ctx context.Context, ns, name, action string) error {
 	resource := "virtualmachines"
 	if action == "pause" || action == "unpause" {
 		resource = "virtualmachineinstances"
+	}
+	if action == "poweroff" {
+		return c.subresource(ctx, ns, resource, name, "stop", `{"gracePeriod":0}`)
 	}
 	return c.subresource(ctx, ns, resource, name, action, "{}")
 }
@@ -439,6 +443,12 @@ func toVM(v, vmi *unstructured.Unstructured) VM {
 	}
 	vm.Node, _, _ = unstructured.NestedString(vmi.Object, "status", "nodeName")
 	vm.OS, _, _ = unstructured.NestedString(vmi.Object, "status", "guestOSInfo", "prettyName")
+	conds, _, _ = unstructured.NestedSlice(vmi.Object, "status", "conditions")
+	for _, c := range conds {
+		if asStr(asObj(c)["type"]) == "AgentConnected" && asStr(asObj(c)["status"]) == "True" {
+			vm.Agent = true
+		}
+	}
 	vm.Started = vmi.GetCreationTimestamp().Time
 	st, _, _ := unstructured.NestedSlice(vmi.Object, "status", "interfaces")
 	for _, x := range st {

@@ -299,6 +299,7 @@
           "enum": [
            "start",
            "stop",
+           "poweroff",
            "restart",
            "pause",
            "unpause"
@@ -921,6 +922,10 @@
      "restartRequired": {
       "type": "boolean",
       "description": "Hardware changes are waiting for the next restart"
+     },
+     "agent": {
+      "type": "boolean",
+      "description": "Guest agent connected"
      }
     }
    },

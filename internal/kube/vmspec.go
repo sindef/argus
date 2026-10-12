@@ -63,6 +63,8 @@ func (g Guest) userData() string {
 		}
 		cfg["users"] = []any{"default", u}
 	}
+	cfg["packages"] = []string{"qemu-guest-agent"}
+	cfg["runcmd"] = []any{[]string{"systemctl", "enable", "--now", "qemu-guest-agent"}}
 	b, _ := json.Marshal(cfg)
 	return "#cloud-config\n" + string(b) + "\n"
 }
@@ -438,6 +440,7 @@ type Hardware struct {
 	MemoryMiB      int64
 	Firmware       string
 	TPM            bool
+	Monitor        bool
 	CDROM          string
 	Disks          []HardwareDisk
 	NICs           []NIC
@@ -469,6 +472,7 @@ func (c *Client) Hardware(ctx context.Context, ns, name string) (Hardware, error
 		}
 	}
 	_, hw.TPM, _ = unstructured.NestedMap(o, "spec", "template", "spec", "domain", "devices", "tpm")
+	_, hw.Monitor, _ = unstructured.NestedMap(o, "spec", "template", "spec", "livenessProbe")
 	vols, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")
 	for _, v := range vols {
 		vo := asObj(v)
@@ -527,6 +531,11 @@ func (c *Client) SetHardware(ctx context.Context, ns, name string, hw Hardware) 
 			unstructured.SetNestedField(o, obj{}, append(dom, "devices", "tpm")...)
 		} else {
 			unstructured.RemoveNestedField(o, append(dom, "devices", "tpm")...)
+		}
+		if hw.Monitor {
+			unstructured.SetNestedField(o, obj{"guestAgentPing": obj{}, "initialDelaySeconds": int64(300), "periodSeconds": int64(30), "failureThreshold": int64(10)}, "spec", "template", "spec", "livenessProbe")
+		} else {
+			unstructured.RemoveNestedField(o, "spec", "template", "spec", "livenessProbe")
 		}
 		disks, _, _ := unstructured.NestedSlice(o, append(dom, "devices", "disks")...)
 		vols, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")
