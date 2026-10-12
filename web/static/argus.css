@@ -272,6 +272,7 @@ h1 .dot { font-size: 14px; font-weight: 400; }
 .addr-form:not(:has(input[name=ipv6][value=static]:checked)) .v6-static { display: none; }
 .addr-head { display: flex; align-items: center; gap: 12px; }
 .vm-form:not(:has(input[name=ipmode][value=static]:checked)) .guest-static { display: none; }
+.library-form:has(input[name=via][value=file]:checked) .via-url, .library-form:has(input[name=via][value=url]:checked) .via-file,
 .import-modal:has(input[name=isrc][value=ova]:checked) .import-esxi, .import-modal:has(input[name=isrc][value=esxi]:checked) .import-ova { display: none; }
 .addr-head .field { width: 48px; }
 .bell { position: relative; }
@@ -313,3 +314,4 @@ dd.wrap { word-break: break-all; }
   .panes.ready, .panes.static { grid-template-columns: 1fr; }
   .panes-nav { position: static; flex-direction: row; overflow-x: auto; }
 }
+.pane > dl.kv { margin-top: 16px; }

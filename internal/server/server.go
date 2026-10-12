@@ -12,11 +12,13 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"argus/internal/auth"
 	"argus/internal/hostd"
 	"argus/internal/kube"
 	"argus/internal/manager"
+	"argus/internal/registry"
 	"argus/internal/tlscert"
 	"argus/web"
 )
@@ -51,6 +53,8 @@ type Server struct {
 	esxi        esxiStreams
 	auditLog    auditLog
 	alarms      alarmState
+	registry    *registry.Registry
+	regAuth     registryAuth
 }
 
 type Options struct {
@@ -110,6 +114,12 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /users/{name}/reset", s.requireOrg(auth.Admin, s.resetPassword))
 	s.mux.HandleFunc("POST /users/{name}/delete", s.requireOrg(auth.Admin, s.deleteUser))
 	if s.manager != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		err := s.startRegistry(ctx)
+		cancel()
+		if err != nil {
+			return nil, err
+		}
 		s.mux.HandleFunc("POST /sso/start", s.ssoStart)
 		s.mux.HandleFunc("GET /sso/callback", s.ssoCallback)
 		s.mux.HandleFunc("GET /{$}", s.require(auth.ReadOnly, s.managerHome))
@@ -272,6 +282,10 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if s.registry != nil && strings.HasPrefix(r.URL.Path, "/v2/") {
+		s.serveRegistry(w, r)
+		return
+	}
 	if !sameOrigin(r) {
 		http.Error(w, "cross-origin request refused", http.StatusForbidden)
 		return

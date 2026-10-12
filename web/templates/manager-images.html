@@ -6,7 +6,17 @@
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
 <div class="panes wide">
 <section class="pane" id="s-images" data-icon="image">
-  <header><h2>Images</h2>{{if .CanOperate}}<div class="actions"><button class="btn primary" data-dialog="import-image">{{template "icon" "download"}}Import from URL</button></div>{{end}}</header>
+  <header><h2>Images</h2>{{if .CanOperate}}<div class="actions"><button class="btn primary" data-dialog="library-add">{{template "icon" "plus"}}Add image</button></div>{{end}}</header>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Library</th><th>Tag</th><th>Size</th><th>Added</th><th></th></tr></thead>
+  <tbody>{{range .Library}}<tr>
+    <td>{{template "icon" "image"}}{{.Name}}</td><td class="mono">{{.Tag}}</td><td>{{bytes .Size}}</td><td>{{.Created.Local.Format "2006-01-02 15:04"}}</td>
+    <td class="row-actions">{{if $.CanOperate}}<button class="link" data-dialog="send-image" data-fill='{"image":"{{.Name}}:{{.Tag}}","name":"{{.HostName}}","size":"{{.SizeGiB}}"}'>Send to hosts</button><button class="link danger" hx-post="/images/library-delete" hx-vals='{"image":"{{.Name}}:{{.Tag}}"}' hx-target="#flash" hx-confirm="Delete {{.Name}}:{{.Tag}} from the library?">Delete</button>{{end}}</td>
+  </tr>{{else}}<tr><td colspan="5" class="muted">No images in the library.</td></tr>{{end}}</tbody>
+</table>
+</div>
+<h3>On hosts</h3>
 <div class="table-wrap">
 <table>
   <thead><tr><th>Name</th><th>Size</th>{{range .HostNames}}<th>{{.}}</th>{{end}}<th></th></tr></thead>
@@ -14,12 +24,61 @@
     <td>{{template "icon" "image"}}{{.Name}}</td><td>{{size .Size}}</td>
     {{range $h := $.HostNames}}<td>{{with index $row.Hosts $h}}<span class="dot {{.Phase}}">{{if eq .Phase "Succeeded"}}Ready{{else}}{{.Phase}} {{.Progress}}{{end}}</span>{{else}}<span class="muted">—</span>{{end}}</td>{{end}}
     <td class="row-actions">{{if $.CanOperate}}<button class="link" data-dialog="copy-image" data-fill='{"image":"{{.Name}}"}'>Copy to hosts</button><button class="link danger" hx-post="/images/delete" hx-vals='{"image":"{{.Name}}"}' hx-target="#flash" hx-confirm="Delete {{.Name}} from every host?">Delete</button>{{end}}</td>
-  </tr>{{else}}<tr><td colspan="9" class="muted">No images.</td></tr>{{end}}</tbody>
+  </tr>{{else}}<tr><td colspan="9" class="muted">No images on hosts.</td></tr>{{end}}</tbody>
 </table>
 </div>
 </section>
+<section class="pane" id="s-sources" data-icon="database">
+  <header><h2>Image sources</h2>{{if .CanOperate}}<div class="actions"><button class="btn" data-dialog="import-image">{{template "icon" "download"}}Import to hosts</button><button class="btn primary" data-dialog="add-source">{{template "icon" "plus"}}Add source</button></div>{{end}}</header>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>Type</th><th>Location</th><th></th></tr></thead>
+  <tbody>
+  <tr>
+    <td>{{template "icon" "server"}}Argus Manager</td><td>Registry</td>
+    <td class="mono">{{if .Address}}{{.Address}}/{{.Org}}{{else}}<span class="muted">Address not set</span>{{end}}</td>
+    <td class="row-actions">{{if .Super}}<button class="link" data-dialog="registry-address" data-fill='{"address":"{{.Address}}"}'>Set address</button>{{end}}</td>
+  </tr>
+  {{range .Sources}}<tr>
+    <td>{{template "icon" "globe"}}{{.Name}}</td><td>{{if eq .Kind "registry"}}Registry{{else}}HTTP{{end}}</td><td class="mono">{{.URL}}</td>
+    <td class="row-actions">{{if $.CanOperate}}<button class="link" data-dialog="import-image" data-fill='{"source":"{{.Name}}"}'>Import to hosts</button><button class="link danger" hx-post="/images/source-delete" hx-vals='{"name":"{{.Name}}"}' hx-target="#flash" hx-confirm="Remove source {{.Name}}?">Remove</button>{{end}}</td>
+  </tr>{{end}}
+  </tbody>
+</table>
+</div>
+{{with .Address}}<dl class="kv spaced"><dt>Push <span class="help" title="Sign in with your Argus Manager user as {{$.Org}}/username. Images must contain a disk file under /disk, as KubeVirt container disks do.">?</span></dt><dd class="mono wrap">docker push {{.}}/{{$.Org}}/NAME:TAG</dd></dl>{{end}}
+</section>
 </div>
 {{if .CanOperate}}
+<dialog id="library-add" class="card">
+  <form id="library-form" hx-post="/images/library-add" hx-target="#library-error" hx-encoding="multipart/form-data" hx-disabled-elt="find button[type=submit]" class="form library-form">
+    <h2>Add image</h2>
+    <p id="library-error" class="error form-error"></p>
+    <div class="seg"><label><input type="radio" name="via" value="file" checked>Upload</label><label><input type="radio" name="via" value="url">From URL</label></div>
+    <div class="row">
+      <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
+      <label>Tag <input name="tag" value="latest" required></label>
+    </div>
+    <label class="via-url">Image URL <input name="url" type="url" placeholder="https://…/image.qcow2"></label>
+    <label class="via-file">File <span class="help" title="qcow2, raw or ISO; gzip compressed is fine.">?</span><input name="file" type="file" accept=".qcow2,.img,.raw,.iso,.gz"></label>
+    <progress id="library-progress" value="0" max="100" hidden></progress>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Add</button></div>
+  </form>
+</dialog>
+<dialog id="send-image" class="card">
+  <form hx-post="/images/send" hx-target="#send-error" class="form">
+    <h2>Send to hosts</h2>
+    <p id="send-error" class="error form-error"></p>
+    <input type="hidden" name="image">
+    <div class="row">
+      <label>Name on hosts <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
+      <label>Size (GiB) <span class="help" title="Disk size on each host. Must be at least the image's virtual size.">?</span><input name="size" type="number" min="1" max="4096" required></label>
+    </div>
+    <div class="field">Hosts</div>
+    {{template "host-picks" .HostNames}}
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Send</button></div>
+  </form>
+</dialog>
 <dialog id="copy-image" class="card">
   <form hx-post="/images/copy" hx-target="#copy-error" class="form">
     <h2>Copy image</h2>
@@ -27,23 +86,56 @@
     <input type="hidden" name="image">
     <label>From <select name="from">{{range .HostNames}}<option>{{.}}</option>{{end}}</select></label>
     <div class="field">To</div>
-    <div class="table-wrap picks"><table><tbody>{{range .HostNames}}<tr><td><label class="check"><input type="checkbox" name="hosts" value="{{.}}"> {{.}}</label></td></tr>{{end}}</tbody></table></div>
+    {{template "host-picks" .HostNames}}
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Copy</button></div>
   </form>
 </dialog>
 <dialog id="import-image" class="card">
   <form hx-post="/images/import" hx-target="#import-error" class="form">
-    <h2>Import from URL</h2>
+    <h2>Import to hosts</h2>
     <p id="import-error" class="error form-error"></p>
+    <label>Source <select name="source"><option value="">URL</option>{{range .Sources}}<option>{{.Name}}</option>{{end}}</select></label>
+    <label>URL or path <span class="help" title="Full URL for a URL import, otherwise the path within the source, such as containerdisks/fedora:41 for a registry.">?</span><input name="path" required></label>
     <div class="row">
       <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
       <label>Size (GiB) <input name="size" type="number" min="1" max="4096" value="10" required></label>
     </div>
-    <label>Image URL <input name="url" type="url" placeholder="https://…/image.qcow2" required></label>
     <div class="field">Hosts</div>
-    <div class="table-wrap picks"><table><tbody>{{range .HostNames}}<tr><td><label class="check"><input type="checkbox" name="hosts" value="{{.}}" checked> {{.}}</label></td></tr>{{end}}</tbody></table></div>
+    {{template "host-picks" .HostNames}}
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Import</button></div>
   </form>
 </dialog>
+<dialog id="add-source" class="card">
+  <form hx-post="/images/source-add" hx-target="#source-error" class="form">
+    <h2>Add source</h2>
+    <p id="source-error" class="error form-error"></p>
+    <div class="row">
+      <label>Name <input name="name" maxlength="64" required></label>
+      <label>Type <select name="kind"><option value="registry">Registry</option><option value="http">HTTP</option></select></label>
+    </div>
+    <label>Location <span class="help" title="Registry: host[:port][/path], such as quay.io/containerdisks. HTTP: base URL.">?</span><input name="url" required></label>
+    <label>CA certificate <span class="help" title="Optional PEM certificate for a private registry.">?</span><textarea name="ca" rows="3" placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Add</button></div>
+  </form>
+</dialog>
 {{end}}
+{{if .Super}}
+<dialog id="registry-address" class="card">
+  <form hx-post="/images/address" hx-target="#address-error" class="form">
+    <h2>Registry address</h2>
+    <p id="address-error" class="error form-error"></p>
+    <label>Address <span class="help" title="Host name or IP address, with port if not 443, that every host uses to reach Argus Manager. Added to Argus Manager's built-in certificate.">?</span><input name="address" placeholder="10.0.0.5:8443"></label>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Save</button></div>
+  </form>
+</dialog>
 {{end}}
+<script>
+document.getElementById("library-form")?.addEventListener("htmx:xhr:progress", (e) => {
+  const p = document.getElementById("library-progress");
+  p.hidden = false;
+  p.value = e.detail.loaded / e.detail.total * 100;
+});
+</script>
+{{end}}
+
+{{define "host-picks"}}<div class="table-wrap picks"><table><tbody>{{range .}}<tr><td><label class="check"><input type="checkbox" name="hosts" value="{{.}}"> {{.}}</label></td></tr>{{end}}</tbody></table></div>{{end}}

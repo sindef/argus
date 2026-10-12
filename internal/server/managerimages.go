@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 
 	"argus/internal/auth"
@@ -46,12 +47,19 @@ func (s *Server) managerImages(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	sort.Strings(hosts)
-	s.render(w, r, "manager-images.html", "layout", map[string]any{"Nav": "images", "Rows": out, "HostNames": hosts, "CanOperate": session(r).Role.Can(auth.Operator), "Error": errs})
+	sources, _, err := s.imageSources(r.Context(), session(r).Org)
+	if err != nil {
+		errs = strings.TrimSpace(errs + " " + err.Error())
+	}
+	s.render(w, r, "manager-images.html", "layout", map[string]any{"Nav": "images", "Rows": out, "HostNames": hosts, "CanOperate": session(r).Role.Can(auth.Operator), "Error": errs,
+		"Library": s.library(session(r).Org), "Sources": sources, "Address": s.registryAddress(r.Context()), "Org": session(r).Org, "Super": superAdmin(r)})
 }
 
 func (s *Server) managerImageOp(w http.ResponseWriter, r *http.Request) {
 	org := session(r).Org
-	r.ParseForm()
+	if r.PathValue("op") != "library-add" {
+		r.ParseForm()
+	}
 	var err error
 	switch r.PathValue("op") {
 	case "copy":
@@ -70,31 +78,18 @@ func (s *Server) managerImageOp(w http.ResponseWriter, r *http.Request) {
 			err = s.manager.CopyImage(org, r.FormValue("image"), src, targets)
 		}
 	case "import":
-		size, serr := gibibytes(r.FormValue("size"))
-		name, url := r.FormValue("name"), r.FormValue("url")
-		switch {
-		case serr != nil:
-			err = serr
-		case !validObject.MatchString(name):
-			err = errors.New("invalid name")
-		case len(r.Form["hosts"]) == 0:
-			err = errors.New("pick at least one host")
-		}
-		var members []manager.NodeState
-		for _, st := range s.inventory(r) {
-			for _, h := range r.Form["hosts"] {
-				if st.Node.Name == h {
-					members = append(members, st)
-				}
-			}
-		}
-		if err == nil {
-			if e := fanOut(r.Context(), members, func(ctx context.Context, n manager.Node) error {
-				return n.Call(ctx, http.MethodPost, "/api/images/import", imageImportReq{Name: name, Size: size, URL: url}, nil)
-			}); e != "" {
-				err = errors.New(e)
-			}
-		}
+		err = s.importFromSource(r)
+	case "library-add":
+		err = s.libraryAdd(r)
+	case "send":
+		err = s.librarySend(r)
+	case "library-delete":
+		name, tag, _ := strings.Cut(r.FormValue("image"), ":")
+		err = s.registry.Delete(org+"/"+name, tag)
+	case "source-add", "source-delete":
+		err = s.changeSources(r, r.PathValue("op") == "source-add")
+	case "address":
+		err = s.setRegistryAddress(r)
 	case "delete":
 		name := r.FormValue("image")
 		if e := fanOut(r.Context(), s.inventory(r), func(ctx context.Context, n manager.Node) error {

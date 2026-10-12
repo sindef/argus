@@ -486,17 +486,25 @@ func hash(password string) (string, error) {
 	return string(h), err
 }
 
-func (s *Store) Login(ctx context.Context, name, password string, remember bool) (string, error) {
+func (s *Store) Verify(ctx context.Context, name, password string) (User, bool, error) {
 	us, err := s.Users(ctx)
 	if err != nil {
-		return "", err
+		return User{}, false, err
 	}
 	for _, u := range us {
-		if u.Name == name && bcrypt.CompareHashAndPassword([]byte(u.Hash), []byte(password)) == nil {
-			return s.NewSession(Session{User: u.Name, Role: u.Role, MustChange: u.MustChange, Scopes: u.Scopes}, remember), nil
+		if u.Name == name && u.Hash != "" && bcrypt.CompareHashAndPassword([]byte(u.Hash), []byte(password)) == nil {
+			return u, true, nil
 		}
 	}
-	return "", nil
+	return User{}, false, nil
+}
+
+func (s *Store) Login(ctx context.Context, name, password string, remember bool) (string, error) {
+	u, ok, err := s.Verify(ctx, name, password)
+	if !ok {
+		return "", err
+	}
+	return s.NewSession(Session{User: u.Name, Role: u.Role, MustChange: u.MustChange, Scopes: u.Scopes}, remember), nil
 }
 
 func (s *Store) Session(tok string) (Session, bool) {
