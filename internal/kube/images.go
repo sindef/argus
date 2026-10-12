@@ -53,6 +53,8 @@ func (c *Client) ListImages(ctx context.Context) ([]Image, error) {
 		img.Progress, _, _ = unstructured.NestedString(o, "status", "progress")
 		if u, ok, _ := unstructured.NestedString(o, "spec", "source", "http", "url"); ok {
 			img.Source = u
+		} else if u, ok, _ := unstructured.NestedString(o, "spec", "source", "registry", "url"); ok {
+			img.Source = u
 		} else {
 			img.Source = "upload"
 		}
@@ -94,7 +96,10 @@ func (c *Client) DeleteImage(ctx context.Context, name string) error {
 	if err := c.imageInUse(ctx, name); err != nil {
 		return err
 	}
-	return c.dyn.Resource(dvGVR).Namespace(Namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	if err := c.dyn.Resource(dvGVR).Namespace(Namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
+		return err
+	}
+	return c.FinishImageImport(ctx, name)
 }
 
 func (c *Client) imageInUse(ctx context.Context, name string) error {
@@ -282,6 +287,49 @@ func (c *Client) ImportImage(ctx context.Context, name, size string, ex Export) 
 		"metadata":   obj{"name": name, "labels": obj{imageLabel: "true"}},
 		"spec": obj{
 			"source":  obj{"http": obj{"url": ex.Disks[0].URL, "certConfigMap": src, "secretExtraHeaders": []any{src}}},
+			"storage": obj{"resources": obj{"requests": obj{"storage": size}}},
+		},
+	}}
+	if _, err := c.dyn.Resource(dvGVR).Namespace(Namespace).Create(ctx, dv, metav1.CreateOptions{}); err != nil {
+		c.FinishImageImport(context.Background(), name)
+		return err
+	}
+	return nil
+}
+
+type RegistrySource struct {
+	Image string `json:"image"`
+	CA    string `json:"ca,omitempty"`
+	User  string `json:"user,omitempty"`
+	Pass  string `json:"pass,omitempty"`
+}
+
+func (c *Client) ImportRegistryImage(ctx context.Context, name, size string, src RegistrySource) error {
+	if err := c.FinishImageImport(ctx, name); err != nil {
+		return err
+	}
+	ref := imageImportName(name)
+	reg := obj{"url": "docker://" + src.Image}
+	if src.CA != "" {
+		cm := &unstructured.Unstructured{Object: obj{"apiVersion": "v1", "kind": "ConfigMap", "metadata": obj{"name": ref}, "data": obj{"ca.pem": src.CA}}}
+		if _, err := c.dyn.Resource(cmGVR).Namespace(Namespace).Create(ctx, cm, metav1.CreateOptions{}); err != nil {
+			return err
+		}
+		reg["certConfigMap"] = ref
+	}
+	if src.User != "" {
+		if err := c.Secrets(Namespace).Create(ctx, ref, "Opaque", map[string][]byte{"accessKeyId": []byte(src.User), "secretKey": []byte(src.Pass)}); err != nil {
+			c.FinishImageImport(context.Background(), name)
+			return err
+		}
+		reg["secretRef"] = ref
+	}
+	dv := &unstructured.Unstructured{Object: obj{
+		"apiVersion": "cdi.kubevirt.io/v1beta1",
+		"kind":       "DataVolume",
+		"metadata":   obj{"name": name, "labels": obj{imageLabel: "true"}},
+		"spec": obj{
+			"source":  obj{"registry": reg},
 			"storage": obj{"resources": obj{"requests": obj{"storage": size}}},
 		},
 	}}

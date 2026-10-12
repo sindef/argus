@@ -146,10 +146,11 @@ func (s *Server) apiImages(w http.ResponseWriter, r *http.Request) {
 }
 
 type imageImportReq struct {
-	Name   string       `json:"name"`
-	Size   string       `json:"size"`
-	URL    string       `json:"url"`
-	Export *kube.Export `json:"export"`
+	Name     string               `json:"name"`
+	Size     string               `json:"size"`
+	URL      string               `json:"url"`
+	Export   *kube.Export         `json:"export"`
+	Registry *kube.RegistrySource `json:"registry"`
 }
 
 func (s *Server) apiImportImage(w http.ResponseWriter, r *http.Request) {
@@ -160,10 +161,12 @@ func (s *Server) apiImportImage(w http.ResponseWriter, r *http.Request) {
 		err = errors.New("name and size required")
 	case req.Export != nil:
 		err = s.kube.ImportImage(r.Context(), req.Name, req.Size, *req.Export)
+	case req.Registry != nil && req.Registry.Image != "":
+		err = s.kube.ImportRegistryImage(r.Context(), req.Name, req.Size, *req.Registry)
 	case strings.HasPrefix(req.URL, "https://") || strings.HasPrefix(req.URL, "http://"):
 		err = s.kube.CreateImage(r.Context(), req.Name, req.Size, req.URL)
 	default:
-		err = errors.New("url or export required")
+		err = errors.New("url, export or registry required")
 	}
 	if err != nil {
 		apiError(w, r, http.StatusConflict, err)
