@@ -60,6 +60,7 @@
 <div class="import-modal">
   <div class="modal-head"><h2>Import VM{{if .Base}} to {{.NodeName}}{{end}}</h2><div class="seg"><label><input type="radio" name="isrc" value="ova" checked> OVA file</label><label><input type="radio" name="isrc" value="esxi"> ESXi host</label></div><button class="icon-btn" type="button" data-close-dialog aria-label="Close">{{template "icon" "x"}}</button></div>
   <p id="import-vm-error" class="error form-error"></p>
+  {{if ne .Arch "amd64"}}<p class="arch-warn">This host is {{.Arch}}. VMware VMs are almost always x86-64 and will only start here if the guest is built for {{.Arch}}.</p>{{end}}
   <form class="form import-ova" hx-post="{{.Base}}/vms/import/ova" hx-encoding="multipart/form-data" hx-target="#import-vm-error" hx-disabled-elt="find button[type=submit]">
     {{template "import-common" .}}
     <label>OVA file <input name="ova" type="file" accept=".ova" required></label>

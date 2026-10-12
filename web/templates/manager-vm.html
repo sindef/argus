@@ -108,23 +108,25 @@
 </div>
 {{if $.IsAdmin}}
 <dialog id="migrate" class="card">
-  <form hx-post="{{$p}}/migrate" hx-target="#migrate-error" class="form">
+  <form hx-post="{{$p}}/migrate" hx-target="#migrate-error" class="form" data-arch="{{$.Arch}}">
     <h2>Migrate {{.Label}}</h2>
     <p id="migrate-error" class="error form-error"></p>
     <label>Destination host
-      <select name="to" required>{{range $.Hosts}}{{if and (ne .Node.Name $.Node.Name) (eq .Status "Healthy")}}<option value="{{.Node.Name}}">{{.Node.Name}}{{with .Node.Cluster}} ({{.}}){{end}}</option>{{end}}{{end}}</select>
+      <select name="to" required>{{range $.Hosts}}{{if and (ne .Node.Name $.Node.Name) (eq .Status "Healthy")}}<option value="{{.Node.Name}}" data-arch="{{.Arch}}">{{.Node.Name}}{{with .Node.Cluster}} ({{.}}){{end}}{{if ne .Arch $.Arch}} · {{.Arch}}{{end}}</option>{{end}}{{end}}</select>
     </label>
+    <p class="arch-warn" hidden>This host has a different CPU architecture. The VM will only start there if its guest supports it.</p>
     <p class="muted">{{if .Running}}Live migration; the VM keeps running.{{else}}Cold migration; disks are copied.{{end}}</p>
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Migrate</button></div>
   </form>
 </dialog>
 <dialog id="protect" class="card">
-  <form hx-post="{{$p}}/protect" hx-target="#protect-error" class="form">
+  <form hx-post="{{$p}}/protect" hx-target="#protect-error" class="form" data-arch="{{$.Arch}}">
     <h2>Protect {{.Label}}</h2>
     <p id="protect-error" class="error form-error"></p>
     <label>Replica host
-      <select name="replica" required>{{range $.Hosts}}{{if ne .Node.Name $.Node.Name}}<option value="{{.Node.Name}}">{{.Node.Name}}{{with .Node.Cluster}} ({{.}}){{end}}</option>{{end}}{{end}}</select>
+      <select name="replica" required>{{range $.Hosts}}{{if ne .Node.Name $.Node.Name}}<option value="{{.Node.Name}}" data-arch="{{.Arch}}">{{.Node.Name}}{{with .Node.Cluster}} ({{.}}){{end}}{{if ne .Arch $.Arch}} · {{.Arch}}{{end}}</option>{{end}}{{end}}</select>
     </label>
+    <p class="arch-warn" hidden>This host has a different CPU architecture. A failover there will only start if the guest supports it.</p>
     <label>Replication interval (minutes) <input name="interval" type="number" min="5" max="1440" value="15" class="num"></label>
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Protect</button></div>
   </form>

@@ -118,11 +118,18 @@ func memBytes(q string) int64 {
 	return v.Value()
 }
 
+func (c *Manager) arch(node string) string {
+	st, _ := c.NodeState(node)
+	return st.Arch()
+}
+
 func (c *Manager) targets(ctx context.Context, src Node) []Node {
 	nodes, _ := c.NodesFor(ctx, src.Org)
+	srcState, _ := c.NodeState(src.Name)
 	type cand struct {
 		n    Node
 		free int64
+		same bool
 	}
 	var cs []cand
 	for _, n := range nodes {
@@ -139,9 +146,14 @@ func (c *Manager) targets(ctx context.Context, src Node) []Node {
 				free -= memBytes(v.Memory)
 			}
 		}
-		cs = append(cs, cand{n, free})
+		cs = append(cs, cand{n, free, st.Arch() == srcState.Arch()})
 	}
-	sort.Slice(cs, func(i, j int) bool { return cs[i].free > cs[j].free })
+	sort.Slice(cs, func(i, j int) bool {
+		if cs[i].same != cs[j].same {
+			return cs[i].same
+		}
+		return cs[i].free > cs[j].free
+	})
 	out := make([]Node, len(cs))
 	for i, x := range cs {
 		out[i] = x.n
@@ -179,7 +191,11 @@ func (c *Manager) evacuate(ctx context.Context, j *Job, n Node, shutdown bool) e
 			if c.preflight(ctx, n, dst, v.Namespace, v.Name) != nil {
 				continue
 			}
-			c.update(j, "Migrating "+v.Name+" to "+dst.Name, false, false)
+			status := "Migrating " + v.Name + " to " + dst.Name
+			if a, b := c.arch(n.Name), c.arch(dst.Name); a != b {
+				status += " (warning: " + b + " host, VM came from " + a + ")"
+			}
+			c.update(j, status, false, false)
 			mj := &Job{Org: n.Org, Namespace: v.Namespace, VM: v.Name, From: n.Name, To: dst.Name, Live: true}
 			if err := c.startJob(mj, 6*time.Hour, func(ctx context.Context, mj *Job) error {
 				return c.liveMigrate(ctx, mj, n, dst, v.Namespace, v.Name)

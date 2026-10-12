@@ -2,7 +2,7 @@
 <form hx-get="/vm-new" hx-target="#modal" class="form">
   <h2>{{if eq .What "import"}}Import VM{{else}}Create VM{{end}}</h2>
   <input type="hidden" name="what" value="{{.What}}">
-  <label>Host <select name="host"><option value="auto">Automatic (most free memory)</option>{{range .Hosts}}{{if eq .Status "Healthy"}}<option>{{.Node.Name}}</option>{{end}}{{end}}</select></label>
+  <label>Host <select name="host"><option value="auto">Automatic (most free memory)</option>{{range .Hosts}}{{if eq .Status "Healthy"}}<option value="{{.Node.Name}}">{{.Node.Name}}{{if ne .Arch "amd64"}} · {{.Arch}}{{end}}</option>{{end}}{{end}}</select></label>
   <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Next</button></div>
 </form>
 {{end}}

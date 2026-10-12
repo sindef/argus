@@ -68,6 +68,7 @@
         if (k === "action") { const f = d.querySelector("form"); f.setAttribute("hx-post", v); htmx.process(f); }
         else d.querySelector(`[name="${k}"]`).value = v;
       }
+      d.querySelectorAll("form").forEach(archCheck);
       d.showModal();
       return;
     }
@@ -152,6 +153,18 @@
     };
     dlg.showModal();
     input.select();
+  });
+
+  const archCheck = (form) => {
+    const src = form.querySelector("[data-arch-source]");
+    const want = src ? (src.selectedOptions?.[0]?.dataset.arch || src.value) : form.dataset.arch;
+    const warn = form.querySelector(".arch-warn");
+    if (!warn || !want) return;
+    warn.hidden = ![...form.querySelectorAll("input[data-arch]:checked, select:not([data-arch-source]) option[data-arch]:checked")].some((e) => e.dataset.arch !== want);
+  };
+  document.addEventListener("change", (e) => {
+    const f = e.target.closest("form[data-arch], form:has([data-arch-source])");
+    if (f) archCheck(f);
   });
 
   const buildPanes = (root) => {

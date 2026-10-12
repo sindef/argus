@@ -353,6 +353,9 @@ func (s *Server) managerVM(w http.ResponseWriter, r *http.Request) {
 	data["Node"], data["VM"], data["Tab"], data["Tabs"] = n, vm, tab, vmTabs
 	data["Ctx"] = map[string]any{"V": vmRow{VM: vm, Host: n.Name}, "Page": fmt.Sprintf("/nodes/%s/vms/%s/%s", n.Name, ns, name), "CanOperate": data["CanOperate"], "IsAdmin": data["IsAdmin"]}
 	data["Nav"] = "vm:" + n.Name + "/" + name
+	if st, ok := s.manager.NodeState(n.Name); ok {
+		data["Arch"] = st.Arch()
+	}
 	if p, ok := data["Protected"].(map[string]manager.Protected)[n.Name+"/"+name]; ok {
 		data["HA"] = p
 	}

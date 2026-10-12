@@ -315,3 +315,4 @@ dd.wrap { word-break: break-all; }
   .panes-nav { position: static; flex-direction: row; overflow-x: auto; }
 }
 .pane > dl.kv { margin-top: 16px; }
+.arch-warn { color: var(--warn); margin: 0; }

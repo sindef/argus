@@ -113,6 +113,7 @@ type NodeInfo struct {
 	CAFingerprint string    `json:"caFingerprint"`
 	RunningVMs    int       `json:"runningVMs"`
 	CPUCores      int64     `json:"cpuCores"`
+	Arch          string    `json:"arch,omitempty"`
 	MemoryBytes   int64     `json:"memoryBytes"`
 	BootTime      time.Time `json:"bootTime"`
 }

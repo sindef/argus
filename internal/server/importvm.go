@@ -20,6 +20,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -417,7 +418,7 @@ func (s *Server) serveESXi(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) importModal(w http.ResponseWriter, r *http.Request) {
 	nets, _ := s.kube.ListNetworks(r.Context())
-	s.render(w, r, "vmnew.html", "import-modal", map[string]any{"Networks": nets, "Pools": s.poolChoices(r.Context())})
+	s.render(w, r, "vmnew.html", "import-modal", map[string]any{"Networks": nets, "Pools": s.poolChoices(r.Context()), "Arch": runtime.GOARCH})
 }
 
 func (s *Server) importVM(w http.ResponseWriter, r *http.Request) {

@@ -26,6 +26,13 @@ type NodeState struct {
 
 func (s NodeState) Reachable() bool { return s.Error == "" && !s.Observed.IsZero() }
 
+func (s NodeState) Arch() string {
+	if s.Info.Arch == "" {
+		return "amd64"
+	}
+	return s.Info.Arch
+}
+
 func (s NodeState) Stale() bool { return time.Since(s.Observed) > 3*pollEvery }
 
 type inventory struct {
