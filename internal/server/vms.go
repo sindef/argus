@@ -576,6 +576,11 @@ func (s *Server) hardwareAction(w http.ResponseWriter, r *http.Request) {
 			err = intField(r, "cores_per_socket", 1, 64, &cps)
 		}
 		req.Hardware.Cores, req.Hardware.MemoryMiB, req.Hardware.CoresPerSocket = int64(cores), int64(mem), int64(cps)
+		if v := strings.TrimSpace(r.FormValue("memory_reserve")); v != "" && err == nil {
+			var reserve int
+			err = intField(r, "memory_reserve", 64, 262144, &reserve)
+			req.Hardware.MemoryReserve = int64(reserve)
+		}
 	case "resize":
 		var size int
 		err = intField(r, "size", 1, 65536, &size)

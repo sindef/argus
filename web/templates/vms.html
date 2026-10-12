@@ -216,6 +216,7 @@
     <label>CPU limit <span class="help" title="Maximum host CPU, in cores. Empty for no limit.">?</span><input name="cpu_limit" value="{{.CPULimit}}" placeholder="none" class="num"></label>
     <label>Cores per socket <span class="help" title="vCPUs must divide evenly. Fewer cores per socket means more sockets; some guest licences limit sockets.">?</span><input name="cores_per_socket" type="number" min="1" max="64" value="{{.CoresPerSocket}}" required></label>
     <label>Memory (MiB) <input name="memory" type="number" min="128" max="262144" step="128" value="{{.MemoryMiB}}" required></label>
+    <label>Memory reservation (MiB) <span class="help" title="Host memory guaranteed to the VM. Less than its memory lets the host overcommit; the balloon driver hands memory the guest frees back to the host. Empty reserves all of it.">?</span><input name="memory_reserve" type="number" min="64" max="262144" value="{{if .MemoryReserve}}{{.MemoryReserve}}{{end}}" placeholder="all" class="num"></label>
     <label>Firmware <select name="firmware">
       {{$fw := .Firmware}}{{range $.Firmwares}}<option value="{{.}}"{{if eq . $fw}} selected{{end}}>{{if eq . "bios"}}BIOS{{else if eq . "uefi"}}UEFI{{else}}UEFI with Secure Boot{{end}}</option>{{end}}
     </select></label>

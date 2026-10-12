@@ -469,6 +469,7 @@ type Hardware struct {
 	TPM            bool
 	Monitor        bool
 	CPUReserve     string
+	MemoryReserve  int64
 	CPULimit       string
 	CDROM          string
 	Disks          []HardwareDisk
@@ -512,6 +513,11 @@ func (c *Client) Hardware(ctx context.Context, ns, name string) (Hardware, error
 	_, hw.TPM, _ = unstructured.NestedMap(o, "spec", "template", "spec", "domain", "devices", "tpm")
 	_, hw.Monitor, _ = unstructured.NestedMap(o, "spec", "template", "spec", "livenessProbe")
 	hw.CPUReserve, _, _ = unstructured.NestedString(o, "spec", "template", "spec", "domain", "resources", "requests", "cpu")
+	if m, ok, _ := unstructured.NestedString(o, "spec", "template", "spec", "domain", "resources", "requests", "memory"); ok {
+		if q, err := resource.ParseQuantity(m); err == nil {
+			hw.MemoryReserve = q.Value() >> 20
+		}
+	}
 	hw.CPULimit, _, _ = unstructured.NestedString(o, "spec", "template", "spec", "domain", "resources", "limits", "cpu")
 	vols, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")
 	for _, v := range vols {
@@ -595,6 +601,14 @@ func (c *Client) SetHardware(ctx context.Context, ns, name string, hw Hardware) 
 		}
 		if r, l := resource.MustParse(cmp.Or(hw.CPUReserve, "0")), resource.MustParse(cmp.Or(hw.CPULimit, "0")); hw.CPUReserve != "" && hw.CPULimit != "" && r.Cmp(l) > 0 {
 			return errors.New("CPU reservation cannot exceed the limit")
+		}
+		switch {
+		case hw.MemoryReserve == 0:
+			unstructured.RemoveNestedField(o, append(dom, "resources", "requests", "memory")...)
+		case hw.MemoryReserve < 64 || hw.MemoryReserve > hw.MemoryMiB:
+			return errors.New("memory reservation must be 64 MiB up to the VM's memory")
+		default:
+			unstructured.SetNestedField(o, fmt.Sprintf("%dMi", hw.MemoryReserve), append(dom, "resources", "requests", "memory")...)
 		}
 		if hw.Monitor {
 			unstructured.SetNestedField(o, obj{"guestAgentPing": obj{}, "initialDelaySeconds": int64(300), "periodSeconds": int64(30), "failureThreshold": int64(10)}, "spec", "template", "spec", "livenessProbe")
