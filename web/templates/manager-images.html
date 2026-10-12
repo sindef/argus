@@ -10,9 +10,14 @@
 <div class="table-wrap">
 <table>
   <thead><tr><th>Library</th><th>Tag</th><th>Architecture</th><th>Size</th><th>Added</th><th></th></tr></thead>
-  <tbody>{{range .Library}}<tr>
+  <tbody>{{range .Library}}{{$d := printf `{"name":"%s:%s","arch":"%s","size":"%s","digest":"%s","pull":"%s/%s:%s"}` .Name .Tag .Arch (bytes .Size) .Digest $.Address .Repo .Tag}}<tr class="clickable" data-dialog="image-details" data-fill='{{$d}}'>
     <td>{{template "icon" "image"}}{{.Name}}</td><td class="mono">{{.Tag}}</td><td>{{.Arch}}</td><td>{{bytes .Size}}</td><td>{{.Created.Local.Format "2006-01-02 15:04"}}</td>
-    <td class="row-actions">{{if $.CanOperate}}<button class="link" data-dialog="send-image" data-fill='{"image":"{{.Name}}:{{.Tag}}","name":"{{.HostName}}","size":"{{.SizeGiB}}","arch":"{{.Arch}}"}'>Send to hosts</button><button class="link danger" hx-post="/images/library-delete" hx-vals='{"image":"{{.Name}}:{{.Tag}}"}' hx-target="#flash" hx-confirm="Delete {{.Name}}:{{.Tag}} from the library?">Delete</button>{{end}}</td>
+    <td class="row-actions"><div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
+      <div class="menu-list" hidden hx-target="#flash">
+        <button data-dialog="image-details" data-fill='{{$d}}'>{{template "icon" "file-text"}}Details</button>
+        {{if $.CanOperate}}<button data-dialog="send-image" data-fill='{"image":"{{.Name}}:{{.Tag}}","name":"{{.HostName}}","size":"{{.SizeGiB}}","arch":"{{.Arch}}"}'>{{template "icon" "upload"}}Send to hosts…</button>
+        <hr><button class="danger" hx-post="/images/library-delete" hx-vals='{"image":"{{.Name}}:{{.Tag}}"}' hx-confirm="Delete {{.Name}}:{{.Tag}} from the library?">{{template "icon" "trash-2"}}Delete</button>{{end}}
+      </div></div></td>
   </tr>{{else}}<tr><td colspan="6" class="muted">No images in the library.</td></tr>{{end}}</tbody>
 </table>
 </div>
@@ -39,9 +44,14 @@
     <td class="mono">{{if .Address}}{{.Address}}/{{.Org}}{{else}}<span class="muted">Address not set</span>{{end}}</td>
     <td class="row-actions">{{if .Super}}<button class="link" data-dialog="registry-address" data-fill='{"address":"{{.Address}}"}'>Set address</button>{{end}}</td>
   </tr>
-  {{range .Sources}}<tr>
+  {{range .Sources}}<tr{{if $.CanOperate}} class="clickable" data-dialog="add-source" data-fill='{"name":"{{.Name}}","kind":"{{.Kind}}","url":"{{.URL}}","ca":"{{.CA}}"}'{{end}}>
     <td>{{template "icon" "globe"}}{{.Name}}</td><td>{{if eq .Kind "registry"}}Registry{{else}}HTTP{{end}}</td><td class="mono">{{.URL}}</td>
-    <td class="row-actions">{{if $.CanOperate}}<button class="link" data-dialog="import-image" data-fill='{"source":"{{.Name}}"}'>Import to hosts</button><button class="link danger" hx-post="/images/source-delete" hx-vals='{"name":"{{.Name}}"}' hx-target="#flash" hx-confirm="Remove source {{.Name}}?">Remove</button>{{end}}</td>
+    <td class="row-actions">{{if $.CanOperate}}<div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
+      <div class="menu-list" hidden hx-target="#flash">
+        <button data-dialog="add-source" data-fill='{"name":"{{.Name}}","kind":"{{.Kind}}","url":"{{.URL}}","ca":"{{.CA}}"}'>{{template "icon" "pencil"}}Edit…</button>
+        <button data-dialog="import-image" data-fill='{"source":"{{.Name}}"}'>{{template "icon" "download"}}Import to hosts…</button>
+        <hr><button class="danger" hx-post="/images/source-delete" hx-vals='{"name":"{{.Name}}"}' hx-confirm="Remove source {{.Name}}?">{{template "icon" "trash-2"}}Remove</button>
+      </div></div>{{end}}</td>
   </tr>{{end}}
   </tbody>
 </table>
@@ -49,6 +59,16 @@
 {{with .Address}}<dl class="kv spaced"><dt>Push <span class="help" title="Sign in with your Argus Manager user as {{$.Org}}/username. Images must contain a disk file under /disk, as KubeVirt container disks do.">?</span></dt><dd class="mono wrap">docker push {{.}}/{{$.Org}}/NAME:TAG</dd></dl>{{end}}
 </section>
 </div>
+<dialog id="image-details" class="card">
+  <div class="form">
+    <h2>Image details</h2>
+    <label>Image <input name="name" readonly></label>
+    <div class="row"><label>Architecture <input name="arch" readonly></label><label>Size <input name="size" readonly></label></div>
+    <label>Digest <input name="digest" readonly class="mono"></label>
+    <label>Pull reference <input name="pull" readonly class="mono"></label>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Close</button></div>
+  </div>
+</dialog>
 {{if .CanOperate}}
 <dialog id="library-add" class="card">
   <form id="library-form" hx-post="/images/library-add" hx-target="#library-error" hx-encoding="multipart/form-data" hx-disabled-elt="find button[type=submit]" class="form library-form">
@@ -111,7 +131,7 @@
 </dialog>
 <dialog id="add-source" class="card">
   <form hx-post="/images/source-add" hx-target="#source-error" class="form">
-    <h2>Add source</h2>
+    <h2>Image source</h2>
     <p id="source-error" class="error form-error"></p>
     <div class="row">
       <label>Name <input name="name" maxlength="64" required></label>
