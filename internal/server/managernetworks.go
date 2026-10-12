@@ -166,15 +166,19 @@ func (s *Server) managerAddNetwork(w http.ResponseWriter, r *http.Request) {
 	if err == nil && n.Gateway != "" && net.ParseIP(n.Gateway) == nil {
 		err = errors.New("invalid gateway")
 	}
+	op := "create"
+	if r.FormValue("edit") != "" {
+		op = "update"
+	}
 	if err == nil {
-		err = s.manager.SaveNetwork(r.Context(), session(r).Org, n)
+		err = s.manager.SaveNetwork(r.Context(), session(r).Org, n, op == "update")
 	}
 	if err != nil {
 		flash(w, r, err)
 		return
 	}
 	log.Printf("%s: define network %s vlan %d", session(r).User, n.Name, n.VLAN)
-	if errs := s.pushNetwork(r, "create", n); errs != "" {
+	if errs := s.pushNetwork(r, op, n); errs != "" {
 		flash(w, r, errors.New(errs))
 		return
 	}

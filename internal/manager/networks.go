@@ -66,12 +66,19 @@ func (m *Manager) updateNetworks(ctx context.Context, org string, fn func([]Netw
 	return m.store.Update(ctx, networksKey(org), rv, data)
 }
 
-func (m *Manager) SaveNetwork(ctx context.Context, org string, n Network) error {
+func (m *Manager) SaveNetwork(ctx context.Context, org string, n Network, replace bool) error {
 	return m.updateNetworks(ctx, org, func(ns []Network) ([]Network, error) {
-		for _, x := range ns {
+		for i, x := range ns {
+			if x.Name == n.Name && replace {
+				ns[i] = n
+				return ns, nil
+			}
 			if x.Name == n.Name {
 				return nil, fmt.Errorf("network %s already exists", n.Name)
 			}
+		}
+		if replace {
+			return nil, fmt.Errorf("network %s not found", n.Name)
 		}
 		return append(ns, n), nil
 	})

@@ -13,12 +13,16 @@
   <thead><tr><th>Name</th><th>VLAN</th><th>Bridge</th><th>Attached VMs</th><th></th></tr></thead>
   <tbody>
   {{range .Networks}}
-  <tr>
+  <tr{{if $.CanEdit}} class="clickable" data-dialog="edit-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.Bridge}}"}'{{end}}>
     <td>{{template "icon" "network"}}{{.Name}}</td>
     <td>{{if .VLAN}}{{.VLAN}}{{else}}<span class="muted">untagged</span>{{end}}</td>
     <td>{{.Bridge}}</td>
     <td>{{index $.Attached .Name}}</td>
-    <td class="row-actions">{{if $.CanEdit}}<button class="link danger" hx-post="/networks/{{.Name}}/delete" hx-target="#flash" hx-confirm="Delete network {{.Name}}?">Delete</button>{{end}}</td>
+    <td class="row-actions">{{if $.CanEdit}}<div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
+      <div class="menu-list" hidden hx-target="#flash">
+        <button data-dialog="edit-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.Bridge}}"}'>{{template "icon" "pencil"}}Edit…</button>
+        <hr><button class="danger" hx-post="/networks/{{.Name}}/delete" hx-confirm="Delete network {{.Name}}?">{{template "icon" "trash-2"}}Delete</button>
+      </div></div>{{end}}</td>
   </tr>
   {{end}}
   </tbody>
@@ -39,6 +43,19 @@
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">{{template "icon" "plus"}}Add network</button></div>
   </form>
 </dialog>
+<dialog id="edit-network" class="card">
+  <form class="form" hx-post="/networks" hx-target="#edit-network-error">
+    <h2>Edit network</h2>
+    <input type="hidden" name="edit" value="1">
+    <p id="edit-network-error" class="error form-error"></p>
+    <div class="row">
+      <label>Name <input name="name" readonly></label>
+      <label>VLAN <input name="vlan" type="number" min="1" max="4094" placeholder="untagged"></label>
+      {{with .Bridges}}<label>Bridge <select name="bridge">{{range .}}<option>{{.}}</option>{{end}}</select></label>{{end}}
+    </div>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Save</button></div>
+  </form>
+</dialog>
 {{end}}
 {{end}}
 {{end}}
@@ -50,7 +67,7 @@
 <div class="table-wrap">
 <table>
   <thead><tr><th>Name</th><th>VLAN</th><th>Bridge</th><th>CIDR</th><th>Gateway</th><th>Applied</th><th>Attached VMs</th><th></th></tr></thead>
-  <tbody>{{range .Rows}}<tr>
+  <tbody>{{range .Rows}}<tr{{if $.CanEdit}} class="clickable" data-dialog="{{if .Defined}}edit-network{{else}}new-network{{end}}" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.BridgeName}}","cidr":"{{.CIDR}}","gateway":"{{.Gateway}}","description":"{{.Description}}"}'{{end}}>
     <td>{{template "icon" "network"}}{{.Name}}{{with .Description}} <span class="muted">{{.}}</span>{{end}}{{if not .Defined}} <span class="badge" title="Exists on a host but is not defined in Argus Manager">host only</span>{{end}}</td>
     <td>{{if .VLAN}}{{.VLAN}}{{else}}<span class="muted">untagged</span>{{end}}</td>
     <td class="mono">{{.BridgeName}}</td>
@@ -58,10 +75,12 @@
     <td>{{with .Gateway}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
     <td><span class="dot {{if eq .Applied $.Reachable}}Applied{{else}}Warning{{end}}" title="{{range $h, $st := .Hosts}}{{$h}}: {{$st}}&#10;{{end}}">{{.Applied}} / {{$.Reachable}} hosts</span></td>
     <td>{{.Attached}}</td>
-    <td class="row-actions">{{if $.CanEdit}}
-      {{if and .Defined (ne .Applied $.Reachable)}}<button class="link" hx-post="/networks/{{.Name}}/apply" hx-target="#flash">Apply</button>{{end}}
-      <button class="link danger" hx-post="/networks/{{.Name}}/delete" hx-target="#flash" hx-confirm="Delete {{.Name}} from all hosts?">Delete</button>
-    {{end}}</td>
+    <td class="row-actions">{{if $.CanEdit}}<div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
+      <div class="menu-list" hidden hx-target="#flash">
+        {{if .Defined}}<button data-dialog="edit-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.BridgeName}}","cidr":"{{.CIDR}}","gateway":"{{.Gateway}}","description":"{{.Description}}"}'>{{template "icon" "pencil"}}Edit…</button>{{else}}<button data-dialog="new-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.BridgeName}}","cidr":"{{.CIDR}}","gateway":"{{.Gateway}}","description":"{{.Description}}"}'>{{template "icon" "plus"}}Define…</button>{{end}}
+        {{if and .Defined (ne .Applied $.Reachable)}}<button hx-post="/networks/{{.Name}}/apply">{{template "icon" "refresh-cw"}}Apply to all hosts</button>{{end}}
+        <hr><button class="danger" hx-post="/networks/{{.Name}}/delete" hx-confirm="Delete {{.Name}} from all hosts?">{{template "icon" "trash-2"}}Delete</button>
+      </div></div>{{end}}</td>
   </tr>{{else}}<tr><td colspan="8" class="muted">No networks.</td></tr>{{end}}</tbody>
 </table>
 </div>
@@ -97,6 +116,25 @@
     </div>
     <label>Description <input name="description"></label>
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Create on all hosts</button></div>
+  </form>
+</dialog>
+<dialog id="edit-network" class="card">
+  <form class="form" hx-post="/networks" hx-target="#edit-network-error">
+    <h2>Edit network</h2>
+    <input type="hidden" name="edit" value="1">
+    <p id="edit-network-error" class="error form-error"></p>
+    <div class="row">
+      <label>Name <input name="name" readonly></label>
+      <label>VLAN <input name="vlan" type="number" min="1" max="4094" placeholder="untagged"></label>
+      <label>Bridge <span class="help" title="Must exist on every host. Create it under Host networks first.">?</span><input name="bridge" placeholder="br0" list="bridge-names-edit"></label>
+    </div>
+    <datalist id="bridge-names-edit">{{range $.AllBridges}}<option>{{.}}</option>{{end}}</datalist>
+    <div class="row">
+      <label>CIDR <span class="help" title="Descriptive only. Addressing comes from your network's DHCP or static guest config.">?</span><input name="cidr" placeholder="10.10.1.0/24"></label>
+      <label>Gateway <input name="gateway" placeholder="10.10.1.1"></label>
+    </div>
+    <label>Description <input name="description"></label>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Save and apply</button></div>
   </form>
 </dialog>
 {{end}}

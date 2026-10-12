@@ -68,14 +68,16 @@ func (s *Server) createNetwork(w http.ResponseWriter, r *http.Request) {
 	if err == nil && n.Bridge != "" && !slices.Contains(s.bridges(r.Context()), n.Bridge) {
 		err = fmt.Errorf("bridge %s not found", n.Bridge)
 	}
-	if err == nil {
+	if err == nil && r.FormValue("edit") != "" {
+		err = s.kube.UpdateNetwork(r.Context(), name, vlan, n.Bridge)
+	} else if err == nil {
 		err = s.kube.CreateNetwork(r.Context(), name, vlan, n.Bridge)
 	}
 	if err != nil {
 		flash(w, r, err)
 		return
 	}
-	log.Printf("%s: create network %s vlan %d", session(r).User, name, vlan)
+	log.Printf("%s: save network %s vlan %d", session(r).User, name, vlan)
 	w.Header().Set("HX-Refresh", "true")
 }
 
@@ -103,6 +105,8 @@ func (s *Server) apiNetworkOp(w http.ResponseWriter, r *http.Request) {
 		err = s.kube.DeleteNetwork(r.Context(), n.Name)
 	} else if n.Bridge != "" && !slices.Contains(s.bridges(r.Context()), n.Bridge) {
 		err = fmt.Errorf("bridge %s not found on %s", n.Bridge, s.nodeName)
+	} else if r.PathValue("op") == "update" {
+		err = s.kube.UpdateNetwork(r.Context(), n.Name, n.VLAN, n.Bridge)
 	} else {
 		err = s.kube.CreateNetwork(r.Context(), n.Name, n.VLAN, n.Bridge)
 	}

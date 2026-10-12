@@ -63,7 +63,7 @@
       return;
     }
     const dlg = e.target.closest("[data-dialog]");
-    if (dlg) {
+    if (dlg && !(dlg.tagName === "TR" && e.target.closest("button, a, input, select, .menu"))) {
       const d = document.getElementById(dlg.dataset.dialog);
       if (dlg.dataset.fill) for (const [k, v] of Object.entries(JSON.parse(dlg.dataset.fill))) {
         if (k === "action") { const f = d.querySelector("form"); f.setAttribute("hx-post", v); htmx.process(f); }

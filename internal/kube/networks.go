@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -61,6 +62,26 @@ func (c *Client) CreateNetwork(ctx context.Context, name string, vlan int, br st
 		"spec":       map[string]interface{}{"config": string(cfg)},
 	}}
 	_, err = c.dyn.Resource(nadGVR).Namespace(Namespace).Create(ctx, nad, metav1.CreateOptions{})
+	return err
+}
+
+func (c *Client) UpdateNetwork(ctx context.Context, name string, vlan int, br string) error {
+	nad, err := c.dyn.Resource(nadGVR).Namespace(Namespace).Get(ctx, name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return c.CreateNetwork(ctx, name, vlan, br)
+	}
+	if err != nil {
+		return err
+	}
+	if br == "" {
+		br = bridge
+	}
+	cfg, err := json.Marshal(cniConfig{CNIVersion: "0.3.1", Name: name, Type: "bridge", Bridge: br, VLAN: vlan})
+	if err != nil {
+		return err
+	}
+	unstructured.SetNestedField(nad.Object, string(cfg), "spec", "config")
+	_, err = c.dyn.Resource(nadGVR).Namespace(Namespace).Update(ctx, nad, metav1.UpdateOptions{})
 	return err
 }
 

@@ -323,3 +323,4 @@ dd.wrap { word-break: break-all; }
 .card.empty h2 { margin: 0; }
 a.nav-head.active { background: var(--accent-bg); }
 .card.empty .actions { display: flex; gap: 8px; }
+input[readonly] { color: var(--muted); }
