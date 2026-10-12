@@ -334,3 +334,45 @@ func (c *Client) DeletePoolClass(ctx context.Context, pool string) error {
 	}
 	return err
 }
+
+var (
+	zfsNamespace = "openebs"
+	zfsSnapGVR   = schema.GroupVersionResource{Group: "zfs.openebs.io", Version: "v1", Resource: "zfssnapshots"}
+	pvGVR        = schema.GroupVersionResource{Version: "v1", Resource: "persistentvolumes"}
+)
+
+func (c *Client) ZFSOrphans(ctx context.Context) (datasets, keep []string, err error) {
+	pvs, err := c.dyn.Resource(pvGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, nil, err
+	}
+	vols, err := c.dyn.Resource(zfsVolumeGVR).Namespace(zfsNamespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, nil, err
+	}
+	snaps, err := c.dyn.Resource(zfsSnapGVR).Namespace(zfsNamespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, nil, err
+	}
+	bound := map[string]bool{}
+	for _, pv := range pvs.Items {
+		bound[pv.GetName()] = true
+	}
+	for _, s := range snaps.Items {
+		keep = append(keep, s.GetName())
+		if s.GetDeletionTimestamp() == nil {
+			bound[s.GetLabels()["openebs.io/persistent-volume"]] = true
+		}
+	}
+	for _, v := range vols.Items {
+		pool, _, _ := unstructured.NestedString(v.Object, "spec", "poolName")
+		if !bound[v.GetName()] && v.GetDeletionTimestamp() == nil && time.Since(v.GetCreationTimestamp().Time) > 10*time.Minute && pool != "" {
+			datasets = append(datasets, pool+"/"+v.GetName())
+		}
+	}
+	return datasets, keep, nil
+}
+
+func (c *Client) DeleteZFSVolume(ctx context.Context, name string) error {
+	return c.dyn.Resource(zfsVolumeGVR).Namespace(zfsNamespace).Delete(ctx, name, metav1.DeleteOptions{})
+}

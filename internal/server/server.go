@@ -313,6 +313,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	go s.haLoop()
 	if s.manager == nil && k != nil {
 		go s.backupLoop()
+		go s.storageLoop()
 	}
 	return s, nil
 }

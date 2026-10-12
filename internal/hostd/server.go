@@ -103,6 +103,27 @@ func NewServer() *Server {
 		reply(w, ch, err)
 	})
 	s.mux.HandleFunc("GET /zfs/read", zfsRead)
+	s.mux.HandleFunc("POST /zfs/release", s.locked(func(w http.ResponseWriter, r *http.Request) {
+		var req struct{ Dataset string }
+		err := decode(r, &req)
+		if err == nil {
+			err = ReleaseVolume(r.Context(), req.Dataset)
+		}
+		log.Printf("release %s: %v", req.Dataset, err)
+		reply(w, nil, err)
+	}))
+	s.mux.HandleFunc("POST /zfs/sweep", s.locked(func(w http.ResponseWriter, r *http.Request) {
+		var req struct{ Keep []string }
+		err := decode(r, &req)
+		var gone []string
+		if err == nil {
+			gone, err = SweepSnapshots(r.Context(), req.Keep)
+		}
+		if len(gone) > 0 || err != nil {
+			log.Printf("sweep snapshots %v: %v", gone, err)
+		}
+		reply(w, gone, err)
+	}))
 	s.mux.HandleFunc("POST /zfs/destroy", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Datasets []string

@@ -156,6 +156,34 @@ func (s *Server) backupLoop() {
 	}
 }
 
+func (s *Server) storageLoop() {
+	for ; ; time.Sleep(10 * time.Minute) {
+		recovering("storage", s.storageTick)
+	}
+}
+
+func (s *Server) storageTick() {
+	if s.hostd == nil {
+		return
+	}
+	ctx := context.Background()
+	orphans, keep, err := s.kube.ZFSOrphans(ctx)
+	if err != nil {
+		log.Printf("storage cleanup: %v", err)
+		return
+	}
+	for _, ds := range orphans {
+		err := s.hostd.ReleaseVolume(ctx, ds)
+		if err == nil {
+			err = s.kube.DeleteZFSVolume(ctx, ds[strings.LastIndex(ds, "/")+1:])
+		}
+		log.Printf("storage cleanup: release orphaned volume %s: %v", ds, err)
+	}
+	if _, err := s.hostd.SweepSnapshots(ctx, keep); err != nil {
+		log.Printf("storage cleanup: %v", err)
+	}
+}
+
 func (s *Server) backupTick() {
 	ctx := context.Background()
 	vms, err := s.kube.ListVMs(ctx)

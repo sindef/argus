@@ -91,6 +91,15 @@ func (c *Client) ZFSRead(ctx context.Context, ds, snap string, h http.Header) (*
 	return resp, nil
 }
 
+func (c *Client) ReleaseVolume(ctx context.Context, dataset string) error {
+	return c.do(ctx, http.MethodPost, "/zfs/release", map[string]string{"dataset": dataset}, nil)
+}
+
+func (c *Client) SweepSnapshots(ctx context.Context, keep []string) ([]string, error) {
+	var gone []string
+	return gone, c.do(ctx, http.MethodPost, "/zfs/sweep", map[string]any{"keep": keep}, &gone)
+}
+
 func (c *Client) ZFSDestroy(ctx context.Context, datasets []string, snap string) error {
 	return c.do(ctx, http.MethodPost, "/zfs/destroy", map[string]any{"datasets": datasets, "snap": snap}, nil)
 }
