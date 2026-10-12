@@ -61,7 +61,7 @@
   <button hx-get="/vm-copy?mode=template&host={{$v.Host}}&ns={{$v.Namespace}}&vm={{$v.Name}}" hx-target="#modal">{{template "icon" "layers"}}Create template…</button>
   <button hx-post="{{.Page}}/snapshot">{{template "icon" "camera"}}Snapshot</button>
   <button hx-post="{{.Page}}/rename" data-prompt="Rename" data-prompt-placeholder="Display name" data-prompt-value="{{$v.DisplayName}}" data-prompt-optional>{{template "icon" "pencil"}}Rename</button>
-  <button data-dialog="vm-tags" data-fill='{"action":"{{.Page}}/tags","tags":"{{join $v.Tags ", "}}"}'>{{template "icon" "tag"}}Tags…</button>
+  <button data-dialog="vm-tags" data-fill='{"action":"{{.Page}}/tags","tags":"{{join $v.Tags ", "}}","folder":{{jsonStr $v.Folder}},"attributes":{{jsonStr (attrText $v.Attributes)}}}'>{{template "icon" "tag"}}Organize…</button>
   {{if .IsAdmin}}<hr><button class="danger" hx-post="{{.Page}}/delete" hx-confirm="Delete {{$v.Label}} and its disks?">{{template "icon" "trash-2"}}Delete</button>{{end}}
   {{end}}
 </div>

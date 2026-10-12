@@ -63,9 +63,11 @@
   </dialog>
   <dialog id="vm-tags" class="card">
     <form hx-target="#tags-error" class="form">
-      <h2>Tags</h2>
+      <h2>Organize</h2>
       <p id="tags-error" class="error form-error"></p>
+      <label>Folder <span class="help" title="Path such as prod/web. Browse folders in the VM list.">?</span><input name="folder" placeholder="None"></label>
       <label>Tags <span class="help" title="Comma separated, e.g. prod, web, team:infra. Searchable in VM lists.">?</span><input name="tags"></label>
+      <label>Attributes <span class="help" title="One name=value per line, e.g. owner=alice. Searchable as name=value.">?</span><textarea name="attributes" rows="3" placeholder="owner=alice"></textarea></label>
       <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Save</button></div>
     </form>
   </dialog>

@@ -81,10 +81,12 @@
 {{else if eq .Tab "vms"}}
 <div class="toolbar">
   <form class="grow input-icon" hx-get="/vms" hx-target="#vms" hx-trigger="input changed delay:300ms from:find input, submit">
-    {{template "icon" "search"}}<input name="q" placeholder="Search VMs, hosts, IPs…" value="{{.Query}}"><input type="hidden" name="dc" value="{{.DC}}"><input type="hidden" name="cluster" value="{{.Cluster}}">
+    {{template "icon" "search"}}<input name="q" placeholder="Search VMs, hosts, IPs, attributes…" value="{{.Query}}"><input type="hidden" name="dc" value="{{.DC}}"><input type="hidden" name="cluster" value="{{.Cluster}}"><input type="hidden" name="folder" value="{{.Folder}}">
   </form>
 </div>
-<div id="vms" hx-get="/vms?dc={{.DC}}&cluster={{.Cluster}}" hx-trigger="every 30s">{{template "vm-table" .}}</div>
+{{if or .Folder .Subfolders}}<nav class="crumbs spaced"><a href="{{.Page}}?tab=vms">All VMs</a>{{$acc := ""}}{{range split .Folder "/"}}{{if .}}{{if $acc}}{{$acc = printf "%s/%s" $acc .}}{{else}}{{$acc = .}}{{end}} / <a href="{{$.Page}}?tab=vms&folder={{$acc}}">{{.}}</a>{{end}}{{end}}
+  {{range .Subfolders}} <a class="badge" href="{{$.Page}}?tab=vms&folder={{with $.Folder}}{{.}}/{{end}}{{.}}">{{.}}</a>{{end}}</nav>{{end}}
+<div id="vms" hx-get="/vms?dc={{.DC}}&cluster={{.Cluster}}&folder={{.Folder}}" hx-trigger="every 30s">{{template "vm-table" .}}</div>
 {{else}}
 <div class="stats">
   <div class="stat">{{template "icon" "monitor"}}<div>

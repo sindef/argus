@@ -210,8 +210,27 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 	q := strings.ToLower(strings.TrimSpace(r.FormValue("q")))
 	if q != "" {
 		rows = slices.DeleteFunc(rows, func(v vmRow) bool {
-			return !strings.Contains(strings.ToLower(v.Name+" "+v.DisplayName+" "+v.Host+" "+v.Cluster+" "+strings.Join(v.IPs(), " ")+" "+strings.Join(v.Tags, " ")), q)
+			text := v.Name + " " + v.DisplayName + " " + v.Host + " " + v.Cluster + " " + strings.Join(v.IPs(), " ") + " " + strings.Join(v.Tags, " ") + " " + v.Folder
+			for k, val := range v.Attributes {
+				text += " " + k + "=" + val
+			}
+			return !strings.Contains(strings.ToLower(text), q)
 		})
+	}
+	folder := strings.Trim(r.FormValue("folder"), "/")
+	var subfolders []string
+	for _, v := range rows {
+		rest, ok := strings.CutPrefix(v.Folder, folder)
+		if folder != "" && (!ok || rest != "" && rest[0] != '/') {
+			continue
+		}
+		if child, _, _ := strings.Cut(strings.TrimPrefix(rest, "/"), "/"); child != "" && !slices.Contains(subfolders, child) {
+			subfolders = append(subfolders, child)
+		}
+	}
+	sort.Strings(subfolders)
+	if folder != "" {
+		rows = slices.DeleteFunc(rows, func(v vmRow) bool { return v.Folder != folder && !strings.HasPrefix(v.Folder, folder+"/") })
 	}
 	vms := 0
 	for _, n := range vmCount {
@@ -222,6 +241,8 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 		"Tree":         tree,
 		"Clusters":     clusters,
 		"Rows":         rows,
+		"Folder":       folder,
+		"Subfolders":   subfolders,
 		"Protected":    protected,
 		"HAList":       haList,
 		"Jobs":         s.jobs(r),
@@ -999,7 +1020,7 @@ func (s *Server) managerMoveDisk(w http.ResponseWriter, r *http.Request) {
 func (s *Server) managerSetTags(w http.ResponseWriter, r *http.Request) {
 	n, err := s.orgNode(r)
 	if err == nil {
-		err = n.Call(r.Context(), http.MethodPost, manager.APIPath("/api/vms/%s/%s/tags", r.PathValue("ns"), r.PathValue("name")), map[string]string{"tags": r.FormValue("tags")}, nil)
+		err = n.Call(r.Context(), http.MethodPost, manager.APIPath("/api/vms/%s/%s/tags", r.PathValue("ns"), r.PathValue("name")), map[string]string{"tags": r.FormValue("tags"), "folder": r.FormValue("folder"), "attributes": r.FormValue("attributes")}, nil)
 	}
 	if err != nil {
 		flash(w, r, err)

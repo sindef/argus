@@ -124,14 +124,25 @@ func (c *Client) CreateAutoSnapshot(ctx context.Context, ns, vm string) (string,
 	return c.createSnapshot(ctx, ns, vm, fmt.Sprintf("%s-auto-%s", vm, time.Now().UTC().Format("20060102-150405")), obj{autoLabel: "true"})
 }
 
-const TagsAnnotation = "argus.io/tags"
+const (
+	TagsAnnotation       = "argus.io/tags"
+	FolderAnnotation     = "argus.io/folder"
+	AttributesAnnotation = "argus.io/attributes"
+)
 
-func (c *Client) SetTags(ctx context.Context, ns, vm string, tags []string) error {
-	var v any = strings.Join(tags, ",")
+func (c *Client) SetTags(ctx context.Context, ns, vm string, tags []string, folder string, attrs map[string]string) error {
+	var t, f, a any = strings.Join(tags, ","), folder, nil
 	if len(tags) == 0 {
-		v = nil
+		t = nil
 	}
-	patch, _ := json.Marshal(obj{"metadata": obj{"annotations": obj{TagsAnnotation: v}}})
+	if folder == "" {
+		f = nil
+	}
+	if len(attrs) > 0 {
+		b, _ := json.Marshal(attrs)
+		a = string(b)
+	}
+	patch, _ := json.Marshal(obj{"metadata": obj{"annotations": obj{TagsAnnotation: t, FolderAnnotation: f, AttributesAnnotation: a}}})
 	_, err := c.dyn.Resource(vmGVR).Namespace(ns).Patch(ctx, vm, types.MergePatchType, patch, metav1.PatchOptions{})
 	return err
 }

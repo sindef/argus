@@ -200,7 +200,7 @@
   <button hx-post="/vms/bulk/clone" hx-vals='{{$sel}}' data-prompt="Clone" data-prompt-placeholder="Name for the clone">{{template "icon" "copy"}}Clone</button>
   <button hx-post="/vms/bulk/template-copy" hx-vals='{{$sel}}' data-prompt="Create template" data-prompt-placeholder="Template name">{{template "icon" "layers"}}Create template</button>
   <button hx-post="/vms/bulk/rename" hx-vals='{{$sel}}' data-prompt="Rename" data-prompt-placeholder="Display name" data-prompt-value="{{.DisplayName}}" data-prompt-optional>{{template "icon" "pencil"}}Rename</button>
-  <button data-dialog="vm-tags" data-fill='{"action":"{{$p}}/tags","tags":"{{join .Tags ", "}}"}'>{{template "icon" "tag"}}Tags…</button>
+  <button data-dialog="vm-tags" data-fill='{"action":"{{$p}}/tags","tags":"{{join .Tags ", "}}","folder":{{jsonStr .Folder}},"attributes":{{jsonStr (attrText .Attributes)}}}'>{{template "icon" "tag"}}Organize…</button>
   <hr>
   <button class="danger" hx-post="{{$p}}/delete" hx-confirm="Delete {{.Label}} and its disks?">{{template "icon" "trash-2"}}Delete</button>
 </template>

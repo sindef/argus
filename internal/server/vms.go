@@ -2,6 +2,7 @@ package server
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -498,12 +499,40 @@ func parseTags(v string) ([]string, error) {
 	return tags, nil
 }
 
-func (s *Server) setTags(w http.ResponseWriter, r *http.Request) {
-	tags, err := parseTags(r.FormValue("tags"))
-	if err == nil {
-		err = s.kube.SetTags(r.Context(), r.PathValue("ns"), r.PathValue("name"), tags)
-	}
+var (
+	validFolder = regexp.MustCompile(`^[^/\x00-\x1f]{1,64}(/[^/\x00-\x1f]{1,64}){0,7}$`)
+	validAttr   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 _.-]{0,62}$`)
+)
+
+func (s *Server) organize(ctx context.Context, ns, name, tagList, folder, attrs string) error {
+	tags, err := parseTags(tagList)
 	if err != nil {
+		return err
+	}
+	folder = strings.Trim(strings.TrimSpace(folder), "/")
+	if folder != "" && !validFolder.MatchString(folder) {
+		return errors.New("folder must be up to 8 levels separated by /")
+	}
+	m := map[string]string{}
+	for _, line := range strings.Split(attrs, "\n") {
+		if line = strings.TrimSpace(line); line == "" {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		k, v = strings.TrimSpace(k), strings.TrimSpace(v)
+		if !ok || !validAttr.MatchString(k) || len(v) > 256 {
+			return fmt.Errorf("attribute %q must be name=value", line)
+		}
+		m[k] = v
+	}
+	if len(m) > 32 {
+		return errors.New("at most 32 attributes")
+	}
+	return s.kube.SetTags(ctx, ns, name, tags, folder, m)
+}
+
+func (s *Server) setTags(w http.ResponseWriter, r *http.Request) {
+	if err := s.organize(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.FormValue("tags"), r.FormValue("folder"), r.FormValue("attributes")); err != nil {
 		flash(w, r, err)
 		return
 	}
@@ -511,12 +540,9 @@ func (s *Server) setTags(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiSetTags(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Tags string }
+	var req struct{ Tags, Folder, Attributes string }
 	json.NewDecoder(r.Body).Decode(&req)
-	tags, err := parseTags(req.Tags)
-	if err == nil {
-		err = s.kube.SetTags(r.Context(), r.PathValue("ns"), r.PathValue("name"), tags)
-	}
+	err := s.organize(r.Context(), r.PathValue("ns"), r.PathValue("name"), req.Tags, req.Folder, req.Attributes)
 	if err != nil {
 		apiError(w, r, http.StatusConflict, err)
 		return

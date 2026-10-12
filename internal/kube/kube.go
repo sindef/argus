@@ -57,6 +57,8 @@ type VM struct {
 	Template       bool
 	Backup         string
 	Schedule       string
+	Folder         string
+	Attributes     map[string]string
 	Running        bool
 	Cores          int64
 	Memory         string
@@ -348,6 +350,8 @@ func toVM(v, vmi *unstructured.Unstructured) VM {
 	if t := v.GetAnnotations()[TagsAnnotation]; t != "" {
 		vm.Tags = strings.Split(t, ",")
 	}
+	vm.Folder = v.GetAnnotations()[FolderAnnotation]
+	json.Unmarshal([]byte(v.GetAnnotations()[AttributesAnnotation]), &vm.Attributes)
 	vm.Status, _, _ = unstructured.NestedString(o, "status", "printableStatus")
 	templates, _, _ := unstructured.NestedSlice(o, "spec", "dataVolumeTemplates")
 	for _, t := range templates {

@@ -926,6 +926,16 @@
      "agent": {
       "type": "boolean",
       "description": "Guest agent connected"
+     },
+     "folder": {
+      "type": "string",
+      "description": "Folder path, e.g. prod/web"
+     },
+     "attributes": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "string"
+      }
      }
     }
    },

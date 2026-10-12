@@ -26,26 +26,28 @@ type v1Host struct {
 }
 
 type v1VM struct {
-	Host         string    `json:"host"`
-	Name         string    `json:"name"`
-	DisplayName  string    `json:"displayName,omitempty"`
-	Status       string    `json:"status"`
-	Running      bool      `json:"running"`
-	Cores        int64     `json:"cores"`
-	Memory       string    `json:"memory"`
-	StorageBytes int64     `json:"storageBytes"`
-	Tags         []string  `json:"tags,omitempty"`
-	Template     bool      `json:"template"`
-	OS           string    `json:"os,omitempty"`
-	IPs          []string  `json:"ips,omitempty"`
-	Started      time.Time `json:"started,omitzero"`
-	Restart      bool      `json:"restartRequired"`
-	Agent        bool      `json:"agent"`
+	Host         string            `json:"host"`
+	Name         string            `json:"name"`
+	DisplayName  string            `json:"displayName,omitempty"`
+	Status       string            `json:"status"`
+	Running      bool              `json:"running"`
+	Cores        int64             `json:"cores"`
+	Memory       string            `json:"memory"`
+	StorageBytes int64             `json:"storageBytes"`
+	Tags         []string          `json:"tags,omitempty"`
+	Folder       string            `json:"folder,omitempty"`
+	Attributes   map[string]string `json:"attributes,omitempty"`
+	Template     bool              `json:"template"`
+	OS           string            `json:"os,omitempty"`
+	IPs          []string          `json:"ips,omitempty"`
+	Started      time.Time         `json:"started,omitzero"`
+	Restart      bool              `json:"restartRequired"`
+	Agent        bool              `json:"agent"`
 }
 
 func toV1VM(host string, v kube.VM) v1VM {
 	return v1VM{Host: host, Name: v.Name, DisplayName: v.DisplayName, Status: v.Status, Running: v.Running, Cores: v.Cores, Memory: v.Memory,
-		StorageBytes: v.StorageBytes, Tags: v.Tags, Template: v.Template, OS: v.OS, IPs: v.IPs(), Started: v.Started, Restart: v.PendingRestart, Agent: v.Agent}
+		StorageBytes: v.StorageBytes, Tags: v.Tags, Folder: v.Folder, Attributes: v.Attributes, Template: v.Template, OS: v.OS, IPs: v.IPs(), Started: v.Started, Restart: v.PendingRestart, Agent: v.Agent}
 }
 
 type v1NewVM struct {
