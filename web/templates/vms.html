@@ -212,6 +212,8 @@
 <form hx-post="{{$p}}/save" hx-target="#hw-error" class="form">
   <div class="row">
     <label>vCPUs <input name="cores" type="number" min="1" max="64" value="{{.Cores}}" required></label>
+    <label>CPU reservation <span class="help" title="Guaranteed host CPU, in cores (e.g. 0.5 or 2). Also sets the VM's share under contention. Empty for the default.">?</span><input name="cpu_reserve" value="{{.CPUReserve}}" placeholder="default" class="num"></label>
+    <label>CPU limit <span class="help" title="Maximum host CPU, in cores. Empty for no limit.">?</span><input name="cpu_limit" value="{{.CPULimit}}" placeholder="none" class="num"></label>
     <label>Cores per socket <span class="help" title="vCPUs must divide evenly. Fewer cores per socket means more sockets; some guest licences limit sockets.">?</span><input name="cores_per_socket" type="number" min="1" max="64" value="{{.CoresPerSocket}}" required></label>
     <label>Memory (MiB) <input name="memory" type="number" min="128" max="262144" step="128" value="{{.MemoryMiB}}" required></label>
     <label>Firmware <select name="firmware">

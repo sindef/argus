@@ -1,6 +1,7 @@
 package kube
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -441,6 +442,8 @@ type Hardware struct {
 	Firmware       string
 	TPM            bool
 	Monitor        bool
+	CPUReserve     string
+	CPULimit       string
 	CDROM          string
 	Disks          []HardwareDisk
 	NICs           []NIC
@@ -473,6 +476,8 @@ func (c *Client) Hardware(ctx context.Context, ns, name string) (Hardware, error
 	}
 	_, hw.TPM, _ = unstructured.NestedMap(o, "spec", "template", "spec", "domain", "devices", "tpm")
 	_, hw.Monitor, _ = unstructured.NestedMap(o, "spec", "template", "spec", "livenessProbe")
+	hw.CPUReserve, _, _ = unstructured.NestedString(o, "spec", "template", "spec", "domain", "resources", "requests", "cpu")
+	hw.CPULimit, _, _ = unstructured.NestedString(o, "spec", "template", "spec", "domain", "resources", "limits", "cpu")
 	vols, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")
 	for _, v := range vols {
 		vo := asObj(v)
@@ -531,6 +536,19 @@ func (c *Client) SetHardware(ctx context.Context, ns, name string, hw Hardware) 
 			unstructured.SetNestedField(o, obj{}, append(dom, "devices", "tpm")...)
 		} else {
 			unstructured.RemoveNestedField(o, append(dom, "devices", "tpm")...)
+		}
+		for _, q := range []struct{ kind, v string }{{"requests", hw.CPUReserve}, {"limits", hw.CPULimit}} {
+			if q.v == "" {
+				unstructured.RemoveNestedField(o, append(dom, "resources", q.kind, "cpu")...)
+				continue
+			}
+			if _, err := resource.ParseQuantity(q.v); err != nil {
+				return fmt.Errorf("invalid CPU amount %q", q.v)
+			}
+			unstructured.SetNestedField(o, q.v, append(dom, "resources", q.kind, "cpu")...)
+		}
+		if r, l := resource.MustParse(cmp.Or(hw.CPUReserve, "0")), resource.MustParse(cmp.Or(hw.CPULimit, "0")); hw.CPUReserve != "" && hw.CPULimit != "" && r.Cmp(l) > 0 {
+			return errors.New("CPU reservation cannot exceed the limit")
 		}
 		if hw.Monitor {
 			unstructured.SetNestedField(o, obj{"guestAgentPing": obj{}, "initialDelaySeconds": int64(300), "periodSeconds": int64(30), "failureThreshold": int64(10)}, "spec", "template", "spec", "livenessProbe")
