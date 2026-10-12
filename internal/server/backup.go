@@ -190,6 +190,11 @@ func (s *Server) backupTick() {
 	if err != nil {
 		return
 	}
+	now := time.Now()
+	if !s.schedSeen.IsZero() {
+		s.runSchedules(ctx, vms, s.schedSeen, now)
+	}
+	s.schedSeen = now
 	for _, vm := range vms {
 		p, ok := parsePolicy(vm.Backup)
 		if !ok {
@@ -575,12 +580,13 @@ type VMBackup struct {
 }
 
 type VMBackups struct {
-	Policy  BackupPolicy   `json:"policy"`
-	Enabled bool           `json:"enabled"`
-	Targets []BackupTarget `json:"targets"`
-	Status  string         `json:"status"`
-	Backups []VMBackup     `json:"backups"`
-	Error   string         `json:"error"`
+	Policy    BackupPolicy    `json:"policy"`
+	Enabled   bool            `json:"enabled"`
+	Targets   []BackupTarget  `json:"targets"`
+	Status    string          `json:"status"`
+	Backups   []VMBackup      `json:"backups"`
+	Schedules []ScheduledTask `json:"schedules"`
+	Error     string          `json:"error"`
 }
 
 func (s *Server) vmBackupInfo(ctx context.Context, ns, name string) VMBackups {
@@ -591,6 +597,7 @@ func (s *Server) vmBackupInfo(ctx context.Context, ns, name string) VMBackups {
 		return info
 	}
 	info.Policy, info.Enabled = parsePolicy(vm.Backup)
+	info.Schedules = parseSchedule(vm.Schedule)
 	if info.Policy.SnapKeep == 0 {
 		info.Policy.SnapKeep = 7
 	}

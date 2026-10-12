@@ -49,6 +49,7 @@ type Server struct {
 	mfa         mfaState
 	mux         *http.ServeMux
 	backups     backupState
+	schedSeen   time.Time
 	certs       *tlscert.Holder
 	dataDir     string
 	esxi        esxiStreams
@@ -150,6 +151,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/tags", s.need(auth.VMConfig, s.managerSetTags))
 		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/snapshots/{snap}/{op}", s.need(auth.VMSnapshot, s.managerSnapshotOp))
 		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/backups/{op}", s.need(auth.VMBackup, s.managerBackupOp))
+		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/schedule/{op}", s.need(auth.VMPower, s.managerScheduleOp))
 		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/{action}", s.need(auth.VMView, s.managerVMAction))
 		s.mux.HandleFunc("GET /events", s.need(auth.VMView, s.managerEvents))
 		s.mux.HandleFunc("POST /jobs/{id}/resolve", s.need(auth.Administer, s.managerResolve))
@@ -229,6 +231,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("GET /esxi-import/{disk}", s.serveESXi)
 	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/backups", s.require(auth.Admin, s.apiVMBackups))
 	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/backups/{op}", s.require(auth.Admin, s.apiVMBackupOp))
+	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/schedule/{op}", s.require(auth.Admin, s.apiScheduleOp))
 	s.hostAPIRoutes()
 	s.cbtRoutes()
 	s.mux.HandleFunc("GET /api/host/network", s.require(auth.Admin, s.apiHostNetwork))
@@ -305,6 +308,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/disks/{disk}/delete", s.require(auth.Operator, s.removeDisk))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/snapshots", s.require(auth.Operator, s.snapshot))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/backups/{op}", s.require(auth.Operator, s.vmBackupForm))
+	s.mux.HandleFunc("POST /vms/{ns}/{name}/schedule/{op}", s.require(auth.Operator, s.scheduleForm))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/snapshots/{snap}/restore", s.require(auth.Operator, s.restoreSnapshot))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/snapshots/{snap}/delete", s.require(auth.Operator, s.deleteSnapshot))
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/{action}", s.require(auth.Operator, s.action))

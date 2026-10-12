@@ -142,6 +142,20 @@
 </form>
 </div>
 <div class="card spaced">
+  <div class="card-head"><h2>Scheduled tasks</h2><span class="help" title="Runs on the host at the given time, in UTC.">?</span></div>
+  <div class="table-wrap"><table><tbody>{{range $i, $t := $b.Schedules}}<tr><td>{{$t.Action}}</td><td>{{if $t.Days}}{{range $j, $d := $t.Days}}{{if $j}}, {{end}}{{$d}}{{end}}{{else}}Every day{{end}} at {{$t.At}} UTC</td>
+    <td class="row-actions">{{if $.CanOperate}}<button class="link danger" hx-post="{{$.P}}/schedule/delete" hx-vals='{"index":"{{$i}}"}' hx-target="#flash">Delete</button>{{end}}</td></tr>
+  {{else}}<tr><td class="muted">No scheduled tasks.</td></tr>{{end}}</tbody></table></div>
+  {{if .CanOperate}}<form hx-post="{{.P}}/schedule/add" hx-target="#flash" class="form spaced">
+    <div class="row">
+      <label>Action <select name="action"><option value="start">Power on</option><option value="shutdown">Shut down</option><option value="poweroff">Power off</option><option value="restart">Restart</option><option value="snapshot">Snapshot</option></select></label>
+      <label>Time (UTC) <input name="at" type="time" required></label>
+    </div>
+    <div class="row">{{range $d := list "mon" "tue" "wed" "thu" "fri" "sat" "sun"}}<label class="check"><input type="checkbox" name="day_{{$d}}" checked> {{$d}}</label>{{end}}</div>
+    <div class="actions"><button class="btn" type="submit">{{template "icon" "plus"}}Add task</button></div>
+  </form>{{end}}
+</div>
+<div class="card spaced">
   <div class="card-head"><h2>Backup copies</h2>{{with $b.Status}}<span class="right muted">Last: {{.}}</span>{{end}}</div>
   <div class="table-wrap"><table>
     <thead><tr><th>Taken</th><th>Target</th><th>Size</th><th></th></tr></thead>

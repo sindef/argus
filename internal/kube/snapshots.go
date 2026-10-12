@@ -136,6 +136,18 @@ func (c *Client) SetTags(ctx context.Context, ns, vm string, tags []string) erro
 	return err
 }
 
+const ScheduleAnnotation = "argus.io/schedule"
+
+func (c *Client) SetSchedule(ctx context.Context, ns, vm, schedule string) error {
+	var v any = schedule
+	if schedule == "" {
+		v = nil
+	}
+	patch, _ := json.Marshal(obj{"metadata": obj{"annotations": obj{ScheduleAnnotation: v}}})
+	_, err := c.dyn.Resource(vmGVR).Namespace(ns).Patch(ctx, vm, types.MergePatchType, patch, metav1.PatchOptions{})
+	return err
+}
+
 func (c *Client) SetBackupPolicy(ctx context.Context, ns, vm, policy string) error {
 	var v any = policy
 	if policy == "" {

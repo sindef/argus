@@ -56,6 +56,7 @@ type VM struct {
 	Tags           []string
 	Template       bool
 	Backup         string
+	Schedule       string
 	Running        bool
 	Cores          int64
 	Memory         string
@@ -343,7 +344,7 @@ func subresourcePath(ns, resource, name, sub string) string {
 
 func toVM(v, vmi *unstructured.Unstructured) VM {
 	o := v.Object
-	vm := VM{Namespace: v.GetNamespace(), Name: v.GetName(), DisplayName: v.GetAnnotations()[displayNameAnnotation], Backup: v.GetAnnotations()[BackupAnnotation], Template: v.GetLabels()[TemplateLabel] == "true"}
+	vm := VM{Namespace: v.GetNamespace(), Name: v.GetName(), DisplayName: v.GetAnnotations()[displayNameAnnotation], Backup: v.GetAnnotations()[BackupAnnotation], Schedule: v.GetAnnotations()[ScheduleAnnotation], Template: v.GetLabels()[TemplateLabel] == "true"}
 	if t := v.GetAnnotations()[TagsAnnotation]; t != "" {
 		vm.Tags = strings.Split(t, ",")
 	}
