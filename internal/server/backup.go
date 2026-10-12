@@ -29,34 +29,51 @@ import (
 )
 
 type BackupPolicy struct {
-	Every   int  `json:"every"`
-	Keep    int  `json:"keep"`
-	Offsite bool `json:"offsite"`
+	SnapEvery   int    `json:"snapEvery"`
+	SnapKeep    int    `json:"snapKeep"`
+	BackupEvery int    `json:"backupEvery"`
+	BackupKeep  int    `json:"backupKeep"`
+	Target      string `json:"target"`
 }
 
 func parsePolicy(s string) (BackupPolicy, bool) {
 	var p BackupPolicy
+	legacy := map[string]int{}
 	for _, f := range strings.Fields(s) {
 		k, v, _ := strings.Cut(f, "=")
 		n, _ := strconv.Atoi(v)
 		switch k {
-		case "every":
-			p.Every = n
-		case "keep":
-			p.Keep = n
-		case "offsite":
-			p.Offsite = n == 1
+		case "snap":
+			p.SnapEvery = n
+		case "snapkeep":
+			p.SnapKeep = n
+		case "backup":
+			p.BackupEvery = n
+		case "backupkeep":
+			p.BackupKeep = n
+		case "target":
+			p.Target = v
+		case "every", "keep", "offsite":
+			legacy[k] = n
 		}
 	}
-	return p, p.Every > 0 && p.Keep > 0
+	if legacy["every"] > 0 {
+		p.SnapEvery, p.SnapKeep = legacy["every"], legacy["keep"]
+		if legacy["offsite"] == 1 {
+			p.BackupEvery, p.BackupKeep, p.Target = legacy["every"], legacy["keep"], "nfs"
+		}
+	}
+	return p, p.SnapEvery > 0 || p.BackupEvery > 0
 }
 
 func (p BackupPolicy) String() string {
-	off := 0
-	if p.Offsite {
-		off = 1
-	}
-	return fmt.Sprintf("every=%d keep=%d offsite=%d", p.Every, p.Keep, off)
+	return fmt.Sprintf("snap=%d snapkeep=%d backup=%d backupkeep=%d target=%s", p.SnapEvery, p.SnapKeep, p.BackupEvery, p.BackupKeep, p.Target)
+}
+
+func newToken() string {
+	b := make([]byte, 24)
+	rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 type backupMeta struct {
@@ -70,10 +87,12 @@ type backupState struct {
 	mu       sync.Mutex
 	running  map[string]bool
 	last     map[string]string
+	lastCopy map[string]time.Time
 	restores map[string]restoreJob
 }
 
 type restoreJob struct {
+	Store     string `json:"store"`
 	Rel       string `json:"rel"`
 	Namespace string `json:"namespace"`
 	Target    string `json:"target"`
@@ -137,21 +156,70 @@ func (s *Server) backupLoop() {
 			if !ok {
 				continue
 			}
-			snaps, err := s.kube.ListSnapshots(ctx, vm.Namespace, vm.Name)
-			if err != nil {
-				continue
+			if p.SnapEvery > 0 {
+				s.snapshotDue(ctx, vm.Namespace, vm.Name, p)
 			}
-			last := time.Time{}
-			for _, sn := range snaps {
-				if sn.Auto && sn.Created.After(last) {
-					last = sn.Created
-				}
-			}
-			if time.Since(last) >= time.Duration(p.Every)*time.Hour {
+			if p.BackupEvery > 0 && time.Since(s.lastCopy(ctx, vm.Namespace, vm.Name, p.Target)) >= time.Duration(p.BackupEvery)*time.Hour {
 				s.startBackup(vm.Namespace, vm.Name, p)
 			}
 		}
 	}
+}
+
+func (s *Server) snapshotDue(ctx context.Context, ns, name string, p BackupPolicy) {
+	snaps, err := s.kube.ListSnapshots(ctx, ns, name)
+	if err != nil {
+		return
+	}
+	var auto []kube.Snapshot
+	for _, sn := range snaps {
+		if sn.Auto {
+			auto = append(auto, sn)
+		}
+	}
+	slices.SortFunc(auto, func(a, b kube.Snapshot) int { return b.Created.Compare(a.Created) })
+	if len(auto) == 0 || time.Since(auto[0].Created) >= time.Duration(p.SnapEvery)*time.Hour {
+		if _, err := s.kube.CreateAutoSnapshot(ctx, ns, name); err != nil {
+			log.Printf("snapshot %s/%s: %v", ns, name, err)
+			return
+		}
+		auto = append([]kube.Snapshot{{}}, auto...)
+	}
+	for i, sn := range auto {
+		if i >= max(p.SnapKeep, 1) && sn.Name != "" {
+			s.kube.DeleteSnapshot(ctx, ns, sn.Name)
+		}
+	}
+}
+
+func (s *Server) lastCopy(ctx context.Context, ns, name, target string) time.Time {
+	key := ns + "/" + name + "@" + target
+	s.backups.mu.Lock()
+	t, ok := s.backups.lastCopy[key]
+	s.backups.mu.Unlock()
+	if ok {
+		return t
+	}
+	if st, err := s.store(ctx, target); err == nil {
+		if bs, err := vmBackups(ctx, st, name); err == nil {
+			for _, b := range bs {
+				if c, err := time.Parse("20060102-150405", b.Stamp); err == nil && b.Complete && c.After(t) {
+					t = c
+				}
+			}
+		}
+	}
+	s.setLastCopy(key, t)
+	return t
+}
+
+func (s *Server) setLastCopy(key string, t time.Time) {
+	s.backups.mu.Lock()
+	defer s.backups.mu.Unlock()
+	if s.backups.lastCopy == nil {
+		s.backups.lastCopy = map[string]time.Time{}
+	}
+	s.backups.lastCopy[key] = t
 }
 
 var transfers = make(chan struct{}, 2)
@@ -170,65 +238,38 @@ func (s *Server) startBackup(ns, name string, p BackupPolicy) bool {
 		if err != nil {
 			log.Printf("backup %s: %v", key, err)
 		}
+		s.setLastCopy(key+"@"+p.Target, time.Now())
 		s.backups.finish(key, err)
 	}()
 	return true
 }
 
 func (s *Server) backupVM(ctx context.Context, ns, name string, p BackupPolicy) error {
-	if _, err := s.kube.CreateAutoSnapshot(ctx, ns, name); err != nil {
-		return err
-	}
-	snaps, err := s.kube.ListSnapshots(ctx, ns, name)
+	st, err := s.store(ctx, p.Target)
 	if err != nil {
 		return err
 	}
-	kept := 0
-	for _, sn := range snaps {
-		if !sn.Auto {
-			continue
-		}
-		if kept++; kept > p.Keep {
-			s.kube.DeleteSnapshot(ctx, ns, sn.Name)
-		}
-	}
-	if !p.Offsite {
-		return nil
-	}
-	if err := s.offsite(ctx, ns, name); err != nil {
+	if err := s.offsite(ctx, st, ns, name); err != nil {
 		return err
 	}
-	bs, err := s.vmBackups(ctx, name)
+	bs, err := vmBackups(ctx, st, name)
 	if err != nil {
 		return err
 	}
 	for i, b := range bs {
-		if i >= p.Keep {
-			s.hostd.DeleteBackup(ctx, b.VM+"/"+b.Stamp)
+		if i >= max(p.BackupKeep, 1) {
+			st.Delete(ctx, b.VM+"/"+b.Stamp)
 		}
 	}
 	return nil
 }
 
-func (s *Server) vmBackups(ctx context.Context, name string) ([]hostd.Backup, error) {
-	if s.hostd == nil {
-		return nil, errors.New("host helper not available")
-	}
-	all, err := s.hostd.Backups(ctx)
+func vmBackups(ctx context.Context, st backupStore, name string) ([]hostd.Backup, error) {
+	all, err := st.List(ctx)
 	return slices.DeleteFunc(all, func(b hostd.Backup) bool { return b.VM != name }), err
 }
 
-func (s *Server) offsite(ctx context.Context, ns, name string) error {
-	if s.hostd == nil {
-		return errors.New("host helper not available")
-	}
-	st, err := s.hostd.Settings(ctx)
-	if err != nil {
-		return err
-	}
-	if st.Backup == "" {
-		return errors.New("no backup target configured on this host")
-	}
+func (s *Server) offsite(ctx context.Context, st backupStore, ns, name string) error {
 	if err := s.kube.CheckBackupable(ctx, ns, name); err != nil {
 		return err
 	}
@@ -242,13 +283,13 @@ func (s *Server) offsite(ctx context.Context, ns, name string) error {
 	meta := backupMeta{Namespace: ns, Spec: ex.Spec, Created: time.Now()}
 	man := hostd.Manifest{Files: map[string]hostd.ManifestFile{}}
 	fail := func(err error) error {
-		s.hostd.DeleteBackup(context.Background(), rel)
+		st.Delete(context.Background(), rel)
 		return err
 	}
 	templates, _, _ := unstructured.NestedSlice(ex.Spec, "dataVolumeTemplates")
 	for _, t := range templates {
 		dv, _, _ := unstructured.NestedString(t.(map[string]any), "metadata", "name")
-		mf, err := s.copyDisk(ctx, ns, name, dv, ex.Token, rel+"/"+dv+".img.gz")
+		mf, err := s.copyDisk(ctx, st, ns, name, dv, ex.Token, rel+"/"+dv+".img.gz")
 		if err != nil {
 			return fail(fmt.Errorf("disk %s: %w", dv, err))
 		}
@@ -261,11 +302,11 @@ func (s *Server) offsite(ctx context.Context, ns, name string) error {
 	}
 	sum := sha256.Sum256(b)
 	man.Files["vm.json"] = hostd.ManifestFile{SHA256: hex.EncodeToString(sum[:]), Size: int64(len(b))}
-	if err := s.hostd.PutBackupFile(ctx, rel+"/vm.json", bytes.NewReader(b)); err != nil {
+	if err := st.Put(ctx, rel+"/vm.json", bytes.NewReader(b)); err != nil {
 		return fail(err)
 	}
 	mb, _ := json.Marshal(man)
-	if err := s.hostd.PutBackupFile(ctx, rel+"/manifest.json", bytes.NewReader(mb)); err != nil {
+	if err := st.Put(ctx, rel+"/manifest.json", bytes.NewReader(mb)); err != nil {
 		return fail(err)
 	}
 	return nil
@@ -284,7 +325,7 @@ func (h *hashReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func (s *Server) copyDisk(ctx context.Context, ns, name, dv, token, rel string) (hostd.ManifestFile, error) {
+func (s *Server) copyDisk(ctx context.Context, st backupStore, ns, name, dv, token, rel string) (hostd.ManifestFile, error) {
 	var mf hostd.ManifestFile
 	src, cert, err := s.kube.BackupSource(ctx, ns, name, dv)
 	if err != nil {
@@ -307,24 +348,28 @@ func (s *Server) copyDisk(ctx context.Context, ns, name, dv, token, rel string) 
 		return mf, fmt.Errorf("export returned %s", resp.Status)
 	}
 	hr := &hashReader{r: resp.Body, h: sha256.New()}
-	if err := s.hostd.PutBackupFile(ctx, rel, hr); err != nil {
+	if err := st.Put(ctx, rel, hr); err != nil {
 		return mf, err
 	}
 	return hostd.ManifestFile{SHA256: hex.EncodeToString(hr.h.Sum(nil)), Size: hr.n}, nil
 }
 
-func (s *Server) restoreBackup(ctx context.Context, vm, stamp, target string) error {
+func (s *Server) restoreBackup(ctx context.Context, store, vm, stamp, target string) error {
 	rel := vm + "/" + stamp
-	if err := s.hostd.VerifyBackup(ctx, rel); err != nil {
+	st, err := s.store(ctx, store)
+	if err != nil {
 		return err
 	}
-	resp, err := s.hostd.GetBackupFile(ctx, rel+"/vm.json")
+	if err := st.Verify(ctx, rel); err != nil {
+		return err
+	}
+	body, _, err := st.Get(ctx, rel+"/vm.json")
 	if err != nil {
 		return err
 	}
 	var meta backupMeta
-	err = json.NewDecoder(resp.Body).Decode(&meta)
-	resp.Body.Close()
+	err = json.NewDecoder(body).Decode(&meta)
+	body.Close()
 	if err != nil {
 		return fmt.Errorf("backup metadata: %w", err)
 	}
@@ -347,14 +392,12 @@ func (s *Server) restoreBackup(ctx context.Context, vm, stamp, target string) er
 	if target != vm {
 		names = kube.RenameSpec(meta.Spec, vm, target)
 	}
-	b := make([]byte, 24)
-	rand.Read(b)
-	token := hex.EncodeToString(b)
+	token := newToken()
 	ex := kube.Export{Spec: meta.Spec, Token: token, CA: string(s.caPEM)}
 	for _, d := range meta.Disks {
 		ex.Disks = append(ex.Disks, kube.ExportDisk{DataVolume: names[d], URL: fmt.Sprintf("https://%s/backups/%s/%s.img.gz", os.Getenv("HOST_IP"), rel, d)})
 	}
-	job := restoreJob{Rel: rel, Namespace: meta.Namespace, Target: target, Key: meta.Namespace + "/" + vm}
+	job := restoreJob{Store: store, Rel: rel, Namespace: meta.Namespace, Target: target, Key: meta.Namespace + "/" + vm}
 	s.trackRestore(token, job)
 	if err := s.kube.ImportVM(ctx, meta.Namespace, target, "restore-"+stamp, ex); err != nil {
 		s.untrackRestore(token)
@@ -452,33 +495,45 @@ func (s *Server) watchRestore(token string, job restoreJob) {
 func (s *Server) serveBackup(w http.ResponseWriter, r *http.Request) {
 	rel := r.PathValue("vm") + "/" + r.PathValue("stamp")
 	s.backups.mu.Lock()
-	ok := s.backups.restores[strings.TrimSpace(r.Header.Get("x-kubevirt-export-token"))].Rel == rel
+	job, ok := s.backups.restores[strings.TrimSpace(r.Header.Get("x-kubevirt-export-token"))]
 	s.backups.mu.Unlock()
-	if !ok || s.hostd == nil {
+	if !ok || job.Rel != rel {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	resp, err := s.hostd.GetBackupFile(r.Context(), rel+"/"+r.PathValue("file"))
+	if job.Store == "" {
+		job.Store = "nfs"
+	}
+	st, err := s.store(r.Context(), job.Store)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	body, size, err := st.Get(r.Context(), rel+"/"+r.PathValue("file"))
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	defer resp.Body.Close()
-	for _, h := range []string{"Content-Length", "Content-Type"} {
-		if v := resp.Header.Get(h); v != "" {
-			w.Header().Set(h, v)
-		}
+	defer body.Close()
+	w.Header().Set("Content-Type", "application/octet-stream")
+	if size > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 	}
-	n, _ := io.Copy(w, resp.Body)
+	n, _ := io.Copy(w, body)
 	log.Printf("backup %s/%s served: %d bytes", rel, r.PathValue("file"), n)
+}
+
+type VMBackup struct {
+	hostd.Backup
+	Target string `json:"target"`
 }
 
 type VMBackups struct {
 	Policy  BackupPolicy   `json:"policy"`
 	Enabled bool           `json:"enabled"`
-	Target  string         `json:"target"`
+	Targets []BackupTarget `json:"targets"`
 	Status  string         `json:"status"`
-	Backups []hostd.Backup `json:"backups"`
+	Backups []VMBackup     `json:"backups"`
 	Error   string         `json:"error"`
 }
 
@@ -490,59 +545,104 @@ func (s *Server) vmBackupInfo(ctx context.Context, ns, name string) VMBackups {
 		return info
 	}
 	info.Policy, info.Enabled = parsePolicy(vm.Backup)
+	if info.Policy.SnapKeep == 0 {
+		info.Policy.SnapKeep = 7
+	}
+	if info.Policy.BackupKeep == 0 {
+		info.Policy.BackupKeep = 7
+	}
 	info.Status = s.backups.status(ns + "/" + name)
-	if s.hostd != nil {
-		if st, err := s.hostd.Settings(ctx); err == nil {
-			info.Target = st.Backup
+	targets, err := s.backupTargets(ctx)
+	if err != nil {
+		info.Error = err.Error()
+	}
+	var errs []string
+	for _, t := range targets {
+		info.Targets = append(info.Targets, BackupTarget{Name: t.Name, Kind: t.Kind, Endpoint: t.Where()})
+		bs, err := vmBackups(ctx, t.open(s.hostd), name)
+		if err != nil {
+			errs = append(errs, t.Name+": "+err.Error())
+		}
+		for _, b := range bs {
+			info.Backups = append(info.Backups, VMBackup{b, t.Name})
 		}
 	}
-	if info.Target != "" {
-		bs, err := s.vmBackups(ctx, name)
-		info.Backups, info.Error = bs, errText(err)
+	slices.SortFunc(info.Backups, func(a, b VMBackup) int { return strings.Compare(b.Stamp, a.Stamp) })
+	if len(errs) > 0 {
+		info.Error = strings.Join(errs, "; ")
 	}
 	return info
 }
 
 func (s *Server) backupOp(ctx context.Context, ns, name, op string, f func(string) string) error {
+	num := func(k string) int { n, _ := strconv.Atoi(f(k)); return n }
 	switch op {
 	case "policy":
-		every, _ := strconv.Atoi(f("every"))
-		keep, _ := strconv.Atoi(f("keep"))
-		p := BackupPolicy{Every: every, Keep: keep, Offsite: f("offsite") != ""}
-		if every == 0 {
-			return s.kube.SetBackupPolicy(ctx, ns, name, "")
+		p := BackupPolicy{SnapEvery: num("snap"), SnapKeep: num("snapkeep"), BackupEvery: num("backup"), BackupKeep: num("backupkeep"), Target: f("target")}
+		for _, v := range [][3]int{{p.SnapEvery, 0, 720}, {p.BackupEvery, 0, 720}} {
+			if v[0] < v[1] || v[0] > v[2] {
+				return errors.New("intervals must be 0-720 hours")
+			}
 		}
-		if p.Offsite {
+		if p.SnapEvery > 0 && (p.SnapKeep < 1 || p.SnapKeep > 365) || p.BackupEvery > 0 && (p.BackupKeep < 1 || p.BackupKeep > 365) {
+			return errors.New("keep must be 1-365")
+		}
+		if p.BackupEvery > 0 {
+			if _, err := s.store(ctx, p.Target); err != nil {
+				return err
+			}
 			if err := s.kube.CheckBackupable(ctx, ns, name); err != nil {
 				return err
 			}
 		}
-		if every < 1 || every > 24*30 || keep < 1 || keep > 365 {
-			return errors.New("interval must be 1-720 hours and keep 1-365")
+		if p.SnapEvery == 0 && p.BackupEvery == 0 {
+			return s.kube.SetBackupPolicy(ctx, ns, name, "")
 		}
 		return s.kube.SetBackupPolicy(ctx, ns, name, p.String())
 	case "now":
-		vm, err := s.kube.GetVM(ctx, ns, name)
-		if err != nil {
-			return err
-		}
-		p, ok := parsePolicy(vm.Backup)
-		if !ok {
-			p = BackupPolicy{Every: 24, Keep: 7, Offsite: true}
-		}
-		if p.Offsite {
-			if err := s.kube.CheckBackupable(ctx, ns, name); err != nil {
+		target := f("target")
+		if target == "" {
+			vm, err := s.kube.GetVM(ctx, ns, name)
+			if err != nil {
 				return err
 			}
+			p, _ := parsePolicy(vm.Backup)
+			target = p.Target
 		}
-		if !s.startBackup(ns, name, p) {
+		if target == "" {
+			targets, err := s.backupTargets(ctx)
+			if err != nil {
+				return err
+			}
+			if len(targets) == 0 {
+				return errors.New("add a backup target in host settings first")
+			}
+			target = targets[0].Name
+		}
+		if _, err := s.store(ctx, target); err != nil {
+			return err
+		}
+		if err := s.kube.CheckBackupable(ctx, ns, name); err != nil {
+			return err
+		}
+		keep := 7
+		if vm, err := s.kube.GetVM(ctx, ns, name); err == nil {
+			if p, _ := parsePolicy(vm.Backup); p.Target == target && p.BackupKeep > 0 {
+				keep = p.BackupKeep
+			}
+		}
+		if !s.startBackup(ns, name, BackupPolicy{BackupKeep: keep, Target: target}) {
 			return errors.New("a backup of this VM is already running")
 		}
 		return nil
 	case "restore":
-		return s.restoreBackup(ctx, name, f("stamp"), strings.TrimSpace(f("target")))
+		return s.restoreBackup(ctx, f("store"), name, f("stamp"), strings.TrimSpace(f("target")))
 	case "delete":
-		return s.hostd.DeleteBackup(ctx, name+"/"+f("stamp"))
+		st, err := s.store(ctx, f("store"))
+		if err != nil {
+			return err
+		}
+		return st.Delete(ctx, name+"/"+f("stamp"))
 	}
 	return errors.New("unknown backup operation")
 }

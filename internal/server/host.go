@@ -175,6 +175,12 @@ func (s *Server) renderHost(w http.ResponseWriter, r *http.Request, notice strin
 	if st, serr := s.hostSettings(r.Context()); serr == nil {
 		data["Settings"] = st
 	}
+	if ts, terr := s.backupTargets(r.Context()); terr == nil {
+		for i := range ts {
+			ts[i].SecretKey = ""
+		}
+		data["Targets"] = ts
+	}
 	data["Notify"], _, _ = s.loadNotify(r.Context())
 	data["Cert"] = s.certInfo()
 	s.render(w, r, "host.html", "layout", data)
@@ -270,8 +276,16 @@ func (s *Server) apiApplyHostSettings(w http.ResponseWriter, r *http.Request) {
 func fields(v string) []string { return strings.Fields(strings.ReplaceAll(v, ",", " ")) }
 
 func (s *Server) hostSettingsForm(w http.ResponseWriter, r *http.Request) {
-	dns, ntp, syslog, backup := fields(r.FormValue("dns")), fields(r.FormValue("ntp")), strings.TrimSpace(r.FormValue("syslog")), strings.TrimSpace(r.FormValue("backup"))
-	u := HostSettingsUpdate{SettingsUpdate: hostd.SettingsUpdate{DNS: &dns, NTP: &ntp, Syslog: &syslog, Backup: &backup}}
+	r.ParseForm()
+	var u HostSettingsUpdate
+	if _, ok := r.Form["dns"]; ok {
+		dns, ntp, syslog := fields(r.FormValue("dns")), fields(r.FormValue("ntp")), strings.TrimSpace(r.FormValue("syslog"))
+		u.DNS, u.NTP, u.Syslog = &dns, &ntp, &syslog
+	}
+	if _, ok := r.Form["backup"]; ok {
+		backup := strings.TrimSpace(r.FormValue("backup"))
+		u.Backup = &backup
+	}
 	if err := s.applyHostSettings(r.Context(), u); err != nil {
 		flash(w, r, err)
 		return
@@ -334,4 +348,43 @@ func formFile(r *http.Request, name string) ([]byte, error) {
 	}
 	defer f.Close()
 	return io.ReadAll(io.LimitReader(f, 1<<20))
+}
+
+func (s *Server) backupTargetForm(w http.ResponseWriter, r *http.Request) {
+	t := BackupTarget{Name: strings.TrimSpace(r.FormValue("name")), Kind: "s3", Endpoint: strings.TrimSpace(r.FormValue("endpoint")), Region: strings.TrimSpace(r.FormValue("region")),
+		Bucket: strings.TrimSpace(r.FormValue("bucket")), Prefix: strings.Trim(strings.TrimSpace(r.FormValue("prefix")), "/"), AccessKey: strings.TrimSpace(r.FormValue("access_key")), SecretKey: r.FormValue("secret_key")}
+	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
+	defer cancel()
+	if err := s.saveTarget(ctx, t, r.PathValue("op") == "remove"); err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: backup target %s %s", session(r).User, t.Name, r.PathValue("op"))
+	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) apiBackupTargets(w http.ResponseWriter, r *http.Request) {
+	ts, err := s.backupTargets(r.Context())
+	if err != nil {
+		apiError(w, r, http.StatusBadGateway, err)
+		return
+	}
+	for i := range ts {
+		ts[i].SecretKey = ""
+	}
+	writeJSON(w, ts)
+}
+
+func (s *Server) apiBackupTargetOp(w http.ResponseWriter, r *http.Request) {
+	var t BackupTarget
+	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+		apiError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	t.Kind = "s3"
+	if err := s.saveTarget(r.Context(), t, r.PathValue("op") == "remove"); err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, map[string]string{})
 }

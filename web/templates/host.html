@@ -29,11 +29,26 @@
       <label>DNS servers <span class="help" title="Used in addition to servers learned from DHCP.">?</span><input name="dns" value="{{join .DNS ", "}}" placeholder="1.1.1.1, 9.9.9.9"></label>
       <label>NTP servers <input name="ntp" value="{{join .NTP ", "}}" placeholder="0.pool.ntp.org, 1.pool.ntp.org"></label>
       <label>Remote syslog <input name="syslog" value="{{.Syslog}}" placeholder="udp://syslog.example:514"></label>
-      <label>Backup target <span class="help" title="NFS export for VM backups. Tested for write access before saving.">?</span><input name="backup" value="{{.Backup}}" placeholder="nas.example:/backups/argus"></label>
       <div class="actions"><button class="btn primary" type="submit">Save</button></div>
     </form>
   </section>
   {{end}}
+{{with .Settings}}
+<section class="pane" id="s-backup" data-icon="download">
+  <header><h2>Backup targets</h2><div class="actions"><button class="btn" data-dialog="add-target">{{template "icon" "plus"}}Add S3 target</button></div></header>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Name</th><th>Type</th><th>Location</th><th></th></tr></thead>
+    <tbody>{{range $.Targets}}<tr><td>{{.Name}}</td><td>{{if eq .Kind "s3"}}S3{{else}}NFS{{end}}</td><td class="mono">{{.Where}}</td>
+      <td class="row-actions">{{if eq .Kind "s3"}}<button class="link" data-dialog="add-target" data-fill='{"name":"{{.Name}}","endpoint":"{{.Endpoint}}","region":"{{.Region}}","bucket":"{{.Bucket}}","prefix":"{{.Prefix}}","access_key":"{{.AccessKey}}"}'>Edit</button><button class="link danger" hx-post="/host/backup-targets/remove" hx-vals='{"name":"{{.Name}}"}' hx-target="#flash" hx-confirm="Remove backup target {{.Name}}? Backups already on it stay there.">Remove</button>{{end}}</td></tr>
+    {{else}}<tr><td colspan="4" class="muted">No backup targets.</td></tr>{{end}}</tbody>
+  </table></div>
+  <h3>NFS <span class="help" title="NFS export for VM backups, shown above as nfs. Tested for write access before saving. Leave empty to remove.">?</span></h3>
+  <form hx-post="/host/settings" hx-target="#flash" class="form inline">
+    <input name="backup" value="{{.Backup}}" placeholder="nas.example:/backups/argus" aria-label="NFS export">
+    <button class="btn primary" type="submit">Save</button>
+  </form>
+</section>
+{{end}}
   {{template "notify-section" .}}
   {{template "cert-section" .}}
   <section class="pane" id="s-access" data-icon="key-round">
@@ -48,6 +63,26 @@
     {{end}}
   </section>
 </div>
+<dialog id="add-target" class="card">
+  <form hx-post="/host/backup-targets/add" hx-target="#target-error" hx-disabled-elt="find button[type=submit]" class="form">
+    <h2>S3 backup target</h2>
+    <p id="target-error" class="error form-error"></p>
+    <div class="row">
+      <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" placeholder="offsite" required></label>
+      <label>Region <input name="region" placeholder="us-east-1"></label>
+    </div>
+    <label>Endpoint <span class="help" title="S3 API URL, such as https://s3.us-east-1.amazonaws.com or a MinIO, Ceph, Wasabi or Backblaze endpoint.">?</span><input name="endpoint" type="url" placeholder="https://s3.example.com" required></label>
+    <div class="row">
+      <label>Bucket <input name="bucket" required></label>
+      <label>Prefix <input name="prefix" placeholder="argus"></label>
+    </div>
+    <div class="row">
+      <label>Access key <input name="access_key" autocomplete="off" required></label>
+      <label>Secret key <input name="secret_key" type="password" autocomplete="new-password" placeholder="unchanged when editing"></label>
+    </div>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Test and save</button></div>
+  </form>
+</dialog>
 <dialog id="add-token" class="card">
   <form method="post" action="/tokens" class="form">
     <h2>Create token</h2>
