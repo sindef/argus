@@ -484,16 +484,8 @@ func (s *Server) managerMigrate(w http.ResponseWriter, r *http.Request) {
 	if err == nil && src.Name == dst.Name {
 		err = errors.New("pick a different host")
 	}
-	var vm kube.VM
 	if err == nil {
-		err = src.Call(r.Context(), http.MethodGet, manager.APIPath("/api/vms/%s/%s", r.PathValue("ns"), r.PathValue("name")), nil, &vm)
-	}
-	if err == nil {
-		if vm.Running {
-			err = s.manager.LiveMigrate(src, dst, r.PathValue("ns"), r.PathValue("name"))
-		} else {
-			err = s.manager.Migrate(src, dst, r.PathValue("ns"), r.PathValue("name"))
-		}
+		err = s.migrate(r, src, dst, r.PathValue("name"))
 	}
 	if err != nil {
 		flash(w, r, err)
@@ -501,6 +493,17 @@ func (s *Server) managerMigrate(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("%s: migrate %s/%s from %s to %s", session(r).User, r.PathValue("ns"), r.PathValue("name"), src.Name, dst.Name)
 	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) migrate(r *http.Request, src, dst manager.Node, name string) error {
+	var vm kube.VM
+	if err := src.Call(r.Context(), http.MethodGet, manager.APIPath("/api/vms/%s/%s", kube.Namespace, name), nil, &vm); err != nil {
+		return err
+	}
+	if vm.Running {
+		return s.manager.LiveMigrate(src, dst, kube.Namespace, name)
+	}
+	return s.manager.Migrate(src, dst, kube.Namespace, name)
 }
 
 func (s *Server) managerProtect(w http.ResponseWriter, r *http.Request) {

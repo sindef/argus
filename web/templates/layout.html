@@ -37,6 +37,7 @@
     <div class="menu-list right" hidden>
       {{with .Session.Org}}<span class="muted" style="display:block;padding:6px 10px">{{.}}</span><hr>{{end}}
       {{if not .Session.SSO}}<a href="/password">{{template "icon" "key-round"}}Change password</a>{{end}}
+      {{if .Manager}}<a href="/account/tokens">{{template "icon" "terminal"}}API tokens</a>{{end}}
       <form method="post" action="/logout"><button type="submit">{{template "icon" "log-out"}}Log out</button></form>
     </div>
   </div>

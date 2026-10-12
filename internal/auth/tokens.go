@@ -20,6 +20,8 @@ type Token struct {
 	Hash    string    `json:"hash"`
 	Created time.Time `json:"created"`
 	Scope   string    `json:"scope,omitempty"`
+	Org     string    `json:"org,omitempty"`
+	User    string    `json:"user,omitempty"`
 }
 
 const (
@@ -58,30 +60,39 @@ func (s *Store) Tokens(ctx context.Context) ([]Token, error) {
 }
 
 func (s *Store) CreateToken(ctx context.Context, name, scope string) (string, error) {
+	return s.AddToken(ctx, Token{Name: name, Scope: scope})
+}
+
+func (s *Store) AddToken(ctx context.Context, t Token) (string, error) {
 	ts, rv, err := s.tokens(ctx)
 	if err != nil {
 		return "", err
 	}
-	for _, t := range ts {
-		if t.Name == name {
+	for _, o := range ts {
+		if o.Name == t.Name && o.Org == t.Org && o.User == t.User {
 			return "", ErrExists
 		}
 	}
 	b := make([]byte, 32)
 	rand.Read(b)
 	plain := "argus_" + hex.EncodeToString(b)
-	ts = append(ts, Token{Name: name, Hash: tokenHash(plain), Created: time.Now().UTC(), Scope: scope})
+	t.Hash, t.Created = tokenHash(plain), time.Now().UTC()
+	ts = append(ts, t)
 	return plain, s.saveTokens(ctx, ts, rv)
 }
 
 func (s *Store) DeleteToken(ctx context.Context, name string) error {
+	return s.RemoveToken(ctx, "", "", name)
+}
+
+func (s *Store) RemoveToken(ctx context.Context, org, user, name string) error {
 	ts, rv, err := s.tokens(ctx)
 	if err != nil {
 		return err
 	}
 	out := ts[:0]
 	for _, t := range ts {
-		if t.Name != name {
+		if t.Name != name || t.Org != org || t.User != user {
 			out = append(out, t)
 		}
 	}

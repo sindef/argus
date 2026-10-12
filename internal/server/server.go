@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"html/template"
 	"log"
 	"net/http"
@@ -84,7 +85,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	}
 	s.version = readEnv(o.ReleaseFile)["KAIROS_VERSION"]
 	s.sso.m = map[string]ssoFlow{}
-	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html", "hostnet.html", "dashboard.html", "hostnets.html", "profile.html", "manager-images.html", "audit.html", "groups.html"} {
+	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html", "hostnet.html", "dashboard.html", "hostnets.html", "profile.html", "manager-images.html", "audit.html", "groups.html", "tokens.html"} {
 		t, err := template.New(p).Funcs(funcs).ParseFS(web.FS, "templates/layout.html", "templates/manager-nav.html", "templates/"+p)
 		if err != nil {
 			return nil, err
@@ -165,6 +166,10 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("POST /hosts/{node}/rotate-token", s.requireOrg(auth.Admin, s.managerRotateToken))
 		s.mux.HandleFunc("GET /network/hosts", s.requireOrg(auth.Admin, s.managerHostNets))
 		s.mux.HandleFunc("GET /vm-new", s.require(auth.Operator, s.managerNewVM))
+		s.apiV1Routes()
+		s.mux.HandleFunc("GET /account/tokens", s.require(auth.ReadOnly, s.accountTokens))
+		s.mux.HandleFunc("POST /account/tokens", s.require(auth.ReadOnly, s.createAccountToken))
+		s.mux.HandleFunc("POST /account/tokens/{name}/delete", s.require(auth.ReadOnly, s.deleteAccountToken))
 		s.mux.HandleFunc("GET /images", s.require(auth.ReadOnly, s.managerImages))
 		s.mux.HandleFunc("GET /vm-copy", s.require(auth.Operator, s.vmCopyModal))
 		s.mux.HandleFunc("POST /vm-copy", s.requireOrg(auth.Operator, s.vmCopy))
@@ -481,9 +486,17 @@ func (s *Server) require(min auth.Role, h http.HandlerFunc) http.HandlerFunc {
 				http.Error(w, "forbidden", http.StatusForbidden)
 				return
 			}
-			sess := auth.Session{User: "token:" + t.Name, Role: auth.Admin}
+			sess, who, err := s.tokenSession(r.Context(), t)
+			if err != nil {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			if !sess.Role.Can(min) {
+				http.Error(w, "forbidden", http.StatusForbidden)
+				return
+			}
 			r2 := r.WithContext(context.WithValue(r.Context(), ctxKey{}, reqAuth{Session: sess}))
-			s.audited(w, r2, sess.User, func(w http.ResponseWriter) { h(w, r2) })
+			s.audited(w, r2, who, func(w http.ResponseWriter) { h(w, r2) })
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/") {
@@ -511,6 +524,23 @@ func (s *Server) require(min auth.Role, h http.HandlerFunc) http.HandlerFunc {
 		r2 := r.WithContext(context.WithValue(r.Context(), ctxKey{}, reqAuth{Session: sess, Token: c.Value}))
 		s.audited(w, r2, s.auditUser(sess.Org, sess.User), func(w http.ResponseWriter) { h(w, r2) })
 	}
+}
+
+func (s *Server) tokenSession(ctx context.Context, t auth.Token) (auth.Session, string, error) {
+	if s.manager == nil {
+		return auth.Session{User: "token:" + t.Name, Role: auth.Admin}, "token:" + t.Name, nil
+	}
+	st := s.auth.ForOrg(t.Org)
+	us, err := st.Users(ctx)
+	if err != nil {
+		return auth.Session{}, "", err
+	}
+	i := slices.IndexFunc(us, func(u auth.User) bool { return u.Name == t.User })
+	if t.User == "" || i < 0 {
+		return auth.Session{}, "", errors.New("token owner not found")
+	}
+	role, scopes := st.Access(ctx, us[i])
+	return auth.Session{User: t.User, Org: t.Org, Role: role, Scopes: scopes}, s.auditUser(t.Org, t.User) + " (token " + t.Name + ")", nil
 }
 
 func redirect(w http.ResponseWriter, r *http.Request, to string) {

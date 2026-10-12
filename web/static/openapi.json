@@ -1,0 +1,778 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "Argus Manager API",
+  "version": "1"
+ },
+ "servers": [
+  {
+   "url": "/api/v1"
+  }
+ ],
+ "security": [
+  {
+   "token": []
+  }
+ ],
+ "paths": {
+  "/hosts": {
+   "get": {
+    "summary": "List hosts",
+    "description": "Minimum role: read-only.",
+    "responses": {
+     "200": {
+      "description": "Hosts",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Host"
+         }
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/vms": {
+   "get": {
+    "summary": "List VMs",
+    "description": "Minimum role: read-only.",
+    "responses": {
+     "200": {
+      "description": "VMs",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/VM"
+         }
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/tasks": {
+   "get": {
+    "summary": "List tasks",
+    "description": "Minimum role: read-only.",
+    "responses": {
+     "200": {
+      "description": "Tasks",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Task"
+         }
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/hosts/{host}/vms": {
+   "post": {
+    "summary": "Create a VM",
+    "description": "Minimum role: operator.",
+    "responses": {
+     "201": {
+      "description": "Created",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "host": {
+           "type": "string"
+          },
+          "name": {
+           "type": "string"
+          }
+         }
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/NewVM"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/hosts/{host}/vms/{name}": {
+   "get": {
+    "summary": "Get a VM",
+    "description": "Minimum role: read-only.",
+    "responses": {
+     "200": {
+      "description": "VM",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/VM"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   },
+   "delete": {
+    "summary": "Delete a VM and its disks",
+    "description": "Minimum role: admin.",
+    "responses": {
+     "202": {
+      "description": "Accepted"
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/vms/{name}/power": {
+   "post": {
+    "summary": "Change power state",
+    "description": "Minimum role: operator.",
+    "responses": {
+     "202": {
+      "description": "Accepted"
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "action"
+        ],
+        "properties": {
+         "action": {
+          "type": "string",
+          "enum": [
+           "start",
+           "stop",
+           "restart",
+           "pause",
+           "unpause"
+          ]
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/hosts/{host}/vms/{name}/migrate": {
+   "post": {
+    "summary": "Move a VM to another host; live when running",
+    "description": "Minimum role: admin.",
+    "responses": {
+     "202": {
+      "description": "Accepted"
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "to"
+        ],
+        "properties": {
+         "to": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/hosts/{host}/vms/{name}/snapshots": {
+   "get": {
+    "summary": "List snapshots",
+    "description": "Minimum role: read-only.",
+    "responses": {
+     "200": {
+      "description": "Snapshots",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Snapshot"
+         }
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   },
+   "post": {
+    "summary": "Take a snapshot",
+    "description": "Minimum role: operator.",
+    "responses": {
+     "202": {
+      "description": "Accepted"
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/vms/{name}/snapshots/{snap}": {
+   "delete": {
+    "summary": "Delete a snapshot",
+    "description": "Minimum role: operator.",
+    "responses": {
+     "202": {
+      "description": "Accepted"
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "snap",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/vms/{name}/snapshots/{snap}/restore": {
+   "post": {
+    "summary": "Restore a snapshot; the VM must be stopped",
+    "description": "Minimum role: operator.",
+    "responses": {
+     "202": {
+      "description": "Accepted"
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "snap",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  }
+ },
+ "components": {
+  "securitySchemes": {
+   "token": {
+    "type": "http",
+    "scheme": "bearer",
+    "description": "Personal API token from Argus Manager (user menu > API tokens). It acts with the owner's current role and scope; read-only tokens allow GET only."
+   }
+  },
+  "schemas": {
+   "Error": {
+    "type": "object",
+    "properties": {
+     "error": {
+      "type": "string"
+     }
+    }
+   },
+   "Host": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "datacenter": {
+      "type": "string"
+     },
+     "cluster": {
+      "type": "string"
+     },
+     "arch": {
+      "type": "string"
+     },
+     "reachable": {
+      "type": "boolean"
+     },
+     "maintenance": {
+      "type": "boolean"
+     },
+     "error": {
+      "type": "string"
+     },
+     "vms": {
+      "type": "integer"
+     }
+    }
+   },
+   "VM": {
+    "type": "object",
+    "properties": {
+     "host": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "displayName": {
+      "type": "string"
+     },
+     "status": {
+      "type": "string"
+     },
+     "running": {
+      "type": "boolean"
+     },
+     "cores": {
+      "type": "integer"
+     },
+     "memory": {
+      "type": "string"
+     },
+     "storageBytes": {
+      "type": "integer"
+     },
+     "tags": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "template": {
+      "type": "boolean"
+     },
+     "os": {
+      "type": "string"
+     },
+     "ips": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "started": {
+      "type": "string",
+      "format": "date-time"
+     }
+    }
+   },
+   "NewVM": {
+    "type": "object",
+    "required": [
+     "name",
+     "cores",
+     "memoryMiB",
+     "diskGiB",
+     "network"
+    ],
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "cores": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 64
+     },
+     "memoryMiB": {
+      "type": "integer",
+      "minimum": 128
+     },
+     "diskGiB": {
+      "type": "integer",
+      "minimum": 1
+     },
+     "image": {
+      "type": "string",
+      "description": "Image name, or tpl:<template> to clone a host template"
+     },
+     "cdrom": {
+      "type": "string"
+     },
+     "network": {
+      "type": "string"
+     },
+     "pool": {
+      "type": "string"
+     },
+     "start": {
+      "type": "boolean"
+     },
+     "userData": {
+      "type": "string",
+      "description": "cloud-init user data; overrides the guest fields"
+     },
+     "hostname": {
+      "type": "string"
+     },
+     "user": {
+      "type": "string"
+     },
+     "sshKeys": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "password": {
+      "type": "string"
+     },
+     "address": {
+      "type": "string",
+      "description": "CIDR; empty for DHCP"
+     },
+     "gateway": {
+      "type": "string"
+     },
+     "dns": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    }
+   },
+   "Task": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string"
+     },
+     "vm": {
+      "type": "string"
+     },
+     "from": {
+      "type": "string"
+     },
+     "to": {
+      "type": "string"
+     },
+     "started": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "status": {
+      "type": "string"
+     },
+     "done": {
+      "type": "boolean"
+     },
+     "failed": {
+      "type": "boolean"
+     }
+    }
+   },
+   "Snapshot": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "created": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "ready": {
+      "type": "boolean"
+     },
+     "auto": {
+      "type": "boolean"
+     }
+    }
+   }
+  }
+ }
+}

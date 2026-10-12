@@ -21,7 +21,12 @@ import (
 )
 
 func writeJSON(w http.ResponseWriter, v any) {
+	writeJSONCode(w, http.StatusOK, v)
+}
+
+func writeJSONCode(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(v)
 }
 

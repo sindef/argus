@@ -291,10 +291,6 @@ func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {
 			DNS:      fields(r.FormValue("dns")),
 		},
 	}
-	if err := validGuest(spec.Guest); err != nil {
-		flash(w, r, err)
-		return
-	}
 	err := intField(r, "cores", 1, 64, &spec.Cores)
 	if err == nil {
 		err = intField(r, "memory", 128, 262144, &spec.MemoryMiB)
@@ -302,11 +298,8 @@ func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		err = intField(r, "disk", 1, 4096, &spec.DiskGiB)
 	}
-	if err == nil && !validObject.MatchString(spec.Name) {
-		err = errors.New("invalid name")
-	}
-	if err == nil && spec.Network == "" {
-		err = errors.New("network required")
+	if err == nil {
+		err = checkVMSpec(spec)
 	}
 	if err == nil {
 		err = s.ops(r).CreateVM(r.Context(), createVMReq{Spec: spec, Pool: r.FormValue("pool")})
@@ -425,6 +418,22 @@ func (s *Server) eventsPage(w http.ResponseWriter, r *http.Request) {
 }
 
 var validHostname = regexp.MustCompile(`^[a-z0-9]([-a-z0-9.]{0,62}[a-z0-9])?$`)
+
+func checkVMSpec(spec kube.VMSpec) error {
+	switch {
+	case !validObject.MatchString(spec.Name):
+		return errors.New("invalid name")
+	case spec.Network == "":
+		return errors.New("network required")
+	case spec.Cores < 1 || spec.Cores > 64:
+		return errors.New("cores must be 1-64")
+	case spec.MemoryMiB < 128 || spec.MemoryMiB > 262144:
+		return errors.New("memory must be 128-262144 MiB")
+	case spec.DiskGiB < 1 || spec.DiskGiB > 4096:
+		return errors.New("disk must be 1-4096 GiB")
+	}
+	return validGuest(spec.Guest)
+}
 
 func validGuest(g kube.Guest) error {
 	switch {
