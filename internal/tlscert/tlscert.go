@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -34,7 +35,7 @@ type PKI struct {
 	CAPEM []byte
 }
 
-func Load(ctx context.Context, secrets Secrets, ips []net.IP) (PKI, error) {
+func Load(ctx context.Context, secrets Secrets, ips []net.IP, names ...string) (PKI, error) {
 	data, rv, err := secrets.Get(ctx, secretName)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return PKI{}, err
@@ -46,8 +47,8 @@ func Load(ctx context.Context, secrets Secrets, ips []net.IP) (PKI, error) {
 		}
 		data = map[string][]byte{"ca.crt": caCert, "ca.key": caKey}
 	}
-	if !covers(data["tls.crt"], ips) {
-		crt, key, err := newLeaf(data["ca.crt"], data["ca.key"], ips)
+	if !covers(data["tls.crt"], ips, names) {
+		crt, key, err := newLeaf(data["ca.crt"], data["ca.key"], ips, names)
 		if err != nil {
 			return PKI{}, err
 		}
@@ -74,7 +75,7 @@ func Fingerprint(certPEM []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func covers(certPEM []byte, ips []net.IP) bool {
+func covers(certPEM []byte, ips []net.IP, names []string) bool {
 	b, _ := pem.Decode(certPEM)
 	if b == nil {
 		return false
@@ -91,6 +92,11 @@ func covers(certPEM []byte, ips []net.IP) bool {
 			}
 		}
 		if !found {
+			return false
+		}
+	}
+	for _, n := range names {
+		if !slices.Contains(c.DNSNames, n) {
 			return false
 		}
 	}
@@ -114,7 +120,7 @@ func newCA() ([]byte, []byte, error) {
 	return encode(tmpl, tmpl, key, key)
 }
 
-func newLeaf(caPEM, caKeyPEM []byte, ips []net.IP) ([]byte, []byte, error) {
+func newLeaf(caPEM, caKeyPEM []byte, ips []net.IP, names []string) ([]byte, []byte, error) {
 	cb, _ := pem.Decode(caPEM)
 	kb, _ := pem.Decode(caKeyPEM)
 	if cb == nil || kb == nil {
@@ -139,7 +145,7 @@ func newLeaf(caPEM, caKeyPEM []byte, ips []net.IP) ([]byte, []byte, error) {
 		NotAfter:     time.Now().AddDate(10, 0, 0),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		DNSNames:     []string{"argus"},
+		DNSNames:     append([]string{"argus"}, names...),
 		IPAddresses:  append([]net.IP{net.ParseIP("127.0.0.1")}, ips...),
 	}
 	return encode(tmpl, ca, key, caKey)
@@ -164,17 +170,23 @@ func serial() *big.Int {
 }
 
 type Holder struct {
-	builtin tls.Certificate
+	builtin atomic.Pointer[tls.Certificate]
 	custom  atomic.Pointer[tls.Certificate]
 }
 
-func NewHolder(builtin tls.Certificate) *Holder { return &Holder{builtin: builtin} }
+func NewHolder(builtin tls.Certificate) *Holder {
+	h := &Holder{}
+	h.builtin.Store(&builtin)
+	return h
+}
+
+func (h *Holder) SetBuiltin(c tls.Certificate) { h.builtin.Store(&c) }
 
 func (h *Holder) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	if c := h.custom.Load(); c != nil && hello.ServerName != "" && hello.ServerName != InternalName {
 		return c, nil
 	}
-	return &h.builtin, nil
+	return h.builtin.Load(), nil
 }
 
 const InternalName = "argus"
