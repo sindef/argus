@@ -86,6 +86,7 @@ type hostOps interface {
 	Import(ctx context.Context, source, contentType string, body io.Reader) (string, error)
 	VCenterVMs(ctx context.Context, fields map[string]string) ([]vsphere.VM, error)
 	DownloadDisk(w http.ResponseWriter, r *http.Request, ns, name, disk string)
+	OVF(ctx context.Context, ns, name string) (string, error)
 }
 
 type opsKey struct{}
@@ -429,7 +430,11 @@ func (o remoteOps) VCenterVMs(ctx context.Context, fields map[string]string) ([]
 }
 
 func (o remoteOps) DownloadDisk(w http.ResponseWriter, r *http.Request, ns, name, disk string) {
-	resp, err := o.n.Open(r.Context(), http.MethodGet, manager.APIPath("/api/vms/%s/%s/disks/%s/download", ns, name, disk), nil, nil)
+	path := manager.APIPath("/api/vms/%s/%s/disks/%s/download", ns, name, disk)
+	if r.URL.Query().Get("format") == "vmdk" {
+		path += "?format=vmdk"
+	}
+	resp, err := o.n.Open(r.Context(), http.MethodGet, path, nil, nil)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
@@ -529,6 +534,15 @@ func (s *Server) hostAPIRoutes() {
 		"POST /api/vms/import/vcenter-vms": func(w http.ResponseWriter, r *http.Request) {
 			var fields map[string]string
 			s.apiOp(w, r, &fields, func() (any, error) { return l.VCenterVMs(r.Context(), fields) })
+		},
+		"GET /api/vms/{ns}/{name}/ovf": func(w http.ResponseWriter, r *http.Request) {
+			x, err := l.OVF(r.Context(), r.PathValue("ns"), r.PathValue("name"))
+			if err != nil {
+				apiError(w, r, http.StatusNotFound, err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/xml")
+			io.WriteString(w, x)
 		},
 		"GET /api/vms/{ns}/{name}/disks/{disk}/download": func(w http.ResponseWriter, r *http.Request) {
 			s.streamDisk(w, r, r.PathValue("ns"), r.PathValue("name"), r.PathValue("disk"))

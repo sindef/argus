@@ -116,11 +116,11 @@
   {{template "icon" "clock"}}<dt>Running for</dt><dd>{{if .Running}}{{since .Started}}{{else}}<span class="muted">—</span>{{end}}</dd>
 </dl>
 {{else if eq $.Tab "hardware"}}
-<h2>Disks</h2>
+<h2>Disks{{if $.CanOperate}} <a class="btn sm" href="/vms/{{.Namespace}}/{{.Name}}/export.ovf" title="OVF descriptor for VMware; download each disk as VMDK into the same folder">{{template "icon" "download"}}OVF</a>{{end}}</h2>
 <div class="table-wrap"><table>
   <thead><tr><th>Name</th><th>Pool</th><th>Source</th><th></th></tr></thead>
   <tbody>{{range .Disks}}<tr><td>{{.Name}}</td><td>{{index $.PoolOf .StorageClass}}</td><td class="clip">{{.Source}}</td>
-    <td class="row-actions">{{if $.CanOperate}}<button class="link" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/disks/{{.Name}}/download" hx-target="#flash">Download</button>{{end}}{{if and $.CanOperate (not $.VM.Running)}}<button class="link" data-dialog="move-disk" data-fill='{"disk":"{{.Name}}"}'>Move</button>{{if ne .Name "root"}}<button class="link danger" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/disks/{{.Name}}/delete" hx-target="#flash" hx-confirm="Remove {{.Name}}?">Remove</button>{{end}}{{end}}</td></tr>{{end}}</tbody>
+    <td class="row-actions">{{if $.CanOperate}}<button class="link" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/disks/{{.Name}}/download" hx-target="#flash">Download</button><button class="link" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/disks/{{.Name}}/download" hx-vals='{"format":"vmdk"}' hx-target="#flash">VMDK</button>{{end}}{{if and $.CanOperate (not $.VM.Running)}}<button class="link" data-dialog="move-disk" data-fill='{"disk":"{{.Name}}"}'>Move</button>{{if ne .Name "root"}}<button class="link danger" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/disks/{{.Name}}/delete" hx-target="#flash" hx-confirm="Remove {{.Name}}?">Remove</button>{{end}}{{end}}</td></tr>{{end}}</tbody>
 </table></div>
 {{if and $.CanOperate (not .Running)}}
 <button class="btn sm spaced" hx-get="/vms/{{.Namespace}}/{{.Name}}/disks/new" hx-target="#modal">{{template "icon" "plus"}}Add disk</button>

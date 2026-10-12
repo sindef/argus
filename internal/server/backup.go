@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -26,6 +27,7 @@ import (
 	"argus/internal/config"
 	"argus/internal/hostd"
 	"argus/internal/kube"
+	"argus/internal/vmdk"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -702,7 +704,7 @@ func (s *Server) downloadLink(w http.ResponseWriter, r *http.Request) {
 	s.backups.links[tok] = downloadGrant{path: path, expires: time.Now().Add(5 * time.Minute)}
 	s.backups.mu.Unlock()
 	base, _ := r.Context().Value(baseKey{}).(string)
-	w.Header().Set("HX-Redirect", base+"/vms/"+r.PathValue("ns")+"/"+r.PathValue("name")+"/disks/"+r.PathValue("disk")+"/download?t="+tok)
+	w.Header().Set("HX-Redirect", base+"/vms/"+r.PathValue("ns")+"/"+r.PathValue("name")+"/disks/"+r.PathValue("disk")+"/download?t="+tok+map[bool]string{true: "&format=vmdk"}[r.FormValue("format") == "vmdk"])
 }
 
 func (s *Server) downloadDisk(w http.ResponseWriter, r *http.Request) {
@@ -762,6 +764,24 @@ func (s *Server) streamDisk(w http.ResponseWriter, r *http.Request, ns, name, di
 		http.Error(w, "export returned "+resp.Status, http.StatusBadGateway)
 		return
 	}
+	if r.URL.Query().Get("format") == "vmdk" {
+		gz, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		file := fmt.Sprintf("%s-%s.vmdk", name, disk)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file))
+		cw := &countingWriter{w: w}
+		if err := vmdk.Write(cw, gz, hw.Disks[i].SizeGiB<<30, file); err != nil {
+			log.Printf("%s: vmdk export of %s/%s disk %s: %v", session(r).User, ns, name, disk, err)
+			panic(http.ErrAbortHandler)
+		}
+		copied = cw.n
+		log.Printf("%s: exported %s/%s disk %s as VMDK (%d bytes)", session(r).User, ns, name, disk, copied)
+		return
+	}
 	w.Header().Set("Content-Type", "application/gzip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-%s.img.gz"`, name, disk))
 	if v := resp.Header.Get("Content-Length"); v != "" {
@@ -781,4 +801,15 @@ func openExport(ctx context.Context, src, ca, token string) (*http.Response, err
 	}
 	req.Header.Set("x-kubevirt-export-token", token)
 	return hc.Do(req)
+}
+
+type countingWriter struct {
+	w io.Writer
+	n int64
+}
+
+func (c *countingWriter) Write(p []byte) (int, error) {
+	n, err := c.w.Write(p)
+	c.n += int64(n)
+	return n, err
 }

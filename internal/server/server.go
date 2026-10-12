@@ -380,6 +380,7 @@ var hostRoutes = []hostRouteDef{
 	{"POST /vms/{ns}/{name}/hardware/{op}", auth.Operator, (*Server).hardwareAction},
 	{"POST /vms/{ns}/{name}/disks/{disk}/download", auth.Operator, (*Server).downloadLink},
 	{"GET /vms/{ns}/{name}/disks/{disk}/download", auth.Operator, (*Server).downloadDisk},
+	{"GET /vms/{ns}/{name}/export.ovf", auth.Operator, (*Server).exportOVF},
 }
 
 func (s *Server) hostRoute(pattern string, min auth.Role, h http.HandlerFunc) {
