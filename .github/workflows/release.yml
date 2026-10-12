@@ -12,7 +12,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
   prepare:
     needs: checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
@@ -49,7 +49,7 @@ jobs:
       matrix:
         include:
           - arch: amd64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
           - arch: arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
@@ -116,7 +116,7 @@ jobs:
           cosign sign --yes "$REGISTRY/argus-os@$(jq -r '."containerimage.digest"' os.json)"
   release:
     needs: os
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
       packages: write

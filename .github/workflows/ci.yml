@@ -8,7 +8,7 @@ permissions:
   contents: read
 jobs:
   secrets:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
@@ -26,7 +26,7 @@ jobs:
           "$RUNNER_TEMP/trufflehog" git "file://$PWD" \
             --no-verification --no-update --fail --fail-on-scan-errors --github-actions
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -43,7 +43,7 @@ jobs:
   images:
     strategy:
       matrix:
-        runner: [ubuntu-latest, ubuntu-24.04-arm]
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
     runs-on: ${{ matrix.runner }}
     needs: [check, secrets]
     steps:
