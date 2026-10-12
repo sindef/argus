@@ -3,8 +3,10 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 
 	"argus/internal/manager"
@@ -18,6 +20,7 @@ var groupTitles = map[string]string{
 	"move-host":         "Move host",
 	"enter-maintenance": "Enter maintenance",
 	"rolling-update":    "Rolling update",
+	"cluster-settings":  "Cluster settings",
 }
 
 func (s *Server) groupNames(r *http.Request) ([]string, []string) {
@@ -48,6 +51,10 @@ func (s *Server) groupModal(w http.ResponseWriter, r *http.Request) {
 		data["Title"] = title + ": " + r.FormValue("host")
 	case "rolling-update":
 		data["Title"] = title + ": " + r.FormValue("cluster")
+	case "cluster-settings":
+		data["Title"] = title + ": " + r.FormValue("cluster")
+		data["Settings"], _ = s.manager.ClusterSettings(r.Context(), session(r).Org, r.FormValue("dc"), r.FormValue("cluster"))
+		data["CPUModels"] = s.manager.CommonCPUModels(session(r).Org, r.FormValue("dc"), r.FormValue("cluster"))
 	}
 	s.render(w, r, "manager.html", "group-modal", data)
 }
@@ -77,6 +84,8 @@ func (s *Server) groupAction(w http.ResponseWriter, r *http.Request) {
 		err = s.manager.EnterMaintenance(org, r.FormValue("host"), r.FormValue("shutdown") != "")
 	case "exit-maintenance":
 		err = s.manager.ExitMaintenance(org, r.FormValue("host"))
+	case "cluster-settings":
+		err = s.saveClusterSettings(r, dc, cl)
 	case "rolling-update":
 		img := strings.TrimSpace(r.FormValue("image"))
 		if img != "" && !validImage.MatchString(img) {
@@ -133,4 +142,17 @@ func (s *Server) applyClusterNetworks(r *http.Request, dc, cl string) error {
 		return errors.New(errs)
 	}
 	return nil
+}
+
+func (s *Server) saveClusterSettings(r *http.Request, dc, cl string) error {
+	org := session(r).Org
+	st, err := s.manager.ClusterSettings(r.Context(), org, dc, cl)
+	if err != nil {
+		return err
+	}
+	st.CPUModel = r.FormValue("cpu_model")
+	if st.CPUModel != "" && !slices.Contains(s.manager.CommonCPUModels(org, dc, cl), st.CPUModel) {
+		return fmt.Errorf("not every host in %s can run %s", cl, st.CPUModel)
+	}
+	return s.manager.SetClusterSettings(r.Context(), org, dc, cl, st)
 }

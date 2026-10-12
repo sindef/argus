@@ -151,4 +151,5 @@ type NodeInfo struct {
 	Arch          string    `json:"arch,omitempty"`
 	MemoryBytes   int64     `json:"memoryBytes"`
 	BootTime      time.Time `json:"bootTime"`
+	CPU           CPUInfo   `json:"cpu"`
 }

@@ -44,7 +44,8 @@ func (s *Server) apiNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mem, _ := memInfo()
-	writeJSON(w, kube.NodeInfo{Name: s.nodeName, Version: s.version, CAFingerprint: tlscert.Fingerprint(s.caPEM), RunningVMs: n, CPUCores: int64(runtime.NumCPU()), Arch: runtime.GOARCH, MemoryBytes: mem, BootTime: bootTime()})
+	cpu, _ := s.kube.CPUInfo(r.Context())
+	writeJSON(w, kube.NodeInfo{Name: s.nodeName, Version: s.version, CAFingerprint: tlscert.Fingerprint(s.caPEM), RunningVMs: n, CPUCores: int64(runtime.NumCPU()), Arch: runtime.GOARCH, MemoryBytes: mem, BootTime: bootTime(), CPU: cpu})
 }
 
 func bootTime() time.Time {

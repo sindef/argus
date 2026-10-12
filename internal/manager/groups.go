@@ -14,9 +14,14 @@ import (
 )
 
 type Group struct {
-	Datacenter string             `json:"datacenter"`
-	Clusters   []string           `json:"clusters"`
-	Profiles   map[string]Profile `json:"profiles,omitempty"`
+	Datacenter string                     `json:"datacenter"`
+	Clusters   []string                   `json:"clusters"`
+	Profiles   map[string]Profile         `json:"profiles,omitempty"`
+	Settings   map[string]ClusterSettings `json:"settings,omitempty"`
+}
+
+type ClusterSettings struct {
+	CPUModel string `json:"cpuModel,omitempty"`
 }
 
 type Profile struct {
@@ -179,6 +184,10 @@ func (c *Manager) RenameCluster(ctx context.Context, org, dc, cl, name string) e
 			delete(gs[i].Profiles, cl)
 			gs[i].Profiles[name] = p
 		}
+		if st, ok := gs[i].Settings[cl]; ok {
+			delete(gs[i].Settings, cl)
+			gs[i].Settings[name] = st
+		}
 		for j := range nodes {
 			if nodes[j].Org == org && nodes[j].Datacenter == dc && nodes[j].Cluster == cl {
 				nodes[j].Cluster = name
@@ -204,6 +213,7 @@ func (c *Manager) DeleteGroup(ctx context.Context, org, dc, cl string) error {
 		}
 		gs[i].Clusters = slices.DeleteFunc(gs[i].Clusters, func(x string) bool { return x == cl })
 		delete(gs[i].Profiles, cl)
+		delete(gs[i].Settings, cl)
 		return gs, nil
 	})
 }
@@ -256,4 +266,45 @@ func (c *Manager) SetProfile(ctx context.Context, org, dc, cl string, p Profile)
 		gs[i].Profiles[cl] = p
 		return gs, nil
 	})
+}
+
+func (c *Manager) ClusterSettings(ctx context.Context, org, dc, cl string) (ClusterSettings, error) {
+	gs, err := c.Groups(ctx, org)
+	if err != nil {
+		return ClusterSettings{}, err
+	}
+	if i := findDC(gs, dc); i >= 0 {
+		return gs[i].Settings[cl], nil
+	}
+	return ClusterSettings{}, nil
+}
+
+func (c *Manager) SetClusterSettings(ctx context.Context, org, dc, cl string, st ClusterSettings) error {
+	return c.updateGroups(ctx, org, func(gs []Group, _ []Node) ([]Group, error) {
+		i := findDC(gs, dc)
+		if i < 0 || !slices.Contains(gs[i].Clusters, cl) {
+			return nil, fmt.Errorf("cluster %s not found in %s", cl, dc)
+		}
+		if gs[i].Settings == nil {
+			gs[i].Settings = map[string]ClusterSettings{}
+		}
+		gs[i].Settings[cl] = st
+		return gs, nil
+	})
+}
+
+func (c *Manager) CommonCPUModels(org, dc, cl string) []string {
+	var common []string
+	first := true
+	for _, st := range c.Inventory(org) {
+		if st.Node.Datacenter != dc || st.Node.Cluster != cl || !st.Reachable() {
+			continue
+		}
+		if first {
+			common, first = slices.Clone(st.Info.CPU.Models), false
+			continue
+		}
+		common = slices.DeleteFunc(common, func(m string) bool { return !slices.Contains(st.Info.CPU.Models, m) })
+	}
+	return common
 }

@@ -3,6 +3,8 @@ package manager
 import (
 	"context"
 	"math/rand"
+	"net/http"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -117,6 +119,7 @@ func (m *Manager) poll(ctx context.Context, n Node) {
 		st.Error = err.Error()
 	} else {
 		st.Info, st.VMs, st.Error, st.Observed = info, vms, "", time.Now()
+		m.alignCPU(ctx, n, &st.Info)
 		var sample kube.MetricsSample
 		if n.Call(ctx, "GET", "/api/metrics", nil, &sample) == nil {
 			m.tel.record(n.Name, info.CPUCores, sample)
@@ -125,4 +128,18 @@ func (m *Manager) poll(ctx context.Context, n Node) {
 	m.inv.mu.Lock()
 	m.inv.nodes[n.Name] = st
 	m.inv.mu.Unlock()
+}
+
+func (m *Manager) alignCPU(ctx context.Context, n Node, info *kube.NodeInfo) {
+	if n.Datacenter == "" || n.Cluster == "" {
+		return
+	}
+	cs, err := m.ClusterSettings(ctx, n.Org, n.Datacenter, n.Cluster)
+	want := cs.CPUModel
+	if err != nil || info.CPU.Baseline == want || want != "" && !slices.Contains(info.CPU.Models, want) {
+		return
+	}
+	if n.Call(ctx, http.MethodPost, "/api/host/cpu-baseline", map[string]string{"model": want}, nil) == nil {
+		info.CPU.Baseline = want
+	}
 }

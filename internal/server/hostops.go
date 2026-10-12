@@ -483,6 +483,12 @@ func (s *Server) hostAPIRoutes() {
 			}
 			s.apiOp(w, r, in, func() (any, error) { return nil, l.NetworkOp(accessCtx(r), r.PathValue("op"), req) })
 		},
+		"POST /api/host/cpu-baseline": func(w http.ResponseWriter, r *http.Request) {
+			var req struct {
+				Model string `json:"model"`
+			}
+			s.apiOp(w, r, &req, func() (any, error) { return nil, s.kube.SetCPUBaseline(r.Context(), req.Model) })
+		},
 		"GET /api/host/vm-form": func(w http.ResponseWriter, r *http.Request) {
 			s.apiOp(w, r, nil, func() (any, error) { return l.VMForm(r.Context()) })
 		},
