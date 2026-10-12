@@ -571,6 +571,16 @@ func (s *Server) managerAddNode(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/hosts", http.StatusSeeOther)
 }
 
+func (s *Server) managerNodeAccess(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("node")
+	if err := s.manager.UpdateNodeAccess(r.Context(), session(r).Org, name, strings.TrimSpace(r.FormValue("url")), strings.TrimSpace(r.FormValue("token")), r.FormValue("fingerprint")); err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: updated connection for host %s", session(r).User, name)
+	w.Header().Set("HX-Refresh", "true")
+}
+
 func (s *Server) managerRemoveNode(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("node")
 	if err := s.manager.RemoveNode(r.Context(), session(r).Org, name); err != nil {

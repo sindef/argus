@@ -158,6 +158,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("GET /groups/modal/{op}", s.requireOrg(auth.Admin, s.groupModal))
 		s.mux.HandleFunc("POST /groups/{op}", s.requireOrg(auth.Admin, s.groupAction))
 		s.mux.HandleFunc("POST /hosts/{node}/delete", s.requireOrg(auth.Admin, s.managerRemoveNode))
+		s.mux.HandleFunc("POST /hosts/{node}/access", s.requireOrg(auth.Admin, s.managerNodeAccess))
 		s.mux.HandleFunc("GET /hosts/{node}/{path...}", s.require(auth.ReadOnly, s.managerHostUI))
 		s.mux.HandleFunc("POST /hosts/{node}/{path...}", s.require(auth.ReadOnly, s.managerHostUI))
 		s.mux.HandleFunc("GET /network/hosts", s.requireOrg(auth.Admin, s.managerHostNets))

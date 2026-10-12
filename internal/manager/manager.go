@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -151,6 +152,42 @@ func (c *Manager) AddNode(ctx context.Context, org, name, url, token, fingerprin
 		return err
 	}
 	return c.PushMigrationNetwork(ctx)
+}
+
+func (c *Manager) UpdateNodeAccess(ctx context.Context, org, name, url, token, fingerprint string) error {
+	url = strings.TrimRight(url, "/")
+	ca, err := fetchCA(ctx, url)
+	if err != nil {
+		return err
+	}
+	if got := tlscert.Fingerprint(ca); !strings.EqualFold(got, strings.ReplaceAll(strings.TrimSpace(fingerprint), ":", "")) {
+		return fmt.Errorf("CA fingerprint mismatch: node presents %s", got)
+	}
+	ns, rv, err := c.load(ctx)
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(ns, func(n Node) bool { return n.Name == name && n.Org == org })
+	if i < 0 {
+		return fmt.Errorf("node %s not found", name)
+	}
+	if slices.ContainsFunc(ns, func(n Node) bool { return n.Name != name && n.URL == url }) {
+		return errors.New("another node uses this address")
+	}
+	n := ns[i]
+	n.URL, n.CA = url, string(ca)
+	if token != "" {
+		n.Token = token
+	}
+	if _, err := n.Info(ctx); err != nil {
+		return err
+	}
+	ns[i] = n
+	if err := c.save(ctx, ns, rv); err != nil {
+		return err
+	}
+	go c.Refresh(name)
+	return nil
 }
 
 func (c *Manager) RemoveNode(ctx context.Context, org, name string) error {

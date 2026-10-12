@@ -2,9 +2,11 @@
 <div class="page-head">
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-server"/></svg>
   <h1>Hosts</h1>
-  {{if .OrgAdmin}}<div class="actions"><button class="btn primary" data-dialog="add-host">{{template "icon" "plus"}}Add host</button></div>{{end}}
 </div>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
+<div class="panes wide">
+<section class="pane" id="s-hosts" data-icon="server">
+  <header><h2>Hosts</h2>{{if .OrgAdmin}}<div class="actions"><button class="btn primary" data-dialog="add-host">{{template "icon" "plus"}}Add host</button></div>{{end}}</header>
 <div class="table-wrap">
 <table>
   <thead><tr><th>Name</th><th>Datacenter</th><th>Cluster</th><th>Address</th><th>Version</th><th>VMs</th><th>Migration IPs</th><th>Status</th><th></th></tr></thead>
@@ -21,6 +23,7 @@
       <div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
         <div class="menu-list" hidden>
           <button hx-get="/groups/modal/move-host?host={{.Node.Name}}&dc={{.Node.Datacenter}}&cluster={{.Node.Cluster}}" hx-target="#modal">{{template "icon" "arrow-right-left"}}Move to…</button>
+          <button data-dialog="host-access" data-fill='{"action":"/hosts/{{.Node.Name}}/access","url":"{{.Node.URL}}"}'>{{template "icon" "key-round"}}Edit connection…</button>
           <hr>
           <form method="post" action="/hosts/{{.Node.Name}}/delete" data-confirm="Remove {{.Node.Name}}?"><button type="submit" class="danger">{{template "icon" "trash-2"}}Remove</button></form>
         </div>
@@ -29,7 +32,19 @@
   </tr>{{else}}<tr><td colspan="9" class="muted">No hosts registered.</td></tr>{{end}}</tbody>
 </table>
 </div>
+</section>
+</div>
 {{if .OrgAdmin}}
+<dialog id="host-access" class="card">
+  <form hx-post="" hx-target="#access-error" hx-disabled-elt="find button[type=submit]" class="form">
+    <h2>Edit connection</h2>
+    <p id="access-error" class="error form-error"></p>
+    <label>Address <input name="url" type="url" required></label>
+    <label>API token <span class="help" title="Leave empty to keep the current token.">?</span><input name="token" autocomplete="off"></label>
+    <label>CA fingerprint <span class="help" title="Shown on the host under Settings → Host → Manager access">?</span><input name="fingerprint" required autocomplete="off"></label>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Test and save</button></div>
+  </form>
+</dialog>
 <dialog id="add-host" class="card">
   <form method="post" action="/hosts" class="form">
     <h2>Add host</h2>
