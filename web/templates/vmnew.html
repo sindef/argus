@@ -31,7 +31,28 @@
     </label>
   </div>
   <details>
-    <summary>Guest customisation <span class="help" title="Applied by cloud-init on first boot. Needs a cloud-init enabled image.">?</span></summary>
+    <summary>Guest customisation <span class="help" title="Applied on first boot by cloud-init (Linux) or sysprep (Windows). The image must support it; Windows images must be generalised.">?</span></summary>
+    <div class="addr-head spaced"><span class="field">OS</span><div class="seg">
+      <label><input type="radio" name="os" value="linux" checked> Linux</label><label><input type="radio" name="os" value="windows"> Windows</label>
+    </div></div>
+    <div class="guest-windows">
+    <div class="row">
+      <label>Computer name <input name="computer_name" maxlength="15" placeholder="WEB01"></label>
+      <label>Administrator password <input name="admin_password" type="password" autocomplete="new-password"></label>
+      <label>Time zone <input name="time_zone" placeholder="UTC"></label>
+    </div>
+    <div class="row">
+      <label>Domain <input name="domain" placeholder="corp.example.com"></label>
+      <label>Join as <input name="domain_user" placeholder="CORP\joiner"></label>
+      <label>Password <input name="domain_password" type="password" autocomplete="new-password"></label>
+    </div>
+    <div class="row">
+      <label>Product key <input name="product_key" placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX"></label>
+      <label class="check"><input name="virtio" type="checkbox"> VirtIO drivers in image <span class="help" title="Unchecked uses SATA disks and an e1000e NIC.">?</span></label>
+    </div>
+    <label>Commands <span class="help" title="Run in order during the specialize pass.">?</span><textarea name="commands" rows="2" placeholder="one per line"></textarea></label>
+    </div>
+    <div class="guest-linux">
     <div class="row spaced">
       <label>Hostname <input name="hostname" placeholder="web-01"></label>
       <label>User <input name="user" placeholder="admin"></label>
@@ -45,6 +66,7 @@
       <label>Address (CIDR) <input name="address" placeholder="192.168.1.20/24"></label>
       <label>Gateway <input name="gateway" placeholder="192.168.1.1"></label>
       <label>DNS <input name="dns" placeholder="1.1.1.1, 9.9.9.9"></label>
+    </div>
     </div>
   </details>
   <details>

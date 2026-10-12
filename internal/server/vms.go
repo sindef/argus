@@ -291,6 +291,20 @@ func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {
 			DNS:      fields(r.FormValue("dns")),
 		},
 	}
+	if r.FormValue("os") == "windows" {
+		spec.Guest = kube.Guest{}
+		spec.Windows = &kube.WindowsGuest{
+			ComputerName:   strings.TrimSpace(r.FormValue("computer_name")),
+			AdminPassword:  r.FormValue("admin_password"),
+			TimeZone:       strings.TrimSpace(r.FormValue("time_zone")),
+			ProductKey:     strings.TrimSpace(r.FormValue("product_key")),
+			Domain:         strings.TrimSpace(r.FormValue("domain")),
+			DomainUser:     strings.TrimSpace(r.FormValue("domain_user")),
+			DomainPassword: r.FormValue("domain_password"),
+			Commands:       slices.DeleteFunc(strings.Split(strings.ReplaceAll(r.FormValue("commands"), "\r", ""), "\n"), func(c string) bool { return strings.TrimSpace(c) == "" }),
+			VirtIO:         r.FormValue("virtio") != "",
+		}
+	}
 	err := intField(r, "cores", 1, 64, &spec.Cores)
 	if err == nil {
 		err = intField(r, "memory", 128, 262144, &spec.MemoryMiB)
@@ -431,6 +445,9 @@ func checkVMSpec(spec kube.VMSpec) error {
 		return errors.New("memory must be 128-262144 MiB")
 	case spec.DiskGiB < 1 || spec.DiskGiB > 4096:
 		return errors.New("disk must be 1-4096 GiB")
+	}
+	if spec.Windows != nil {
+		return spec.Windows.Validate()
 	}
 	return validGuest(spec.Guest)
 }

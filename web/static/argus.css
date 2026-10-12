@@ -273,6 +273,7 @@ h1 .dot { font-size: 14px; font-weight: 400; }
 .addr-form:not(:has(input[name=ipv6][value=static]:checked)) .v6-static { display: none; }
 .addr-head { display: flex; align-items: center; gap: 12px; }
 .vm-form:not(:has(input[name=ipmode][value=static]:checked)) .guest-static { display: none; }
+.vm-form:has(input[name=os][value=windows]:checked) .guest-linux, .vm-form:not(:has(input[name=os][value=windows]:checked)) .guest-windows { display: none; }
 .library-form:has(input[name=via][value=file]:checked) .via-url, .library-form:has(input[name=via][value=url]:checked) .via-file,
 .import-modal:not(:has(input[name=isrc][value=ova]:checked)) .import-ova, .import-modal:not(:has(input[name=isrc][value=esxi]:checked)) .import-esxi, .import-modal:not(:has(input[name=isrc][value=vcenter]:checked)) .import-vcenter { display: none; }
 .addr-head .field { width: 48px; }

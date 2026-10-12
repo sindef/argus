@@ -32,6 +32,7 @@ type VMSpec struct {
 	Start        bool
 	StorageClass string
 	Guest        Guest
+	Windows      *WindowsGuest
 }
 
 type Guest struct {
@@ -119,6 +120,22 @@ func (c *Client) CreateVM(ctx context.Context, s VMSpec) error {
 	if userData == "" {
 		userData = s.Guest.userData()
 	}
+	bus, model := "virtio", "virtio"
+	if s.Windows != nil {
+		if err := s.Windows.Validate(); err != nil {
+			return err
+		}
+		if !s.Windows.VirtIO {
+			bus, model = "sata", "e1000e"
+			disks[0].(obj)["disk"] = obj{"bus": bus}
+		}
+		userData, networkData = "", ""
+		if err := c.Secrets(Namespace).Create(ctx, s.Name+"-sysprep", "Opaque", map[string][]byte{"unattend.xml": []byte(s.Windows.Unattend())}); err != nil {
+			return err
+		}
+		disks = append(disks, obj{"name": "sysprep", "cdrom": obj{"bus": cdromBus()}})
+		volumes = append(volumes, obj{"name": "sysprep", "sysprep": obj{"secret": obj{"name": s.Name + "-sysprep"}}})
+	}
 	if userData != "" || networkData != "" {
 		ci := obj{"userData": userData}
 		if userData == "" {
@@ -156,7 +173,7 @@ func (c *Client) CreateVM(ctx context.Context, s VMSpec) error {
 						"devices": obj{
 							"autoattachPodInterface": false,
 							"disks":                  disks,
-							"interfaces":             []interface{}{obj{"name": "nic0", "model": "virtio", "bridge": obj{}, "macAddress": mac}},
+							"interfaces":             []interface{}{obj{"name": "nic0", "model": model, "bridge": obj{}, "macAddress": mac}},
 						},
 					},
 					"networks": []interface{}{obj{"name": "nic0", "multus": obj{"networkName": s.Network}}},
@@ -165,7 +182,16 @@ func (c *Client) CreateVM(ctx context.Context, s VMSpec) error {
 			},
 		},
 	}}
-	_, err := c.dyn.Resource(vmGVR).Namespace(Namespace).Create(ctx, vm, metav1.CreateOptions{})
+	created, err := c.dyn.Resource(vmGVR).Namespace(Namespace).Create(ctx, vm, metav1.CreateOptions{})
+	if s.Windows == nil {
+		return err
+	}
+	if err != nil {
+		c.dyn.Resource(secGVR).Namespace(Namespace).Delete(ctx, s.Name+"-sysprep", metav1.DeleteOptions{})
+		return err
+	}
+	owner, _ := json.Marshal(obj{"metadata": obj{"ownerReferences": []any{obj{"apiVersion": "kubevirt.io/v1", "kind": "VirtualMachine", "name": s.Name, "uid": string(created.GetUID())}}}})
+	_, err = c.dyn.Resource(secGVR).Namespace(Namespace).Patch(ctx, s.Name+"-sysprep", types.MergePatchType, owner, metav1.PatchOptions{})
 	return err
 }
 

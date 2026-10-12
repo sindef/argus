@@ -49,23 +49,36 @@ func toV1VM(host string, v kube.VM) v1VM {
 }
 
 type v1NewVM struct {
-	Name      string   `json:"name"`
-	Cores     int      `json:"cores"`
-	MemoryMiB int      `json:"memoryMiB"`
-	DiskGiB   int      `json:"diskGiB"`
-	Image     string   `json:"image"`
-	CDROM     string   `json:"cdrom"`
-	Network   string   `json:"network"`
-	Pool      string   `json:"pool"`
-	Start     bool     `json:"start"`
-	UserData  string   `json:"userData"`
-	Hostname  string   `json:"hostname"`
-	User      string   `json:"user"`
-	SSHKeys   []string `json:"sshKeys"`
-	Password  string   `json:"password"`
-	Address   string   `json:"address"`
-	Gateway   string   `json:"gateway"`
-	DNS       []string `json:"dns"`
+	Name      string     `json:"name"`
+	Cores     int        `json:"cores"`
+	MemoryMiB int        `json:"memoryMiB"`
+	DiskGiB   int        `json:"diskGiB"`
+	Image     string     `json:"image"`
+	CDROM     string     `json:"cdrom"`
+	Network   string     `json:"network"`
+	Pool      string     `json:"pool"`
+	Start     bool       `json:"start"`
+	UserData  string     `json:"userData"`
+	Hostname  string     `json:"hostname"`
+	User      string     `json:"user"`
+	SSHKeys   []string   `json:"sshKeys"`
+	Password  string     `json:"password"`
+	Address   string     `json:"address"`
+	Gateway   string     `json:"gateway"`
+	DNS       []string   `json:"dns"`
+	Windows   *v1Windows `json:"windows,omitempty"`
+}
+
+type v1Windows struct {
+	ComputerName   string   `json:"computerName"`
+	AdminPassword  string   `json:"adminPassword"`
+	TimeZone       string   `json:"timeZone"`
+	ProductKey     string   `json:"productKey"`
+	Domain         string   `json:"domain"`
+	DomainUser     string   `json:"domainUser"`
+	DomainPassword string   `json:"domainPassword"`
+	Commands       []string `json:"commands"`
+	VirtIO         bool     `json:"virtio"`
 }
 
 type v1Task struct {
@@ -266,6 +279,10 @@ func (s *Server) v1CreateVM(w http.ResponseWriter, r *http.Request) {
 		UserData: req.UserData, Start: req.Start, Guest: kube.Guest{Hostname: strings.TrimSpace(req.Hostname), User: strings.TrimSpace(req.User),
 			SSHKeys: slices.DeleteFunc(req.SSHKeys, func(k string) bool { return strings.TrimSpace(k) == "" }), Password: req.Password,
 			Address: req.Address, Gateway: req.Gateway, DNS: req.DNS}}
+	if w := req.Windows; w != nil {
+		spec.Windows = &kube.WindowsGuest{ComputerName: w.ComputerName, AdminPassword: w.AdminPassword, TimeZone: w.TimeZone, ProductKey: w.ProductKey,
+			Domain: w.Domain, DomainUser: w.DomainUser, DomainPassword: w.DomainPassword, Commands: w.Commands, VirtIO: w.VirtIO}
+	}
 	if err := checkVMSpec(spec); err != nil {
 		apiError(w, r, http.StatusBadRequest, err)
 		return

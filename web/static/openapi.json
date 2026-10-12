@@ -1002,6 +1002,49 @@
       "items": {
        "type": "string"
       }
+     },
+     "windows": {
+      "type": "object",
+      "description": "Sysprep customisation for a generalised Windows image; replaces the cloud-init fields",
+      "required": [
+       "computerName",
+       "adminPassword"
+      ],
+      "properties": {
+       "computerName": {
+        "type": "string",
+        "maxLength": 15
+       },
+       "adminPassword": {
+        "type": "string"
+       },
+       "timeZone": {
+        "type": "string",
+        "description": "Windows time zone ID, default UTC"
+       },
+       "productKey": {
+        "type": "string"
+       },
+       "domain": {
+        "type": "string"
+       },
+       "domainUser": {
+        "type": "string"
+       },
+       "domainPassword": {
+        "type": "string"
+       },
+       "commands": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       "virtio": {
+        "type": "boolean",
+        "description": "Image has VirtIO drivers; otherwise SATA and e1000e are used"
+       }
+      }
      }
     }
    },
