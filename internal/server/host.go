@@ -192,9 +192,9 @@ func (s *Server) createToken(w http.ResponseWriter, r *http.Request) {
 		s.renderHost(w, r, "", errors.New("invalid token name"))
 		return
 	}
-	scope := ""
-	if r.FormValue("scope") == auth.MetricsScope {
-		scope = auth.MetricsScope
+	scope := r.FormValue("scope")
+	if scope != auth.MetricsScope && scope != auth.ReadScope {
+		scope = ""
 	}
 	tok, err := s.auth.CreateToken(r.Context(), name, scope)
 	if err != nil {
@@ -386,5 +386,35 @@ func (s *Server) apiBackupTargetOp(w http.ResponseWriter, r *http.Request) {
 		apiError(w, r, http.StatusConflict, err)
 		return
 	}
+	writeJSON(w, map[string]string{})
+}
+
+func (s *Server) apiRotateToken(w http.ResponseWriter, r *http.Request) {
+	caller := strings.TrimPrefix(session(r).User, "token:")
+	base := strings.TrimRight(strings.TrimRight(caller, "0123456789"), "-")
+	if base == "" {
+		base = "manager"
+	}
+	name := base + "-" + time.Now().UTC().Format("20060102150405")
+	tok, err := s.auth.CreateToken(r.Context(), name, "")
+	if err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	log.Printf("%s: rotated API token to %s", session(r).User, name)
+	writeJSON(w, map[string]string{"name": name, "token": tok, "old": caller})
+}
+
+func (s *Server) apiRetireToken(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Name string }
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" || "token:"+req.Name == session(r).User {
+		apiError(w, r, http.StatusBadRequest, errors.New("name of another token required"))
+		return
+	}
+	if err := s.auth.DeleteToken(r.Context(), req.Name); err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	log.Printf("%s: retired API token %s", session(r).User, req.Name)
 	writeJSON(w, map[string]string{})
 }

@@ -190,6 +190,33 @@ func (c *Manager) UpdateNodeAccess(ctx context.Context, org, name, url, token, f
 	return nil
 }
 
+func (c *Manager) RotateToken(ctx context.Context, org, name string) error {
+	ns, rv, err := c.load(ctx)
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(ns, func(n Node) bool { return n.Name == name && n.Org == org })
+	if i < 0 {
+		return fmt.Errorf("node %s not found", name)
+	}
+	var out struct{ Name, Token, Old string }
+	if err := ns[i].do(ctx, http.MethodPost, "/api/tokens/rotate", nil, &out); err != nil {
+		return err
+	}
+	ns[i].Token = out.Token
+	if _, err := ns[i].Info(ctx); err != nil {
+		return fmt.Errorf("new token did not work, old token kept: %w", err)
+	}
+	if err := c.save(ctx, ns, rv); err != nil {
+		return err
+	}
+	go c.Refresh(name)
+	if err := ns[i].do(ctx, http.MethodPost, "/api/tokens/retire", map[string]string{"name": out.Old}, nil); err != nil {
+		return fmt.Errorf("new token saved, but the old token %s is still valid on %s: %w", out.Old, name, err)
+	}
+	return nil
+}
+
 func (c *Manager) RemoveNode(ctx context.Context, org, name string) error {
 	ns, rv, err := c.load(ctx)
 	if err != nil {

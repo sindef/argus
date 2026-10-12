@@ -24,6 +24,7 @@
         <div class="menu-list" hidden>
           <button hx-get="/groups/modal/move-host?host={{.Node.Name}}&dc={{.Node.Datacenter}}&cluster={{.Node.Cluster}}" hx-target="#modal">{{template "icon" "arrow-right-left"}}Move to…</button>
           <button data-dialog="host-access" data-fill='{"action":"/hosts/{{.Node.Name}}/access","url":"{{.Node.URL}}"}'>{{template "icon" "key-round"}}Edit connection…</button>
+          <button hx-post="/hosts/{{.Node.Name}}/rotate-token" hx-target="#flash" hx-confirm="Rotate the API token for {{.Node.Name}}? A new token is issued and the old one revoked.">{{template "icon" "refresh-cw"}}Rotate token</button>
           <hr>
           <form method="post" action="/hosts/{{.Node.Name}}/delete" data-confirm="Remove {{.Node.Name}}?"><button type="submit" class="danger">{{template "icon" "trash-2"}}Remove</button></form>
         </div>

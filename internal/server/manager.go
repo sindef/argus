@@ -590,6 +590,16 @@ func (s *Server) managerNodeAccess(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("HX-Refresh", "true")
 }
 
+func (s *Server) managerRotateToken(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("node")
+	if err := s.manager.RotateToken(r.Context(), session(r).Org, name); err != nil {
+		flash(w, r, err)
+		return
+	}
+	log.Printf("%s: rotated the API token for host %s", session(r).User, name)
+	w.Header().Set("HX-Refresh", "true")
+}
+
 func (s *Server) managerRemoveNode(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("node")
 	if err := s.manager.RemoveNode(r.Context(), session(r).Org, name); err != nil {

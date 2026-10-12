@@ -163,6 +163,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.mux.HandleFunc("POST /groups/{op}", s.requireOrg(auth.Admin, s.groupAction))
 		s.mux.HandleFunc("POST /hosts/{node}/delete", s.requireOrg(auth.Admin, s.managerRemoveNode))
 		s.mux.HandleFunc("POST /hosts/{node}/access", s.requireOrg(auth.Admin, s.managerNodeAccess))
+		s.mux.HandleFunc("POST /hosts/{node}/rotate-token", s.requireOrg(auth.Admin, s.managerRotateToken))
 		s.mux.HandleFunc("GET /hosts/{node}/{path...}", s.require(auth.ReadOnly, s.managerHostUI))
 		s.mux.HandleFunc("POST /hosts/{node}/{path...}", s.require(auth.ReadOnly, s.managerHostUI))
 		s.mux.HandleFunc("GET /network/hosts", s.requireOrg(auth.Admin, s.managerHostNets))
@@ -222,6 +223,8 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("GET /api/host/settings", s.require(auth.Admin, s.apiHostSettings))
 	s.mux.HandleFunc("POST /api/host/settings", s.require(auth.Admin, s.apiApplyHostSettings))
 	s.mux.HandleFunc("GET /api/host/backup-targets", s.require(auth.Admin, s.apiBackupTargets))
+	s.mux.HandleFunc("POST /api/tokens/rotate", s.require(auth.Admin, s.apiRotateToken))
+	s.mux.HandleFunc("POST /api/tokens/retire", s.require(auth.Admin, s.apiRetireToken))
 	s.mux.HandleFunc("POST /api/host/backup-targets/{op}", s.require(auth.Admin, s.apiBackupTargetOp))
 	s.mux.HandleFunc("POST /api/host/power/{action}", s.require(auth.Admin, s.apiHostRequest))
 	s.mux.HandleFunc("POST /api/host/network/{op}", s.require(auth.Admin, s.apiHostNetworkOp))
@@ -482,7 +485,7 @@ func (s *Server) require(min auth.Role, h http.HandlerFunc) http.HandlerFunc {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
-			if t.Scope == auth.MetricsScope && r.URL.Path != "/api/prometheus" {
+			if t.Scope == auth.MetricsScope && r.URL.Path != "/api/prometheus" || t.Scope == auth.ReadScope && r.Method != http.MethodGet && r.Method != http.MethodHead {
 				http.Error(w, "forbidden", http.StatusForbidden)
 				return
 			}

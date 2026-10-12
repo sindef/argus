@@ -22,7 +22,10 @@ type Token struct {
 	Scope   string    `json:"scope,omitempty"`
 }
 
-const MetricsScope = "metrics"
+const (
+	MetricsScope = "metrics"
+	ReadScope    = "read"
+)
 
 func (s *Store) tokens(ctx context.Context) ([]Token, string, error) {
 	data, rv, err := s.secrets.Get(ctx, tokenSecret)

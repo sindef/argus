@@ -87,7 +87,7 @@
   <form method="post" action="/tokens" class="form">
     <h2>Create token</h2>
     <label>Name <input name="name" pattern="[a-z][a-z0-9._-]{0,31}" placeholder="manager" required></label>
-    <label>Access <select name="scope"><option value="">Argus Manager (full)</option><option value="metrics">Prometheus metrics only</option></select></label>
+    <label>Access <select name="scope"><option value="">Argus Manager (full)</option><option value="read">Read-only</option><option value="metrics">Prometheus metrics only</option></select></label>
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Create token</button></div>
   </form>
 </dialog>
