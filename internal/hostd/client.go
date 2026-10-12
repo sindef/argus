@@ -58,17 +58,49 @@ func (c *Client) stream(ctx context.Context, method, path string, body io.Reader
 	return resp, nil
 }
 
-func (c *Client) ZFSSnapshots(ctx context.Context, datasets []string) (map[string][]string, error) {
+func (c *Client) ZFSSnapshots(ctx context.Context, datasets []string, kind string) (map[string][]string, error) {
 	var out map[string][]string
-	return out, c.do(ctx, http.MethodGet, "/zfs/snapshots?"+url.Values{"ds": datasets}.Encode(), nil, &out)
+	return out, c.do(ctx, http.MethodGet, "/zfs/snapshots?"+url.Values{"ds": datasets, "kind": {kind}}.Encode(), nil, &out)
+}
+
+func (c *Client) ZFSChanges(ctx context.Context, ds, snap, from string) (Changes, error) {
+	var out Changes
+	return out, c.do(ctx, http.MethodGet, "/zfs/changes?"+url.Values{"ds": {ds}, "snap": {snap}, "from": {from}}.Encode(), nil, &out)
+}
+
+func (c *Client) ZFSRead(ctx context.Context, ds, snap string, h http.Header) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://hostd/zfs/read?"+url.Values{"ds": {ds}, "snap": {snap}}.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	for _, k := range []string{"Range", "If-Range"} {
+		if v := h.Get(k); v != "" {
+			req.Header.Set(k, v)
+		}
+	}
+	resp, err := c.raw.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("host helper unavailable: %w", err)
+	}
+	if resp.StatusCode >= 300 && resp.StatusCode != http.StatusRequestedRangeNotSatisfiable {
+		defer resp.Body.Close()
+		var e struct{ Error string }
+		json.NewDecoder(resp.Body).Decode(&e)
+		return nil, errors.New(e.Error)
+	}
+	return resp, nil
+}
+
+func (c *Client) ZFSDestroy(ctx context.Context, datasets []string, snap string) error {
+	return c.do(ctx, http.MethodPost, "/zfs/destroy", map[string]any{"datasets": datasets, "snap": snap}, nil)
 }
 
 func (c *Client) ZFSSnapshot(ctx context.Context, datasets []string, snap string) error {
 	return c.do(ctx, http.MethodPost, "/zfs/snapshot", map[string]any{"datasets": datasets, "snap": snap}, nil)
 }
 
-func (c *Client) ZFSPrune(ctx context.Context, datasets, keep []string) error {
-	return c.do(ctx, http.MethodPost, "/zfs/prune", map[string]any{"datasets": datasets, "keep": keep}, nil)
+func (c *Client) ZFSPrune(ctx context.Context, datasets, keep []string, kind string) error {
+	return c.do(ctx, http.MethodPost, "/zfs/prune", map[string]any{"datasets": datasets, "keep": keep, "kind": kind}, nil)
 }
 
 func (c *Client) ZFSSend(ctx context.Context, ds, snap, from string) (*http.Response, error) {

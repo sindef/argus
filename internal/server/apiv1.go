@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -82,19 +83,24 @@ func (s *Server) apiV1Routes() {
 		role auth.Role
 		h    http.HandlerFunc
 	}{
-		"GET /api/v1/openapi.json":                                      {auth.ReadOnly, s.v1Spec},
-		"GET /api/v1/hosts":                                             {auth.ReadOnly, s.v1Hosts},
-		"GET /api/v1/vms":                                               {auth.ReadOnly, s.v1VMs},
-		"GET /api/v1/tasks":                                             {auth.ReadOnly, s.v1Tasks},
-		"POST /api/v1/hosts/{node}/vms":                                 {auth.Operator, s.v1CreateVM},
-		"GET /api/v1/hosts/{node}/vms/{name}":                           {auth.ReadOnly, s.v1VM},
-		"DELETE /api/v1/hosts/{node}/vms/{name}":                        {auth.Admin, s.v1VMCall("delete")},
-		"POST /api/v1/hosts/{node}/vms/{name}/power":                    {auth.Operator, s.v1Power},
-		"POST /api/v1/hosts/{node}/vms/{name}/migrate":                  {auth.Admin, s.v1Migrate},
-		"GET /api/v1/hosts/{node}/vms/{name}/snapshots":                 {auth.ReadOnly, s.v1Snapshots},
-		"POST /api/v1/hosts/{node}/vms/{name}/snapshots":                {auth.Operator, s.v1VMCall("snapshots")},
-		"POST /api/v1/hosts/{node}/vms/{name}/snapshots/{snap}/restore": {auth.Operator, s.v1SnapshotOp("restore")},
-		"DELETE /api/v1/hosts/{node}/vms/{name}/snapshots/{snap}":       {auth.Operator, s.v1SnapshotOp("delete")},
+		"GET /api/v1/openapi.json":                                              {auth.ReadOnly, s.v1Spec},
+		"GET /api/v1/hosts":                                                     {auth.ReadOnly, s.v1Hosts},
+		"GET /api/v1/vms":                                                       {auth.ReadOnly, s.v1VMs},
+		"GET /api/v1/tasks":                                                     {auth.ReadOnly, s.v1Tasks},
+		"POST /api/v1/hosts/{node}/vms":                                         {auth.Operator, s.v1CreateVM},
+		"GET /api/v1/hosts/{node}/vms/{name}":                                   {auth.ReadOnly, s.v1VM},
+		"DELETE /api/v1/hosts/{node}/vms/{name}":                                {auth.Admin, s.v1VMCall("delete")},
+		"POST /api/v1/hosts/{node}/vms/{name}/power":                            {auth.Operator, s.v1Power},
+		"POST /api/v1/hosts/{node}/vms/{name}/migrate":                          {auth.Admin, s.v1Migrate},
+		"GET /api/v1/hosts/{node}/vms/{name}/snapshots":                         {auth.ReadOnly, s.v1Snapshots},
+		"POST /api/v1/hosts/{node}/vms/{name}/snapshots":                        {auth.Operator, s.v1VMCall("snapshots")},
+		"POST /api/v1/hosts/{node}/vms/{name}/snapshots/{snap}/restore":         {auth.Operator, s.v1SnapshotOp("restore")},
+		"DELETE /api/v1/hosts/{node}/vms/{name}/snapshots/{snap}":               {auth.Operator, s.v1SnapshotOp("delete")},
+		"POST /api/v1/hosts/{node}/vms/{name}/backups":                          {auth.Operator, s.v1Backup},
+		"GET /api/v1/hosts/{node}/vms/{name}/backups":                           {auth.ReadOnly, s.v1Backup},
+		"DELETE /api/v1/hosts/{node}/vms/{name}/backups/{id}":                   {auth.Operator, s.v1Backup},
+		"GET /api/v1/hosts/{node}/vms/{name}/backups/{id}/disks/{disk}/changes": {auth.Operator, s.v1Backup},
+		"GET /api/v1/hosts/{node}/vms/{name}/backups/{id}/disks/{disk}/data":    {auth.Operator, s.v1Backup},
 	} {
 		s.mux.HandleFunc(pattern, s.require(r.role, r.h))
 	}
@@ -308,4 +314,34 @@ func (s *Server) deleteAccountToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/account/tokens", http.StatusSeeOther)
+}
+
+func (s *Server) v1Backup(w http.ResponseWriter, r *http.Request) {
+	n, ok := s.v1Node(w, r)
+	if !ok {
+		return
+	}
+	path := manager.APIPath("/api/vms/%s/%s/cbt", kube.Namespace, r.PathValue("name"))
+	if id := r.PathValue("id"); id != "" {
+		path += manager.APIPath("/%s", id)
+	}
+	if disk := r.PathValue("disk"); disk != "" {
+		path += manager.APIPath("/disks/%s/", disk) + r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+	}
+	if base := r.URL.Query().Get("base"); base != "" {
+		path += "?" + url.Values{"base": {base}}.Encode()
+	}
+	h := http.Header{}
+	for _, k := range []string{"Range", "If-Range"} {
+		if v := r.Header.Get(k); v != "" {
+			h.Set(k, v)
+		}
+	}
+	resp, err := n.Open(r.Context(), r.Method, path, h, nil)
+	if err != nil {
+		apiError(w, r, http.StatusConflict, err)
+		return
+	}
+	defer resp.Body.Close()
+	copyStream(w, resp)
 }

@@ -219,6 +219,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/backups", s.require(auth.Admin, s.apiVMBackups))
 	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/backups/{op}", s.require(auth.Admin, s.apiVMBackupOp))
 	s.hostAPIRoutes()
+	s.cbtRoutes()
 	s.mux.HandleFunc("GET /api/host/network", s.require(auth.Admin, s.apiHostNetwork))
 	s.mux.HandleFunc("GET /api/host/status", s.require(auth.Admin, s.apiHostStatus))
 	s.mux.HandleFunc("GET /api/images", s.require(auth.Admin, s.apiImages))

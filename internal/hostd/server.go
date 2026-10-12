@@ -60,7 +60,7 @@ func NewServer() *Server {
 		out := map[string][]string{}
 		for _, d := range ds {
 			if err == nil {
-				out[d], err = zfsSnapshots(r.Context(), d)
+				out[d], err = zfsSnapshots(r.Context(), d, r.URL.Query().Get("kind"))
 			}
 		}
 		reply(w, out, err)
@@ -83,17 +83,40 @@ func NewServer() *Server {
 		reply(w, nil, err)
 	})
 	s.mux.HandleFunc("POST /zfs/prune", func(w http.ResponseWriter, r *http.Request) {
-		var req struct{ Datasets, Keep []string }
+		var req struct {
+			Datasets, Keep []string
+			Kind           string
+		}
 		err := decode(r, &req)
 		if err == nil {
 			err = checkDatasets(req.Datasets)
 		}
 		if err == nil {
-			err = zfsPrune(r.Context(), req.Datasets, req.Keep)
+			err = zfsPrune(r.Context(), req.Datasets, req.Keep, req.Kind)
 		}
 		reply(w, nil, err)
 	})
 	s.mux.HandleFunc("GET /zfs/send", zfsSend)
+	s.mux.HandleFunc("GET /zfs/changes", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		ch, err := zfsChanges(r.Context(), q.Get("ds"), q.Get("snap"), q.Get("from"))
+		reply(w, ch, err)
+	})
+	s.mux.HandleFunc("GET /zfs/read", zfsRead)
+	s.mux.HandleFunc("POST /zfs/destroy", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Datasets []string
+			Snap     string
+		}
+		err := decode(r, &req)
+		if err == nil {
+			err = checkDatasets(req.Datasets)
+		}
+		if err == nil {
+			err = zfsDestroy(r.Context(), req.Datasets, req.Snap)
+		}
+		reply(w, nil, err)
+	})
 	s.mux.HandleFunc("PUT /zfs/recv", zfsRecv)
 	s.mux.HandleFunc("GET /settings", func(w http.ResponseWriter, r *http.Request) { reply(w, readSettings(), nil) })
 	s.mux.HandleFunc("POST /settings", s.locked(func(w http.ResponseWriter, r *http.Request) {

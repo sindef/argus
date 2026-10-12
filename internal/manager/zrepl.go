@@ -62,7 +62,7 @@ func zsync(ctx context.Context, vm string, owner, replica Node) error {
 }
 
 func zpipe(ctx context.Context, vm, volume, snap, base string, owner, replica Node) error {
-	src, err := owner.Open(ctx, http.MethodGet, vmPath(vm, "zfs/send")+"?"+url.Values{"volume": {volume}, "snap": {snap}, "from": {base}}.Encode(), "", nil)
+	src, err := owner.Open(ctx, http.MethodGet, vmPath(vm, "zfs/send")+"?"+url.Values{"volume": {volume}, "snap": {snap}, "from": {base}}.Encode(), nil, nil)
 	if err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func zpipe(ctx context.Context, vm, volume, snap, base string, owner, replica No
 	if base == "" {
 		q.Set("full", "1")
 	}
-	dst, err := replica.Open(ctx, http.MethodPut, vmPath(vm, "zfs/recv")+"?"+q.Encode(), "application/octet-stream", src.Body)
+	dst, err := replica.Open(ctx, http.MethodPut, vmPath(vm, "zfs/recv")+"?"+q.Encode(), http.Header{"Content-Type": {"application/octet-stream"}}, src.Body)
 	if err != nil {
 		return err
 	}

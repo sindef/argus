@@ -547,6 +547,280 @@
      }
     ]
    }
+  },
+  "/hosts/{host}/vms/{name}/backups": {
+   "get": {
+    "summary": "List backup sessions",
+    "description": "Minimum role: read-only.",
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Sessions",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/BackupSession"
+         }
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "summary": "Start a backup session",
+    "description": "Minimum role: operator. Takes a crash-consistent snapshot of every disk (application-consistent when the guest agent is running). Keep the latest session as the base for the next incremental backup and delete older ones.",
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "201": {
+      "description": "Session",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BackupSession"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/hosts/{host}/vms/{name}/backups/{id}": {
+   "delete": {
+    "summary": "Delete a backup session",
+    "description": "Minimum role: operator.",
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Deleted"
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/hosts/{host}/vms/{name}/backups/{id}/disks/{disk}/changes": {
+   "get": {
+    "summary": "Changed block map",
+    "description": "Minimum role: operator. Without base: allocated data of the whole disk. With base: data written since that session. Zero extents read as zeros in this session and may be applied as holes.",
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "disk",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "base",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "description": "An earlier session id of the same VM."
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Extents",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Changes"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/hosts/{host}/vms/{name}/backups/{id}/disks/{disk}/data": {
+   "get": {
+    "summary": "Read disk data",
+    "description": "Minimum role: operator. Supports HTTP Range requests; read the data extents from the change map.",
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "disk",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Raw disk image",
+      "content": {
+       "application/octet-stream": {}
+      }
+     },
+     "206": {
+      "description": "Requested range",
+      "content": {
+       "application/octet-stream": {}
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
   }
  },
  "components": {
@@ -770,6 +1044,60 @@
      },
      "auto": {
       "type": "boolean"
+     }
+    }
+   },
+   "BackupSession": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "created": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "disks": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "spec": {
+      "type": "object",
+      "description": "VM definition at backup time"
+     }
+    }
+   },
+   "Changes": {
+    "type": "object",
+    "properties": {
+     "size": {
+      "type": "integer",
+      "description": "Disk size in bytes"
+     },
+     "data": {
+      "type": "array",
+      "items": {
+       "type": "array",
+       "items": {
+        "type": "integer"
+       },
+       "minItems": 2,
+       "maxItems": 2
+      },
+      "description": "[offset, length] pairs to read"
+     },
+     "zero": {
+      "type": "array",
+      "items": {
+       "type": "array",
+       "items": {
+        "type": "integer"
+       },
+       "minItems": 2,
+       "maxItems": 2
+      }
      }
     }
    }

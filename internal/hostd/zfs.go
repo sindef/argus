@@ -15,8 +15,18 @@ import (
 
 var (
 	validDataset = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]*/pvc-[0-9a-f-]{36}$`)
-	validZSnap   = regexp.MustCompile(`^argus-zrepl-[0-9]+$`)
+	validZSnap   = regexp.MustCompile(`^argus-(zrepl|cbt)-[0-9]+$`)
 )
+
+func snapKind(kind string) (string, error) {
+	switch kind {
+	case "", "zrepl":
+		return "argus-zrepl-", nil
+	case "cbt":
+		return "argus-cbt-", nil
+	}
+	return "", fmt.Errorf("invalid snapshot kind %q", kind)
+}
 
 func checkDatasets(ds []string) error {
 	for _, d := range ds {
@@ -27,23 +37,27 @@ func checkDatasets(ds []string) error {
 	return nil
 }
 
-func zfsSnapshots(ctx context.Context, ds string) ([]string, error) {
+func zfsSnapshots(ctx context.Context, ds, kind string) ([]string, error) {
+	prefix, err := snapKind(kind)
+	if err != nil {
+		return nil, err
+	}
 	out, err := run(ctx, "zfs", "list", "-H", "-t", "snapshot", "-o", "name", "-s", "createtxg", "-d", "1", ds)
 	if err != nil {
 		return nil, err
 	}
 	var snaps []string
 	for _, l := range strings.Fields(out) {
-		if _, s, ok := strings.Cut(l, "@"); ok && validZSnap.MatchString(s) {
+		if _, s, ok := strings.Cut(l, "@"); ok && validZSnap.MatchString(s) && strings.HasPrefix(s, prefix) {
 			snaps = append(snaps, s)
 		}
 	}
 	return snaps, nil
 }
 
-func zfsPrune(ctx context.Context, datasets []string, keep []string) error {
+func zfsPrune(ctx context.Context, datasets, keep []string, kind string) error {
 	for _, ds := range datasets {
-		snaps, err := zfsSnapshots(ctx, ds)
+		snaps, err := zfsSnapshots(ctx, ds, kind)
 		if err != nil {
 			return err
 		}
@@ -112,9 +126,11 @@ func zfsRecv(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if full {
-		if err := zfsPrune(r.Context(), []string{ds}, nil); err != nil {
-			reply(w, nil, err)
-			return
+		for _, kind := range []string{"zrepl", "cbt"} {
+			if err := zfsPrune(r.Context(), []string{ds}, nil, kind); err != nil {
+				reply(w, nil, err)
+				return
+			}
 		}
 	}
 	cmd := exec.CommandContext(r.Context(), "zfs", "recv", "-F", ds)

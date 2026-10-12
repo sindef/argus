@@ -27,7 +27,7 @@ func (s *Server) apiZFSDisks(w http.ResponseWriter, r *http.Request) {
 	disks, ds, err := s.vmDatasets(r)
 	var snaps map[string][]string
 	if err == nil {
-		snaps, err = s.hostd.ZFSSnapshots(r.Context(), ds)
+		snaps, err = s.hostd.ZFSSnapshots(r.Context(), ds, "zrepl")
 	}
 	if err != nil {
 		apiError(w, r, http.StatusConflict, err)
@@ -53,7 +53,7 @@ func (s *Server) apiZFSSnapshot(w http.ResponseWriter, r *http.Request) {
 		_, ds, err = s.vmDatasets(r)
 	}
 	if err == nil {
-		err = s.hostd.ZFSPrune(r.Context(), ds, req.Keep)
+		err = s.hostd.ZFSPrune(r.Context(), ds, req.Keep, "zrepl")
 	}
 	snap := "argus-zrepl-" + strconv.FormatInt(time.Now().Unix(), 10)
 	if err == nil {
@@ -78,7 +78,7 @@ func (s *Server) apiZFSPrune(w http.ResponseWriter, r *http.Request) {
 		_, ds, err = s.vmDatasets(r)
 	}
 	if err == nil {
-		err = s.hostd.ZFSPrune(r.Context(), ds, req.Keep)
+		err = s.hostd.ZFSPrune(r.Context(), ds, req.Keep, "zrepl")
 	}
 	if err != nil {
 		apiError(w, r, http.StatusConflict, err)

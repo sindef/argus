@@ -404,7 +404,7 @@ func (o remoteOps) HardwareOp(ctx context.Context, ns, name, op string, req hwOp
 }
 
 func (o remoteOps) Import(ctx context.Context, source, contentType string, body io.Reader) (string, error) {
-	resp, err := o.n.Open(ctx, http.MethodPost, manager.APIPath("/api/vms/import/%s", source), contentType, body)
+	resp, err := o.n.Open(ctx, http.MethodPost, manager.APIPath("/api/vms/import/%s", source), http.Header{"Content-Type": {contentType}}, body)
 	if err != nil {
 		return "", err
 	}
@@ -414,7 +414,7 @@ func (o remoteOps) Import(ctx context.Context, source, contentType string, body 
 }
 
 func (o remoteOps) DownloadDisk(w http.ResponseWriter, r *http.Request, ns, name, disk string) {
-	resp, err := o.n.Open(r.Context(), http.MethodGet, manager.APIPath("/api/vms/%s/%s/disks/%s/download", ns, name, disk), "", nil)
+	resp, err := o.n.Open(r.Context(), http.MethodGet, manager.APIPath("/api/vms/%s/%s/disks/%s/download", ns, name, disk), nil, nil)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
