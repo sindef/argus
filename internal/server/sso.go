@@ -58,12 +58,11 @@ func (s *Server) oauthConfig(r *http.Request, org string) (*oauth2.Config, *oidc
 	if claim == "" {
 		claim = "groups"
 	}
-	return conf, provider, &oidcSettings{groupsClaim: claim, roles: o.OIDC.Roles}, nil
+	return conf, provider, &oidcSettings{groupsClaim: claim}, nil
 }
 
 type oidcSettings struct {
 	groupsClaim string
-	roles       map[string]auth.Role
 }
 
 func (s *Server) ssoStart(w http.ResponseWriter, r *http.Request) {
@@ -133,16 +132,25 @@ func (s *Server) ssoCallback(w http.ResponseWriter, r *http.Request) {
 		fail("Single sign-on failed", errors.New("no username claim"))
 		return
 	}
-	role, ok := mapRole(claims[settings.groupsClaim], settings.roles)
+	var claimed []string
+	if list, ok := claims[settings.groupsClaim].([]any); ok {
+		for _, g := range list {
+			if name, ok := g.(string); ok {
+				claimed = append(claimed, name)
+			}
+		}
+	}
+	store := s.auth.ForOrg(flow.org)
+	role, scopes, matched, ok := store.SSOAccess(r.Context(), claimed)
 	if !ok {
 		fail("Your account has no access to this organization", errors.New(user+": no mapped group"))
 		return
 	}
-	if err := s.auth.ForOrg(flow.org).UpsertSSO(r.Context(), user, idt.Issuer+"|"+idt.Subject, role); err != nil {
+	if err := store.UpsertSSO(r.Context(), user, idt.Issuer+"|"+idt.Subject, role, scopes, matched); err != nil {
 		fail("Single sign-on failed", err)
 		return
 	}
-	session := s.auth.ForOrg(flow.org).NewSession(auth.Session{User: user, Role: role, SSO: true}, flow.remember)
+	session := store.NewSession(auth.Session{User: user, Role: role, SSO: true, Scopes: scopes}, flow.remember)
 	s.setSessionCookie(w, session, flow.remember)
 	log.Printf("sso: %s signed in to %s as %s", user, flow.org, role)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -155,17 +163,4 @@ func firstString(claims map[string]any, keys ...string) string {
 		}
 	}
 	return ""
-}
-
-func mapRole(groups any, roles map[string]auth.Role) (auth.Role, bool) {
-	list, _ := groups.([]any)
-	var best auth.Role
-	found := false
-	for _, g := range list {
-		name, _ := g.(string)
-		if r, ok := roles[name]; ok && (!found || r.Can(best)) {
-			best, found = r, true
-		}
-	}
-	return best, found
 }

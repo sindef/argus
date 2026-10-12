@@ -77,13 +77,13 @@ func TestSessionRevocationSurvivesRestart(t *testing.T) {
 func TestSSOIdentityIsBySubject(t *testing.T) {
 	ctx := context.Background()
 	s := NewStore(&memSecrets{m: map[string]map[string][]byte{}})
-	if err := s.UpsertSSO(ctx, "alice", "idp|1", Admin); err != nil {
+	if err := s.UpsertSSO(ctx, "alice", "idp|1", Admin, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.UpsertSSO(ctx, "alice", "idp|2", Admin); err == nil {
+	if err := s.UpsertSSO(ctx, "alice", "idp|2", Admin, nil, nil); err == nil {
 		t.Fatal("a second identity took over an existing SSO user name")
 	}
-	if err := s.UpsertSSO(ctx, "alice.smith", "idp|1", Operator); err != nil {
+	if err := s.UpsertSSO(ctx, "alice.smith", "idp|1", Operator, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	us, _ := s.Users(ctx)

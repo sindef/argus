@@ -606,14 +606,6 @@ func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, notice s
 		err = oerr
 	}
 	data := map[string]any{"Nav": "settings", "Org": org, "Notice": notice, "Super": superAdmin(r), "Roles": auth.Roles}
-	if org.OIDC != nil {
-		var maps []string
-		for g, role := range org.OIDC.Roles {
-			maps = append(maps, g+"="+string(role))
-		}
-		sort.Strings(maps)
-		data["RoleMap"] = strings.Join(maps, "\n")
-	}
 	if superAdmin(r) {
 		data["Orgs"], _ = s.manager.Orgs(r.Context())
 		data["Migration"], _ = s.manager.MigrationSettings(r.Context())
@@ -642,23 +634,11 @@ func (s *Server) managerSSO(w http.ResponseWriter, r *http.Request) {
 			s.renderSettings(w, r, "", errors.New("issuer must be an https URL"))
 			return
 		}
-		roles := map[string]auth.Role{}
-		for _, line := range strings.Split(r.FormValue("roles"), "\n") {
-			g, role, ok := strings.Cut(strings.TrimSpace(line), "=")
-			if !ok {
-				continue
-			}
-			if !auth.Role(strings.TrimSpace(role)).Valid() {
-				s.renderSettings(w, r, "", fmt.Errorf("invalid role in %q", line))
-				return
-			}
-			roles[strings.TrimSpace(g)] = auth.Role(strings.TrimSpace(role))
-		}
 		secret := r.FormValue("secret")
 		if secret == "" && org.OIDC != nil {
 			secret = org.OIDC.ClientSecret
 		}
-		org.OIDC = &manager.OIDC{Issuer: issuer, ClientID: strings.TrimSpace(r.FormValue("client")), ClientSecret: secret, GroupsClaim: strings.TrimSpace(r.FormValue("claim")), Roles: roles}
+		org.OIDC = &manager.OIDC{Issuer: issuer, ClientID: strings.TrimSpace(r.FormValue("client")), ClientSecret: secret, GroupsClaim: strings.TrimSpace(r.FormValue("claim"))}
 	}
 	if err := s.manager.SaveOrg(r.Context(), org); err != nil {
 		s.renderSettings(w, r, "", err)

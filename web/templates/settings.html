@@ -14,9 +14,7 @@
         <label>Client ID <input name="client" value="{{with .Org.OIDC}}{{.ClientID}}{{end}}"></label>
         <label>Client secret <input name="secret" type="password" autocomplete="new-password" placeholder="{{with .Org.OIDC}}{{if .ClientSecret}}unchanged{{end}}{{end}}"></label>
       </div>
-      <label>Groups claim <input name="claim" placeholder="groups" value="{{with .Org.OIDC}}{{.GroupsClaim}}{{end}}"></label>
-      <label>Role mapping <span class="help" title="One group=role per line. Roles: admin, operator, readonly. Users in no listed group are refused.">?</span>
-        <textarea name="roles" rows="3" placeholder="argus-admins=admin">{{.RoleMap}}</textarea></label>
+      <label>Groups claim <span class="help" title="Token claim listing the user's groups. Map them to roles under Administration → Groups; users in no mapped group are refused.">?</span><input name="claim" placeholder="groups" value="{{with .Org.OIDC}}{{.GroupsClaim}}{{end}}"></label>
       <dl class="kv"><dt>Redirect URI</dt><dd class="mono">https://&lt;manager&gt;/sso/callback</dd></dl>
       <div class="actions"><button class="btn primary" type="submit">Save</button></div>
     </form>

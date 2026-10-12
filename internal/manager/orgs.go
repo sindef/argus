@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"sort"
 
-	"argus/internal/auth"
-
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -18,11 +16,10 @@ const (
 )
 
 type OIDC struct {
-	Issuer       string               `json:"issuer"`
-	ClientID     string               `json:"clientID"`
-	ClientSecret string               `json:"clientSecret"`
-	GroupsClaim  string               `json:"groupsClaim"`
-	Roles        map[string]auth.Role `json:"roles"`
+	Issuer       string `json:"issuer"`
+	ClientID     string `json:"clientID"`
+	ClientSecret string `json:"clientSecret"`
+	GroupsClaim  string `json:"groupsClaim"`
 }
 
 type Org struct {

@@ -46,6 +46,7 @@ type User struct {
 	SSO        bool     `json:"sso,omitempty"`
 	Scopes     []string `json:"scopes,omitempty"`
 	Subject    string   `json:"subject,omitempty"`
+	Groups     []string `json:"groups,omitempty"`
 }
 
 const (
@@ -118,7 +119,8 @@ func (s *Store) PersistSessions(ctx context.Context) {
 					users[v.Org] = us
 				}
 				if time.Now().After(v.Expires) || !slices.ContainsFunc(us, func(u User) bool {
-					return u.Name == v.User && u.Role == v.Role && slices.Equal(u.Scopes, v.Scopes)
+					role, scopes := s.storeFor(v.Org).Access(ctx, u)
+					return u.Name == v.User && role == v.Role && slices.Equal(scopes, v.Scopes)
 				}) {
 					delete(m, k)
 				}
@@ -309,7 +311,7 @@ func (s *Store) Add(ctx context.Context, name string, role Role, password string
 	})
 }
 
-func (s *Store) UpsertSSO(ctx context.Context, name, subject string, role Role) error {
+func (s *Store) UpsertSSO(ctx context.Context, name, subject string, role Role, scopes, groups []string) error {
 	var drop []string
 	err := s.modify(ctx, func(us []User) ([]User, error) {
 		drop = nil
@@ -323,10 +325,10 @@ func (s *Store) UpsertSSO(ctx context.Context, name, subject string, role Role) 
 					}
 					drop = append(drop, us[i].Name)
 				}
-				if us[i].Role != role {
+				if us[i].Role != role || !slices.Equal(us[i].Scopes, scopes) {
 					drop = append(drop, us[i].Name)
 				}
-				us[i].Name, us[i].Role = name, role
+				us[i].Name, us[i].Role, us[i].Scopes, us[i].Groups = name, role, scopes, groups
 				return us, nil
 			}
 		}
@@ -341,13 +343,13 @@ func (s *Store) UpsertSSO(ctx context.Context, name, subject string, role Role) 
 				return nil, fmt.Errorf("user name %s belongs to another identity", name)
 			}
 			us[i].Subject = subject
-			if us[i].Role != role {
+			if us[i].Role != role || !slices.Equal(us[i].Scopes, scopes) {
 				drop = append(drop, name)
 			}
-			us[i].Role = role
+			us[i].Role, us[i].Scopes, us[i].Groups = role, scopes, groups
 			return us, nil
 		}
-		return append(us, User{Name: name, Role: role, SSO: true, Subject: subject}), nil
+		return append(us, User{Name: name, Role: role, SSO: true, Subject: subject, Scopes: scopes, Groups: groups}), nil
 	})
 	for _, n := range drop {
 		s.dropSessions(n)
@@ -504,7 +506,8 @@ func (s *Store) Login(ctx context.Context, name, password string, remember bool)
 	if !ok {
 		return "", err
 	}
-	return s.NewSession(Session{User: u.Name, Role: u.Role, MustChange: u.MustChange, Scopes: u.Scopes}, remember), nil
+	role, scopes := s.Access(ctx, u)
+	return s.NewSession(Session{User: u.Name, Role: role, MustChange: u.MustChange, Scopes: scopes}, remember), nil
 }
 
 func (s *Store) Session(tok string) (Session, bool) {
