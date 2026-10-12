@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"regexp"
@@ -18,10 +19,15 @@ func (s *Server) loginPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
-	ip := clientIP(r)
+	ip, acct := clientIP(r), accountKey(r.FormValue("org"), r.FormValue("username"))
 	if s.limiter.blocked(ip) {
 		w.WriteHeader(http.StatusTooManyRequests)
 		s.render(w, r, "login.html", "auth", s.loginData(r, "Too many failed sign-ins, try again later"))
+		return
+	}
+	if d := s.limiter.backoff(acct); d > 0 {
+		w.WriteHeader(http.StatusTooManyRequests)
+		s.render(w, r, "login.html", "auth", s.loginData(r, fmt.Sprintf("Too many failed sign-ins for this account, try again in %s", d.Round(time.Second))))
 		return
 	}
 	store, remember := s.auth, false
@@ -51,6 +57,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	}
 	if tok == "" {
 		s.limiter.fail(ip)
+		s.limiter.fail(acct)
 		log.Printf("login: failed for %q from %s", r.FormValue("username"), ip)
 		s.record(s.auditUser(r.FormValue("org"), r.FormValue("username")), "sign in from "+ip, false, "invalid username or password")
 		time.Sleep(time.Second)
@@ -59,6 +66,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.limiter.succeed(ip)
+	s.limiter.succeed(acct)
 	s.record(s.auditUser(r.FormValue("org"), r.FormValue("username")), "sign in from "+ip, true, "")
 	s.setSessionCookie(w, tok, remember)
 	http.Redirect(w, r, "/", http.StatusSeeOther)

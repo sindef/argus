@@ -54,6 +54,7 @@ const (
 	secretKey   = "users.json"
 	sessionTTL  = 12 * time.Hour
 	rememberTTL = 30 * 24 * time.Hour
+	idleTimeout = 2 * time.Hour
 )
 
 var (
@@ -84,6 +85,8 @@ type Session struct {
 	SSO        bool
 	Scopes     []string
 	Expires    time.Time
+	Idle       bool
+	Seen       time.Time
 }
 
 type Sessions struct {
@@ -225,7 +228,7 @@ func (ss *Sessions) add(sess Session, remember bool) string {
 			delete(ss.m, k)
 		}
 	}
-	sess.Expires = now.Add(ttl)
+	sess.Expires, sess.Idle, sess.Seen = now.Add(ttl), !remember, now
 	ss.m[tokenKey(tok)] = sess
 	ss.dirty = true
 	return tok
@@ -513,10 +516,21 @@ func (s *Store) Login(ctx context.Context, name, password string, remember bool)
 func (s *Store) Session(tok string) (Session, bool) {
 	s.sessions.mu.Lock()
 	defer s.sessions.mu.Unlock()
-	v, ok := s.sessions.m[tokenKey(tok)]
-	if !ok || time.Now().After(v.Expires) {
+	k := tokenKey(tok)
+	v, ok := s.sessions.m[k]
+	now := time.Now()
+	if ok && v.Idle && now.Sub(v.Seen) > idleTimeout {
+		delete(s.sessions.m, k)
+		s.sessions.dirty, ok = true, false
+	}
+	if !ok || now.After(v.Expires) {
 		return Session{}, false
 	}
+	if now.Sub(v.Seen) > 5*time.Minute {
+		s.sessions.dirty = true
+	}
+	v.Seen = now
+	s.sessions.m[k] = v
 	return v, true
 }
 

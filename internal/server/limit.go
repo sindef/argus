@@ -3,6 +3,10 @@ package server
 import (
 	"net"
 	"net/http"
+	"net/netip"
+	"os"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -10,7 +14,26 @@ import (
 const (
 	maxFailures   = 10
 	failureWindow = 15 * time.Minute
+	freeAttempts  = 5
+	maxBackoff    = 15 * time.Minute
 )
+
+var trustedProxies = func() []netip.Prefix {
+	var out []netip.Prefix
+	for _, f := range strings.FieldsFunc(os.Getenv("ARGUS_TRUSTED_PROXIES"), func(r rune) bool { return r == ',' || r == ' ' }) {
+		if p, err := netip.ParsePrefix(f); err == nil {
+			out = append(out, p)
+		} else if a, err := netip.ParseAddr(f); err == nil {
+			out = append(out, netip.PrefixFrom(a, a.BitLen()))
+		}
+	}
+	return out
+}()
+
+func trusted(ip string) bool {
+	a, err := netip.ParseAddr(ip)
+	return err == nil && slices.ContainsFunc(trustedProxies, func(p netip.Prefix) bool { return p.Contains(a.Unmap()) })
+}
 
 type loginLimiter struct {
 	mu       sync.Mutex
@@ -25,9 +48,35 @@ func newLoginLimiter() *loginLimiter {
 func clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		host = r.RemoteAddr
+	}
+	if !trusted(host) {
+		return host
+	}
+	hops := strings.Split(strings.Join(r.Header.Values("X-Forwarded-For"), ","), ",")
+	for i := len(hops) - 1; i >= 0; i-- {
+		h := strings.TrimSpace(hops[i])
+		if _, err := netip.ParseAddr(h); err != nil {
+			break
+		}
+		if host = h; !trusted(h) {
+			break
+		}
 	}
 	return host
+}
+
+func accountKey(org, user string) string { return "account:" + org + "/" + strings.ToLower(user) }
+
+func (l *loginLimiter) backoff(key string) time.Duration {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	ts := l.recent(key)
+	if len(ts) < freeAttempts {
+		return 0
+	}
+	d := min(time.Second<<min(len(ts)-freeAttempts, 20), maxBackoff)
+	return time.Until(ts[len(ts)-1].Add(d))
 }
 
 func (l *loginLimiter) recent(ip string) []time.Time {
