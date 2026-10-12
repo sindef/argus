@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"argus/internal/auth"
+	"argus/internal/config"
 	"argus/internal/hostd"
 	"argus/internal/kube"
 
@@ -233,7 +234,7 @@ func (s *Server) setLastCopy(key string, t time.Time) {
 	s.backups.lastCopy[key] = t
 }
 
-var transfers = make(chan struct{}, 2)
+var transfers = make(chan struct{}, config.Int("ARGUS_TRANSFERS", 2))
 
 func (s *Server) startBackup(ns, name string, p BackupPolicy) bool {
 	key := ns + "/" + name

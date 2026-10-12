@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"argus/internal/auth"
+	"argus/internal/config"
 	"argus/internal/kube"
 )
 
@@ -283,7 +284,7 @@ func (c *Manager) failover(ctx context.Context) {
 	}
 }
 
-var replications = make(chan struct{}, 2)
+var replications = make(chan struct{}, config.Int("ARGUS_REPLICATIONS", 2))
 
 func (c *Manager) replicate() {
 	ctx := context.Background()

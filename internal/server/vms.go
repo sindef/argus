@@ -413,7 +413,7 @@ func (s *Server) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) eventsPage(w http.ResponseWriter, r *http.Request) {
-	evs, err := s.kube.Events(r.Context(), "default", "", 200)
+	evs, err := s.kube.Events(r.Context(), kube.Namespace, "", 200)
 	s.render(w, r, "events.html", "layout", map[string]any{"Events": evs, "Error": errText(err), "Nav": "events"})
 }
 

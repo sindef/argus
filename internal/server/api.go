@@ -350,7 +350,7 @@ func (s *Server) apiVM(w http.ResponseWriter, r *http.Request) {
 func (s *Server) apiEvents(w http.ResponseWriter, r *http.Request) {
 	ns := r.PathValue("ns")
 	if ns == "" {
-		ns = "default"
+		ns = kube.Namespace
 	}
 	evs, err := s.kube.Events(r.Context(), ns, r.PathValue("name"), 50)
 	if err != nil {
