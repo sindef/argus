@@ -323,6 +323,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	if s.manager == nil && k != nil {
 		go s.backupLoop()
 		go s.storageLoop()
+		go k.WatchVMs(context.Background())
 	}
 	return s, nil
 }

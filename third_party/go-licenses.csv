@@ -18,6 +18,7 @@ github.com/json-iterator/go,third_party/licenses/go/github.com/json-iterator/go/
 github.com/modern-go/concurrent,third_party/licenses/go/github.com/modern-go/concurrent/LICENSE,Apache-2.0
 github.com/modern-go/reflect2,third_party/licenses/go/github.com/modern-go/reflect2/LICENSE,Apache-2.0
 github.com/munnerz/goautoneg,third_party/licenses/go/github.com/munnerz/goautoneg/LICENSE,BSD-3-Clause
+github.com/pmezard/go-difflib/difflib,third_party/licenses/go/github.com/pmezard/go-difflib/difflib/LICENSE,BSD-3-Clause
 github.com/remyoudompheng/bigfft,third_party/licenses/go/github.com/remyoudompheng/bigfft/LICENSE,BSD-3-Clause
 github.com/spf13/pflag,third_party/licenses/go/github.com/spf13/pflag/LICENSE,BSD-3-Clause
 github.com/x448/float16,third_party/licenses/go/github.com/x448/float16/LICENSE,MIT

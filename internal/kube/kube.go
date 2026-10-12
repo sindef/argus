@@ -12,6 +12,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -39,6 +40,7 @@ type Client struct {
 	tls  *tls.Config
 
 	Guard func() error
+	cache atomic.Pointer[vmCache]
 }
 
 func (c *Client) guard() error {
@@ -176,22 +178,36 @@ func secret(name, typ, resourceVersion string, data map[string][]byte) *unstruct
 	}}
 }
 
-func (c *Client) ListVMs(ctx context.Context) ([]VM, error) {
+func (c *Client) listVMObjects(ctx context.Context) ([]*unstructured.Unstructured, map[string]*unstructured.Unstructured, error) {
+	if vc := c.cache.Load(); vc != nil {
+		return vc.list()
+	}
 	vms, err := c.dyn.Resource(vmGVR).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	vmis, err := c.dyn.Resource(vmiGVR).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	out := make([]*unstructured.Unstructured, len(vms.Items))
+	for i := range vms.Items {
+		out[i] = &vms.Items[i]
 	}
 	inst := map[string]*unstructured.Unstructured{}
 	for i := range vmis.Items {
 		inst[vmis.Items[i].GetNamespace()+"/"+vmis.Items[i].GetName()] = &vmis.Items[i]
 	}
-	out := make([]VM, 0, len(vms.Items))
-	for i := range vms.Items {
-		v := &vms.Items[i]
+	return out, inst, nil
+}
+
+func (c *Client) ListVMs(ctx context.Context) ([]VM, error) {
+	vms, inst, err := c.listVMObjects(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]VM, 0, len(vms))
+	for _, v := range vms {
 		out = append(out, toVM(v, inst[v.GetNamespace()+"/"+v.GetName()]))
 	}
 	sort.Slice(out, func(i, j int) bool {
