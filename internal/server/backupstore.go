@@ -3,6 +3,8 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -44,7 +46,6 @@ type backupStore interface {
 	Get(ctx context.Context, rel string) (io.ReadCloser, int64, error)
 	List(ctx context.Context) ([]hostd.Backup, error)
 	Delete(ctx context.Context, rel string) error
-	Verify(ctx context.Context, rel string) error
 }
 
 func (s *Server) backupTargets(ctx context.Context) ([]BackupTarget, error) {
@@ -149,7 +150,6 @@ func (h hostdStore) Get(ctx context.Context, rel string) (io.ReadCloser, int64, 
 
 func (h hostdStore) List(ctx context.Context) ([]hostd.Backup, error) { return h.c.Backups(ctx) }
 func (h hostdStore) Delete(ctx context.Context, rel string) error     { return h.c.DeleteBackup(ctx, rel) }
-func (h hostdStore) Verify(ctx context.Context, rel string) error     { return h.c.VerifyBackup(ctx, rel) }
 
 type s3Store struct {
 	c      *s3.Client
@@ -210,29 +210,69 @@ func (s s3Store) Delete(ctx context.Context, rel string) error {
 	return nil
 }
 
-func (s s3Store) Verify(ctx context.Context, rel string) error {
-	resp, err := s.c.Get(ctx, s.prefix+rel+"/manifest.json")
-	if err != nil {
-		return fmt.Errorf("backup has no manifest; it did not finish: %w", err)
-	}
+func manifestOf(ctx context.Context, st backupStore, rel string) (hostd.Manifest, error) {
 	var man hostd.Manifest
-	err = json.NewDecoder(resp.Body).Decode(&man)
-	resp.Body.Close()
+	body, _, err := st.Get(ctx, rel+"/manifest.json")
 	if err != nil {
-		return fmt.Errorf("backup manifest: %w", err)
+		return man, errors.New("backup has no manifest; it did not finish")
 	}
-	objs, err := s.c.List(ctx, s.prefix+rel+"/")
+	err = json.NewDecoder(io.LimitReader(body, 1<<20)).Decode(&man)
+	body.Close()
+	if err != nil || len(man.Files) == 0 {
+		return man, errors.New("backup manifest is unreadable")
+	}
+	return man, nil
+}
+
+func checkBackup(ctx context.Context, st backupStore, rel string) error {
+	man, err := manifestOf(ctx, st, rel)
 	if err != nil {
 		return err
 	}
-	sizes := map[string]int64{}
-	for _, o := range objs {
-		sizes[strings.TrimPrefix(o.Key, s.prefix+rel+"/")] = o.Size
-	}
 	for name, f := range man.Files {
-		if n, ok := sizes[name]; !ok || n != f.Size {
-			return fmt.Errorf("backup file %s is missing or the wrong size", name)
+		body, size, err := st.Get(ctx, rel+"/"+name)
+		if err != nil {
+			return fmt.Errorf("backup file %s is missing", name)
+		}
+		body.Close()
+		if size != f.Size {
+			return fmt.Errorf("backup file %s is the wrong size", name)
 		}
 	}
 	return nil
+}
+
+const verifyTail = 1 << 20
+
+var errChecksum = errors.New("does not match its checksum")
+
+func verifiedCopy(w io.Writer, r io.Reader, want hostd.ManifestFile) (int64, error) {
+	h := sha256.New()
+	buf := make([]byte, 0, 2*verifyTail)
+	var n int64
+	chunk := make([]byte, 256<<10)
+	for {
+		k, err := r.Read(chunk)
+		h.Write(chunk[:k])
+		buf = append(buf, chunk[:k]...)
+		if len(buf) > verifyTail {
+			out := len(buf) - verifyTail
+			if _, werr := w.Write(buf[:out]); werr != nil {
+				return n, werr
+			}
+			n += int64(out)
+			buf = append(buf[:0], buf[out:]...)
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return n, err
+		}
+	}
+	if n+int64(len(buf)) != want.Size || hex.EncodeToString(h.Sum(nil)) != want.SHA256 {
+		return n, errChecksum
+	}
+	k, err := w.Write(buf)
+	return n + int64(k), err
 }

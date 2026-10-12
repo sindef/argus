@@ -38,14 +38,6 @@ func NewServer() *Server {
 		bs, err := listBackups(r.Context())
 		reply(w, bs, err)
 	})
-	s.mux.HandleFunc("POST /backup/verify", func(w http.ResponseWriter, r *http.Request) {
-		var req struct{ Path string }
-		err := decode(r, &req)
-		if err == nil {
-			err = verifyBackup(r.Context(), req.Path)
-		}
-		reply(w, nil, err)
-	})
 	s.mux.HandleFunc("POST /backup/delete", func(w http.ResponseWriter, r *http.Request) {
 		var req struct{ Path string }
 		err := decode(r, &req)

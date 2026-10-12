@@ -137,10 +137,6 @@ func (c *Client) Backups(ctx context.Context) ([]Backup, error) {
 	return bs, c.do(ctx, http.MethodGet, "/backup/list", nil, &bs)
 }
 
-func (c *Client) VerifyBackup(ctx context.Context, rel string) error {
-	return c.do(ctx, http.MethodPost, "/backup/verify", map[string]string{"path": rel}, nil)
-}
-
 func (c *Client) DeleteBackup(ctx context.Context, rel string) error {
 	return c.do(ctx, http.MethodPost, "/backup/delete", map[string]string{"path": rel}, nil)
 }

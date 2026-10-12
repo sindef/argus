@@ -368,7 +368,7 @@ func (s *Server) restoreBackup(ctx context.Context, store, vm, stamp, target str
 	if err != nil {
 		return err
 	}
-	if err := st.Verify(ctx, rel); err != nil {
+	if err := checkBackup(ctx, st, rel); err != nil {
 		return err
 	}
 	body, _, err := st.Get(ctx, rel+"/vm.json")
@@ -457,16 +457,28 @@ func (s *Server) resumeRestores() {
 	}
 }
 
+var errRestoreAborted = errors.New("restore aborted")
+
 func (s *Server) watchRestore(token string, job restoreJob) {
 	defer s.untrackRestore(token)
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
 	defer cancel()
-	failed, _ := kube.WaitDisks(ctx, 10*time.Second, func(ctx context.Context) ([]kube.DiskStatus, error) {
+	failed, err := kube.WaitDisks(ctx, 10*time.Second, func(ctx context.Context) ([]kube.DiskStatus, error) {
+		s.backups.mu.Lock()
+		_, tracked := s.backups.restores[token]
+		s.backups.mu.Unlock()
+		if !tracked {
+			return nil, errRestoreAborted
+		}
 		disks, _ := s.kube.DiskStatus(ctx, job.Namespace, job.Target)
 		return disks, ctx.Err()
 	}, nil)
 	s.kube.FinishImport(context.Background(), job.Namespace, job.Target)
 	switch {
+	case errors.Is(err, errRestoreAborted):
+		if err := s.kube.DeleteVM(context.Background(), job.Namespace, job.Target); err != nil {
+			log.Printf("restore of %s: remove %s: %v", job.Rel, job.Target, err)
+		}
 	case failed != "":
 		s.backups.note(job.Key, "Failed restore as "+job.Target+": disk "+failed+" did not copy")
 	case ctx.Err() != nil:
@@ -480,7 +492,8 @@ func (s *Server) watchRestore(token string, job restoreJob) {
 func (s *Server) serveBackup(w http.ResponseWriter, r *http.Request) {
 	rel := r.PathValue("vm") + "/" + r.PathValue("stamp")
 	s.backups.mu.Lock()
-	job, ok := s.backups.restores[strings.TrimSpace(r.Header.Get("x-kubevirt-export-token"))]
+	token := strings.TrimSpace(r.Header.Get("x-kubevirt-export-token"))
+	job, ok := s.backups.restores[token]
 	s.backups.mu.Unlock()
 	if !ok || job.Rel != rel {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -494,17 +507,30 @@ func (s *Server) serveBackup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	body, size, err := st.Get(r.Context(), rel+"/"+r.PathValue("file"))
+	man, err := manifestOf(r.Context(), st, rel)
+	want, listed := man.Files[r.PathValue("file")]
+	if err != nil || !listed {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	body, _, err := st.Get(r.Context(), rel+"/"+r.PathValue("file"))
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
 	defer body.Close()
 	w.Header().Set("Content-Type", "application/octet-stream")
-	if size > 0 {
-		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	w.Header().Set("Content-Length", strconv.FormatInt(want.Size, 10))
+	n, err := verifiedCopy(w, body, want)
+	if err != nil {
+		log.Printf("backup %s/%s: %v after %d bytes; aborting the restore stream", rel, r.PathValue("file"), err, n)
+		if !errors.Is(err, errChecksum) {
+			panic(http.ErrAbortHandler)
+		}
+		s.backups.note(job.Key, "Failed restore as "+job.Target+": "+r.PathValue("file")+" "+err.Error())
+		s.untrackRestore(token)
+		panic(http.ErrAbortHandler)
 	}
-	n, _ := io.Copy(w, body)
 	log.Printf("backup %s/%s served: %d bytes", rel, r.PathValue("file"), n)
 }
 
