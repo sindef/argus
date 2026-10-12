@@ -27,12 +27,11 @@
     <h2>Create bridge on hosts</h2>
     <div class="row">
       <label>Name <input name="name" pattern="[a-z][a-z0-9-]{0,14}" placeholder="br1" required></label>
-      <label>Ports <span class="help" title="Port names, space separated. They must exist and be unused on every selected host.">?</span><input name="ports" placeholder="enp3s0 enp4s0" required></label>
+      <label>Bond mode <span class="help" title="Two or more ports are bonded before bridging.">?</span><select name="bond_mode"><option>active-backup</option><option>802.3ad</option><option>balance-alb</option><option>balance-tlb</option><option>balance-xor</option></select></label>
     </div>
-    <div class="row">
-      <label>Bond name <span class="help" title="Optional. Bonds the ports before bridging them.">?</span><input name="bond" pattern="[a-z][a-z0-9-]{0,14}" placeholder="bond0"></label>
-      <label>Bond mode <select name="bond_mode"><option>active-backup</option><option>802.3ad</option><option>balance-alb</option><option>balance-tlb</option><option>balance-xor</option></select></label>
-    </div>
+    <div class="field">Ports <span class="help" title="Unused physical ports: no address, not part of a bridge or bond, not the management interface. Each port must exist on every selected host.">?</span></div>
+    {{with .Ports}}<div class="table-wrap picks"><table><tbody>{{range .}}<tr><td><label class="check"><input type="checkbox" name="ports" value="{{.Name}}"> <span class="mono">{{.Name}}</span></label></td><td class="muted">{{if eq (len .Hosts) $.HostCount}}All hosts{{else}}{{range $i, $h := .Hosts}}{{if $i}}, {{end}}{{$h}}{{end}}{{end}}</td></tr>{{end}}</tbody></table></div>
+    {{else}}<p class="muted">No unused ports on any host.</p>{{end}}
     <div class="field">Hosts <span class="help" title="Applied one host at a time. Each host is confirmed only once Argus Manager can still reach it; the rollout stops at the first failure.">?</span></div>
     <div class="table-wrap picks"><table><tbody>{{range .Rows}}<tr><td><label class="check"><input type="checkbox" name="hosts" value="{{.Node.Name}}"{{if .Error}} disabled{{else if index $.Pre .Node.Name}} checked{{end}}> {{.Node.Name}}</label></td><td class="muted">{{range .Bridges}}{{.Name}} {{end}}</td></tr>{{end}}</tbody></table></div>
     <pre id="rollout-result" class="log"></pre>

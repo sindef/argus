@@ -183,7 +183,7 @@ func (s *Server) hostNetworkAction(w http.ResponseWriter, r *http.Request) {
 	switch op := r.PathValue("op"); op {
 	case "bridge":
 		r.ParseForm()
-		spec := hostd.BridgeSpec{Name: r.FormValue("name"), Ports: r.Form["ports"], Bond: r.FormValue("bond"), BondMode: r.FormValue("bond_mode")}
+		spec := bridgeSpec(r)
 		err = s.hostd.CreateBridge(ctx, spec)
 	case "delete":
 		br := r.FormValue("bridge")
@@ -290,4 +290,13 @@ func (s *Server) apiHostNetworkOp(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("%s: host network %s", session(r).User, r.PathValue("op"))
 	writeJSON(w, map[string]string{})
+}
+
+func bridgeSpec(r *http.Request) hostd.BridgeSpec {
+	spec := hostd.BridgeSpec{Name: r.FormValue("name"), Ports: r.Form["ports"], BondMode: r.FormValue("bond_mode")}
+	if len(spec.Ports) > 1 {
+		spec.Bond = "bond-" + spec.Name
+		spec.Bond = spec.Bond[:min(len(spec.Bond), 15)]
+	}
+	return spec
 }

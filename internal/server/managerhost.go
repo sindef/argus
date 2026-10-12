@@ -105,7 +105,13 @@ type hostNetRow struct {
 	Info    HostNetInfo
 	Bridges []hostd.Iface
 	Mgmt    []string
+	Free    []string
 	Error   string
+}
+
+type freePort struct {
+	Name  string
+	Hosts []string
 }
 
 func (s *Server) fleetHostNets(ctx context.Context, org string) []hostNetRow {
@@ -132,6 +138,9 @@ func (s *Server) fleetHostNets(ctx context.Context, org string) []hostNetRow {
 				if i.Master == "" && (!row.Info.Net.Restricted || slices.Contains(row.Info.Net.Management, i.Name)) {
 					row.Mgmt = append(row.Mgmt, i.Name)
 				}
+				if i.Kind == "ether" && i.Master == "" && len(i.Addresses) == 0 && !i.Mgmt && !i.Access {
+					row.Free = append(row.Free, i.Name)
+				}
 			}
 			mu.Lock()
 			rows = append(rows, row)
@@ -151,12 +160,23 @@ func (s *Server) managerHostNets(w http.ResponseWriter, r *http.Request) {
 			pre[row.Node.Name] = inGroup(row.Node, dc, r.FormValue("cluster"))
 		}
 	}
-	s.render(w, r, "hostnets.html", "layout", map[string]any{"Nav": "hostnets", "Rows": rows, "Pre": pre})
+	byPort := map[string][]string{}
+	for _, row := range rows {
+		for _, p := range row.Free {
+			byPort[p] = append(byPort[p], row.Node.Name)
+		}
+	}
+	var ports []freePort
+	for p, hs := range byPort {
+		ports = append(ports, freePort{p, hs})
+	}
+	sort.Slice(ports, func(i, j int) bool { return ports[i].Name < ports[j].Name })
+	s.render(w, r, "hostnets.html", "layout", map[string]any{"Nav": "hostnets", "Rows": rows, "Pre": pre, "Ports": ports, "HostCount": len(rows)})
 }
 
 func (s *Server) managerBridgeRollout(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
-	spec := hostd.BridgeSpec{Name: r.FormValue("name"), Ports: strings.Fields(strings.ReplaceAll(r.FormValue("ports"), ",", " ")), Bond: r.FormValue("bond"), BondMode: r.FormValue("bond_mode")}
+	spec := bridgeSpec(r)
 	hosts := r.Form["hosts"]
 	sort.Strings(hosts)
 	if len(hosts) == 0 || spec.Name == "" || len(spec.Ports) == 0 {

@@ -32,8 +32,7 @@
     <p id="bridge-form-error" class="error form-error"></p>
     <div class="row">
       <label>Name <input name="name" pattern="[a-z][a-z0-9-]{0,14}" placeholder="br1" required></label>
-      <label>Bond name <span class="help" title="Optional. Bonds the selected ports before bridging them; needs two or more ports.">?</span><input name="bond" pattern="[a-z][a-z0-9-]{0,14}" placeholder="bond0"></label>
-      <label>Bond mode <select name="bond_mode"><option>active-backup</option><option>802.3ad</option><option>balance-alb</option><option>balance-tlb</option><option>balance-xor</option></select></label>
+      <label>Bond mode <span class="help" title="Two or more ports are bonded before bridging.">?</span><select name="bond_mode"><option>active-backup</option><option>802.3ad</option><option>balance-alb</option><option>balance-tlb</option><option>balance-xor</option></select></label>
     </div>
     <div class="field">Ports</div>
     <div class="table-wrap picks"><table><tbody>{{range .Ports}}<tr>
