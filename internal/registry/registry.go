@@ -53,6 +53,7 @@ type Registry struct {
 	root      string
 	Authorize func(r *http.Request, repo string, a Access) bool
 	mu        sync.Mutex
+	rejected  map[string]time.Time
 }
 
 type Image struct {
@@ -83,7 +84,7 @@ func New(root string) (*Registry, error) {
 			return nil, err
 		}
 	}
-	return &Registry{root: root}, nil
+	return &Registry{root: root, rejected: map[string]time.Time{}}, nil
 }
 
 func (g *Registry) blob(d string) string {
@@ -292,24 +293,24 @@ func (g *Registry) serveManifest(w http.ResponseWriter, r *http.Request, repo, r
 	}
 }
 
-var ErrNotDisk = errors.New("not a disk image: expected qcow2, raw, ISO, VMDK, VHDX or VDI")
+var ErrNotDisk = errors.New("not a disk image: expected qcow2, raw, ISO, VMDK, VHD, VHDX or VDI")
 
-const sniffLen = 0x8006
+const SniffLen = 0x8006
 
-func isDisk(b []byte) bool {
+func IsDisk(b []byte) bool {
 	at := func(off int, magic string) bool {
 		return len(b) >= off+len(magic) && string(b[off:off+len(magic)]) == magic
 	}
-	return at(0, "QFI\xfb") || at(0, "KDMV") || at(0, "vhdxfile") || at(0x40, "\x7f\x10\xda\xbe") || at(0x8001, "CD001") || at(510, "\x55\xaa") || at(512, "EFI PART")
+	return at(0, "QFI\xfb") || at(0, "KDMV") || at(0, "vhdxfile") || at(0, "conectix") || at(0x40, "\x7f\x10\xda\xbe") || at(0x8001, "CD001") || at(510, "\x55\xaa") || at(512, "EFI PART")
 }
 
 func sniff(r io.Reader) (io.Reader, error) {
-	br := bufio.NewReaderSize(r, sniffLen)
-	b, err := br.Peek(sniffLen)
+	br := bufio.NewReaderSize(r, SniffLen)
+	b, err := br.Peek(SniffLen)
 	if err != nil && err != io.EOF {
 		return nil, err
 	}
-	if !isDisk(b) {
+	if !IsDisk(b) {
 		return nil, ErrNotDisk
 	}
 	return br, nil
@@ -355,6 +356,55 @@ func (g *Registry) checkDisk(m manifest) error {
 	return nil
 }
 
+func (g *Registry) wasRejected(d string) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	t, ok := g.rejected[d]
+	return ok && time.Since(t) < staleAfter
+}
+
+func (g *Registry) drop(repo string, refs []descriptor, reject bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	used := map[string]bool{}
+	repos := g.repos(true)
+	for _, r := range repos {
+		ents, _ := os.ReadDir(filepath.Join(g.repo(r), "_manifests"))
+		for _, e := range ents {
+			var m manifest
+			if b, err := os.ReadFile(g.blob("sha256:" + e.Name())); err == nil && json.Unmarshal(b, &m) == nil {
+				for _, c := range m.refs() {
+					used[c.Digest] = true
+				}
+			}
+		}
+	}
+	for k, t := range g.rejected {
+		if time.Since(t) > staleAfter {
+			delete(g.rejected, k)
+		}
+	}
+	for _, l := range refs {
+		if used[l.Digest] {
+			continue
+		}
+		if reject {
+			g.rejected[l.Digest] = time.Now()
+		}
+		os.Remove(g.layerLink(repo, l.Digest))
+		if !slices.ContainsFunc(repos, func(r string) bool { return exists(g.layerLink(r, l.Digest)) || exists(g.manifestLink(r, l.Digest)) }) {
+			os.Remove(g.blob(l.Digest))
+		}
+	}
+	if ents, _ := os.ReadDir(filepath.Join(g.repo(repo), "_manifests")); len(ents) == 0 {
+		if links, _ := os.ReadDir(filepath.Join(g.repo(repo), "_layers")); len(links) == 0 {
+			os.RemoveAll(g.repo(repo))
+			for p := filepath.Dir(g.repo(repo)); p != filepath.Join(g.root, "repos") && os.Remove(p) == nil; p = filepath.Dir(p) {
+			}
+		}
+	}
+}
+
 func (g *Registry) putManifest(repo, ref, ct string, b []byte) (string, error) {
 	return g.storeManifest(repo, ref, ct, b, true)
 }
@@ -377,11 +427,16 @@ func (g *Registry) storeManifest(repo, ref, ct string, b []byte, check bool) (st
 	}
 	for _, c := range m.refs() {
 		if !exists(g.layerLink(repo, c.Digest)) && !exists(g.manifestLink(repo, c.Digest)) {
+			if g.wasRejected(c.Digest) {
+				g.drop(repo, m.refs(), true)
+				return "", ErrNotDisk
+			}
 			return "", fmt.Errorf("blob %s is not in %s", c.Digest, repo)
 		}
 	}
 	if check {
 		if err := g.checkDisk(m); err != nil {
+			g.drop(repo, m.refs(), true)
 			return "", err
 		}
 	}
@@ -712,13 +767,22 @@ func (g *Registry) Delete(repo, tag string) error {
 	}
 	for _, t := range g.tags(repo) {
 		if b, _ := os.ReadFile(g.tag(repo, t)); string(b) == d {
-			return g.GC()
+			return nil
 		}
+	}
+	var m manifest
+	b, err := os.ReadFile(g.blob(d))
+	if err == nil {
+		err = json.Unmarshal(b, &m)
+	}
+	if err != nil {
+		return err
 	}
 	if err := g.deleteRef(repo, d); err != nil {
 		return err
 	}
-	return g.GC()
+	g.drop(repo, append(m.refs(), descriptor{Digest: d}), false)
+	return nil
 }
 
 func (g *Registry) GC() error {

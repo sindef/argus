@@ -86,6 +86,13 @@ func TestPushPullDelete(t *testing.T) {
 	if resp := do(t, srv, "PUT", "/v2/org/app/manifests/sh", notDisk, basic...); resp.StatusCode != 400 {
 		t.Fatalf("non-disk image accepted: %d", resp.StatusCode)
 	}
+	if exists(g.blob(digestOf(app))) || exists(g.layerLink("org/app", digestOf(app))) {
+		t.Fatal("refused layer left on disk")
+	}
+	resp = do(t, srv, "PUT", "/v2/org/app/manifests/sh", notDisk, basic...)
+	if msg, _ := io.ReadAll(resp.Body); resp.StatusCode != 400 || !strings.Contains(string(msg), "not a disk image") {
+		t.Fatalf("retry after refusal: %d %s", resp.StatusCode, msg)
+	}
 
 	resp = do(t, srv, "GET", "/v2/org/app/manifests/v1", nil, basic...)
 	got, _ := io.ReadAll(resp.Body)
@@ -115,6 +122,9 @@ func TestPushPullDelete(t *testing.T) {
 	}
 	if len(g.List("org/")) != 0 {
 		t.Fatal("image still listed after delete")
+	}
+	if exists(g.blob(ld)) || exists(g.blob(digestOf(m))) || exists(g.repo("org")) {
+		t.Fatal("deleted image left data on disk")
 	}
 }
 
