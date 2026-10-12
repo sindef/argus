@@ -57,11 +57,11 @@ func (g Guest) userData() string {
 		if len(g.SSHKeys) > 0 {
 			u["ssh_authorized_keys"] = g.SSHKeys
 		}
-		cfg["users"] = []any{"default", u}
 		if g.Password != "" {
-			cfg["chpasswd"] = obj{"expire": false, "users": []any{obj{"name": g.User, "password": g.Password, "type": "text"}}}
+			u["passwd"] = sha512Crypt(g.Password, cryptSalt())
 			cfg["ssh_pwauth"] = true
 		}
+		cfg["users"] = []any{"default", u}
 	}
 	b, _ := json.Marshal(cfg)
 	return "#cloud-config\n" + string(b) + "\n"
