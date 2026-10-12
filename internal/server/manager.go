@@ -236,7 +236,7 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 	}
 }
 
-var groupTabs = []string{"summary", "hosts", "vms"}
+var groupTabs = []string{"summary", "hosts", "vms", "networks"}
 
 func (s *Server) managerHome(w http.ResponseWriter, r *http.Request) {
 	data := s.managerData(r)
@@ -257,6 +257,15 @@ func (s *Server) managerHome(w http.ResponseWriter, r *http.Request) {
 		tab = "summary"
 	}
 	data["Tab"], data["Range"] = tab, r.URL.Query().Get("range")
+	if tab == "networks" {
+		defs, _ := s.manager.Networks(r.Context(), session(r).Org)
+		data["Networks"] = slices.DeleteFunc(defs, func(n manager.Network) bool {
+			return len(n.Scopes) > 0 && dc != "" && !slices.ContainsFunc(n.Scopes, func(sc string) bool {
+				d, c, _ := strings.Cut(sc, "/")
+				return d == dc && (cl == "" || c == "" || c == cl)
+			})
+		})
+	}
 	s.render(w, r, "manager.html", "layout", data)
 }
 

@@ -10,12 +10,13 @@ import (
 )
 
 type Network struct {
-	Name        string `json:"name"`
-	VLAN        int    `json:"vlan"`
-	CIDR        string `json:"cidr"`
-	Gateway     string `json:"gateway"`
-	Description string `json:"description"`
-	Bridge      string `json:"bridge,omitempty"`
+	Name        string   `json:"name"`
+	VLAN        int      `json:"vlan"`
+	CIDR        string   `json:"cidr"`
+	Gateway     string   `json:"gateway"`
+	Description string   `json:"description"`
+	Bridge      string   `json:"bridge,omitempty"`
+	Scopes      []string `json:"scopes,omitempty"`
 }
 
 func (n Network) BridgeName() string {

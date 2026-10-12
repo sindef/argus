@@ -66,6 +66,7 @@ type netRow struct {
 	Defined  bool
 	Hosts    map[string]string
 	Applied  int
+	InScope  int
 	Attached int
 }
 
@@ -104,18 +105,28 @@ func (s *Server) managerNetworks(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	nodes := map[string]manager.Node{}
+	for _, st := range states {
+		nodes[st.Node.Name] = st.Node
+	}
 	rows := map[string]*netRow{}
 	for _, d := range defs {
 		rows[d.Name] = &netRow{Network: d, Defined: true, Hosts: map[string]string{}}
 	}
-	for host, nets := range onHost {
+	for _, nets := range onHost {
 		for name, x := range nets {
 			if rows[name] == nil {
 				rows[name] = &netRow{Network: manager.Network{Name: name, VLAN: x.VLAN, Bridge: x.Bridge}, Hosts: map[string]string{}}
 			}
 		}
+	}
+	for host, nets := range onHost {
 		for name, row := range rows {
 			x, ok := nets[name]
+			if !inScope(row.Scopes, nodes[host]) {
+				continue
+			}
+			row.InScope++
 			switch {
 			case !ok:
 				row.Hosts[host] = "Missing"
@@ -145,12 +156,24 @@ func (s *Server) managerNetworks(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	sort.Strings(all)
-	s.render(w, r, "networks.html", "layout", map[string]any{"Nav": "networks", "Rows": out, "Reachable": len(onHost), "Switches": switches(s.fleetHostNets(r.Context(), org), out), "AllBridges": all, "CanEdit": session(r).Role.Can(auth.Admin), "Error": errs})
+	s.render(w, r, "networks.html", "layout", map[string]any{"Nav": "networks", "Rows": out, "Reachable": len(onHost), "Switches": switches(s.fleetHostNets(r.Context(), org), out), "Scopes": s.scopeNames(r), "AllBridges": all, "CanEdit": session(r).Role.Can(auth.Admin), "Error": errs})
+}
+
+func networksFor(defs []manager.Network, n manager.Node) []manager.Network {
+	return slices.DeleteFunc(slices.Clone(defs), func(d manager.Network) bool { return !inScope(d.Scopes, n) })
 }
 
 func (s *Server) pushNetwork(r *http.Request, op string, n manager.Network) string {
 	return fanOut(r.Context(), s.inventory(r), func(ctx context.Context, node manager.Node) error {
-		return node.Call(ctx, http.MethodPost, "/api/networks/"+op, networkReq{Name: n.Name, VLAN: n.VLAN, Bridge: n.Bridge}, nil)
+		req := networkReq{Name: n.Name, VLAN: n.VLAN, Bridge: n.Bridge}
+		if op == "delete" || inScope(n.Scopes, node) {
+			return node.Call(ctx, http.MethodPost, "/api/networks/"+op, req, nil)
+		}
+		var nets []kube.Network
+		if err := node.Call(ctx, http.MethodGet, "/api/networks", nil, &nets); err != nil || !slices.ContainsFunc(nets, func(x kube.Network) bool { return x.Name == n.Name }) {
+			return err
+		}
+		return node.Call(ctx, http.MethodPost, "/api/networks/delete", req, nil)
 	})
 }
 
@@ -159,7 +182,7 @@ func (s *Server) managerAddNetwork(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		err = validNetwork(req)
 	}
-	n := manager.Network{Name: req.Name, VLAN: req.VLAN, Bridge: req.Bridge, CIDR: strings.TrimSpace(r.FormValue("cidr")), Gateway: strings.TrimSpace(r.FormValue("gateway")), Description: strings.TrimSpace(r.FormValue("description"))}
+	n := manager.Network{Name: req.Name, VLAN: req.VLAN, Bridge: req.Bridge, CIDR: strings.TrimSpace(r.FormValue("cidr")), Gateway: strings.TrimSpace(r.FormValue("gateway")), Description: strings.TrimSpace(r.FormValue("description")), Scopes: scopeList(r.FormValue("scopes"))}
 	if _, _, cerr := net.ParseCIDR(n.CIDR); err == nil && n.CIDR != "" && cerr != nil {
 		err = errors.New("invalid CIDR")
 	}

@@ -11,6 +11,7 @@
   <a href="{{.Page}}"{{if eq .Tab "summary"}} class="active"{{end}}>{{template "icon" "gauge"}}Summary</a>
   <a href="{{.Page}}?tab=hosts"{{if eq .Tab "hosts"}} class="active"{{end}}>{{template "icon" "server"}}Hosts</a>
   <a href="{{.Page}}?tab=vms"{{if eq .Tab "vms"}} class="active"{{end}}>{{template "icon" "monitor"}}Virtual machines</a>
+  <a href="{{.Page}}?tab=networks"{{if eq .Tab "networks"}} class="active"{{end}}>{{template "icon" "network"}}Networks</a>
 </nav>
 <div class="panes-body">
 {{if eq .Tab "hosts"}}
@@ -31,6 +32,16 @@
       <td>{{.Running}} / {{.VMs}}</td>
       <td>{{since .Info.BootTime}}</td>{{end}}
     </tr>{{end}}</tbody>
+  </table></div>
+</div>
+{{else if eq .Tab "networks"}}
+<div class="card">
+  <div class="card-head"><h2>Networks</h2><a class="right" href="/networks">Manage networks</a></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Name</th><th>VLAN</th><th>Bridge</th><th>Scope</th><th>CIDR</th></tr></thead>
+    <tbody>{{range .Networks}}<tr><td>{{template "icon" "network"}}{{.Name}}{{with .Description}} <span class="muted">{{.}}</span>{{end}}</td><td>{{if .VLAN}}{{.VLAN}}{{else}}<span class="muted">untagged</span>{{end}}</td><td class="mono">{{.BridgeName}}</td>
+      <td>{{range $i, $s := .Scopes}}{{if $i}}, {{end}}{{$s}}{{else}}<span class="muted">All</span>{{end}}</td><td>{{with .CIDR}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td></tr>
+    {{else}}<tr><td colspan="5" class="muted">No networks cover this {{if .Cluster}}cluster{{else if .DC}}datacenter{{else}}organization{{end}}.</td></tr>{{end}}</tbody>
   </table></div>
 </div>
 {{else if eq .Tab "vms"}}

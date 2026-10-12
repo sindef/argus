@@ -83,7 +83,7 @@ func (s *Server) compliance(r *http.Request, p manager.Profile, dc, cl string) [
 				row.Error = err.Error()
 				return
 			}
-			row.Diffs = profileDiffs(p, hs, nets, defs)
+			row.Diffs = profileDiffs(p, hs, nets, networksFor(defs, row.Node))
 		}(&rows[i])
 	}
 	wg.Wait()
@@ -140,7 +140,7 @@ func (s *Server) profileApply(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		if p.Networks {
-			for _, d := range defs {
+			for _, d := range networksFor(defs, n) {
 				if err := n.Call(ctx, http.MethodPost, "/api/networks/create", networkReq{Name: d.Name, VLAN: d.VLAN, Bridge: d.Bridge}, nil); err != nil {
 					return err
 				}

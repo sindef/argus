@@ -66,22 +66,23 @@
   <header><h2>Networks</h2>{{if .CanEdit}}<div class="actions"><button class="btn primary" data-dialog="new-network">{{template "icon" "plus"}}Define network</button></div>{{end}}</header>
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Name</th><th>VLAN</th><th>Bridge</th><th>CIDR</th><th>Gateway</th><th>Applied</th><th>Attached VMs</th><th></th></tr></thead>
-  <tbody>{{range .Rows}}<tr{{if $.CanEdit}} class="clickable" data-dialog="{{if .Defined}}edit-network{{else}}new-network{{end}}" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.BridgeName}}","cidr":"{{.CIDR}}","gateway":"{{.Gateway}}","description":"{{.Description}}"}'{{end}}>
+  <thead><tr><th>Name</th><th>VLAN</th><th>Bridge</th><th>Scope</th><th>CIDR</th><th>Gateway</th><th>Applied</th><th>Attached VMs</th><th></th></tr></thead>
+  <tbody>{{range .Rows}}<tr{{if $.CanEdit}} class="clickable" data-dialog="{{if .Defined}}edit-network{{else}}new-network{{end}}" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.BridgeName}}","cidr":"{{.CIDR}}","gateway":"{{.Gateway}}","description":"{{.Description}}","scopes":"{{join .Scopes ", "}}"}'{{end}}>
     <td>{{template "icon" "network"}}{{.Name}}{{with .Description}} <span class="muted">{{.}}</span>{{end}}{{if not .Defined}} <span class="badge" title="Exists on a host but is not defined in Argus Manager">host only</span>{{end}}</td>
     <td>{{if .VLAN}}{{.VLAN}}{{else}}<span class="muted">untagged</span>{{end}}</td>
     <td class="mono">{{.BridgeName}}</td>
+    <td>{{range $i, $s := .Scopes}}{{if $i}}, {{end}}{{$s}}{{else}}<span class="muted">All</span>{{end}}</td>
     <td>{{with .CIDR}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
     <td>{{with .Gateway}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
-    <td><span class="dot {{if eq .Applied $.Reachable}}Applied{{else}}Warning{{end}}" title="{{range $h, $st := .Hosts}}{{$h}}: {{$st}}&#10;{{end}}">{{.Applied}} / {{$.Reachable}} hosts</span></td>
+    <td><span class="dot {{if eq .Applied .InScope}}Applied{{else}}Warning{{end}}" title="{{range $h, $st := .Hosts}}{{$h}}: {{$st}}&#10;{{end}}">{{.Applied}} / {{.InScope}} hosts</span></td>
     <td>{{.Attached}}</td>
     <td class="row-actions">{{if $.CanEdit}}<div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
       <div class="menu-list" hidden hx-target="#flash">
-        {{if .Defined}}<button data-dialog="edit-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.BridgeName}}","cidr":"{{.CIDR}}","gateway":"{{.Gateway}}","description":"{{.Description}}"}'>{{template "icon" "pencil"}}Edit…</button>{{else}}<button data-dialog="new-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.BridgeName}}","cidr":"{{.CIDR}}","gateway":"{{.Gateway}}","description":"{{.Description}}"}'>{{template "icon" "plus"}}Define…</button>{{end}}
-        {{if and .Defined (ne .Applied $.Reachable)}}<button hx-post="/networks/{{.Name}}/apply">{{template "icon" "refresh-cw"}}Apply to all hosts</button>{{end}}
+        {{if .Defined}}<button data-dialog="edit-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.BridgeName}}","cidr":"{{.CIDR}}","gateway":"{{.Gateway}}","description":"{{.Description}}","scopes":"{{join .Scopes ", "}}"}'>{{template "icon" "pencil"}}Edit…</button>{{else}}<button data-dialog="new-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.BridgeName}}","cidr":"{{.CIDR}}","gateway":"{{.Gateway}}","description":"{{.Description}}","scopes":"{{join .Scopes ", "}}"}'>{{template "icon" "plus"}}Define…</button>{{end}}
+        {{if and .Defined (ne .Applied .InScope)}}<button hx-post="/networks/{{.Name}}/apply">{{template "icon" "refresh-cw"}}Apply to hosts in scope</button>{{end}}
         <hr><button class="danger" hx-post="/networks/{{.Name}}/delete" hx-confirm="Delete {{.Name}} from all hosts?">{{template "icon" "trash-2"}}Delete</button>
       </div></div>{{end}}</td>
-  </tr>{{else}}<tr><td colspan="8" class="muted">No networks.</td></tr>{{end}}</tbody>
+  </tr>{{else}}<tr><td colspan="9" class="muted">No networks.</td></tr>{{end}}</tbody>
 </table>
 </div>
 </section>
@@ -100,6 +101,7 @@
 </section>
 </div>
 {{if .CanEdit}}
+<datalist id="net-scopes">{{range $.Scopes}}<option>{{.}}</option>{{end}}</datalist>
 <dialog id="new-network" class="card">
   <form class="form" hx-post="/networks" hx-target="#fleet-network-error">
     <h2>Define network</h2>
@@ -114,8 +116,9 @@
       <label>CIDR <span class="help" title="Descriptive only. Addressing comes from your network's DHCP or static guest config.">?</span><input name="cidr" placeholder="10.10.1.0/24"></label>
       <label>Gateway <input name="gateway" placeholder="10.10.1.1"></label>
     </div>
+    <label>Scope <span class="help" title="Comma separated datacenters or datacenter/cluster. Empty means every host in the organization.">?</span><input name="scopes" list="net-scopes" placeholder="All"></label>
     <label>Description <input name="description"></label>
-    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Create on all hosts</button></div>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Create on hosts in scope</button></div>
   </form>
 </dialog>
 <dialog id="edit-network" class="card">
@@ -133,6 +136,7 @@
       <label>CIDR <span class="help" title="Descriptive only. Addressing comes from your network's DHCP or static guest config.">?</span><input name="cidr" placeholder="10.10.1.0/24"></label>
       <label>Gateway <input name="gateway" placeholder="10.10.1.1"></label>
     </div>
+    <label>Scope <span class="help" title="Comma separated datacenters or datacenter/cluster. Empty means every host in the organization.">?</span><input name="scopes" list="net-scopes" placeholder="All"></label>
     <label>Description <input name="description"></label>
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Save and apply</button></div>
   </form>
