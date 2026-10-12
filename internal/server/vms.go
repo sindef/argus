@@ -517,7 +517,7 @@ func (s *Server) hardwareModal(w http.ResponseWriter, r *http.Request) {
 	}
 	imgs, _ := s.kube.ListImages(r.Context())
 	nets, _ := s.kube.ListNetworks(r.Context())
-	s.render(w, r, "vms.html", "hardware-modal", map[string]any{"HW": hw, "NS": ns, "Name": name, "Images": imgs, "Networks": nets})
+	s.render(w, r, "vms.html", "hardware-modal", map[string]any{"HW": hw, "NS": ns, "Name": name, "Images": imgs, "Networks": nets, "Firmwares": kube.Firmwares()})
 }
 
 func (s *Server) hardwareAction(w http.ResponseWriter, r *http.Request) {
@@ -530,7 +530,7 @@ func (s *Server) hardwareAction(w http.ResponseWriter, r *http.Request) {
 		if err = intField(r, "cores", 1, 64, &cores); err == nil {
 			err = intField(r, "memory", 128, 262144, &mem)
 		}
-		if err == nil && !slices.Contains([]string{"bios", "uefi", "uefi-secure"}, hw.Firmware) {
+		if err == nil && !slices.Contains(kube.Firmwares(), hw.Firmware) {
 			err = errors.New("invalid firmware")
 		}
 		if err == nil {

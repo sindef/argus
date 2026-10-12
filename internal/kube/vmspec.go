@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"runtime"
 	"slices"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -107,7 +108,7 @@ func (c *Client) CreateVM(ctx context.Context, s VMSpec) error {
 	disks := []interface{}{obj{"name": "root", "bootOrder": rootBoot, "disk": obj{"bus": "virtio"}}}
 	volumes := []interface{}{obj{"name": "root", "dataVolume": obj{"name": root}}}
 	if s.CDROM != "" {
-		disks = append(disks, obj{"name": "cdrom", "bootOrder": cdBoot, "cdrom": obj{"bus": "sata"}})
+		disks = append(disks, obj{"name": "cdrom", "bootOrder": cdBoot, "cdrom": obj{"bus": cdromBus()}})
 		volumes = append(volumes, obj{"name": "cdrom", "persistentVolumeClaim": obj{"claimName": s.CDROM, "readOnly": true}})
 	}
 	mac := randomMAC()
@@ -163,6 +164,20 @@ func (c *Client) CreateVM(ctx context.Context, s VMSpec) error {
 	}}
 	_, err := c.dyn.Resource(vmGVR).Namespace(Namespace).Create(ctx, vm, metav1.CreateOptions{})
 	return err
+}
+
+func cdromBus() string {
+	if runtime.GOARCH == "arm64" {
+		return "scsi"
+	}
+	return "sata"
+}
+
+func Firmwares() []string {
+	if runtime.GOARCH == "arm64" {
+		return []string{"uefi"}
+	}
+	return []string{"bios", "uefi", "uefi-secure"}
 }
 
 func randomMAC() string {
@@ -405,7 +420,7 @@ func (c *Client) Hardware(ctx context.Context, ns, name string) (Hardware, error
 		return Hardware{}, err
 	}
 	o := vm.Object
-	hw := Hardware{Firmware: "bios"}
+	hw := Hardware{Firmware: Firmwares()[0]}
 	hw.Cores, _, _ = unstructured.NestedInt64(o, "spec", "template", "spec", "domain", "cpu", "cores")
 	if m, ok, _ := unstructured.NestedString(o, "spec", "template", "spec", "domain", "memory", "guest"); ok {
 		if q, err := resource.ParseQuantity(m); err == nil {
@@ -414,7 +429,7 @@ func (c *Client) Hardware(ctx context.Context, ns, name string) (Hardware, error
 	}
 	if _, ok, _ := unstructured.NestedMap(o, "spec", "template", "spec", "domain", "firmware", "bootloader", "efi"); ok {
 		hw.Firmware = "uefi"
-		if sb, ok, _ := unstructured.NestedBool(o, "spec", "template", "spec", "domain", "firmware", "bootloader", "efi", "secureBoot"); !ok || sb {
+		if sb, ok, _ := unstructured.NestedBool(o, "spec", "template", "spec", "domain", "firmware", "bootloader", "efi", "secureBoot"); (!ok || sb) && runtime.GOARCH != "arm64" {
 			hw.Firmware = "uefi-secure"
 		}
 	}
@@ -458,6 +473,9 @@ func (c *Client) SetHardware(ctx context.Context, ns, name string, hw Hardware) 
 		case "uefi":
 			unstructured.SetNestedField(o, obj{"secureBoot": false}, append(dom, "firmware", "bootloader", "efi")...)
 		case "uefi-secure":
+			if runtime.GOARCH == "arm64" {
+				return errors.New("Secure Boot is not available on arm64 hosts")
+			}
 			unstructured.SetNestedField(o, obj{"secureBoot": true}, append(dom, "firmware", "bootloader", "efi")...)
 			unstructured.SetNestedField(o, obj{"enabled": true}, append(dom, "features", "smm")...)
 		}
@@ -471,7 +489,7 @@ func (c *Client) SetHardware(ctx context.Context, ns, name string, hw Hardware) 
 		disks = without(disks, func(m obj) bool { return m["name"] == "cdrom" })
 		vols = without(vols, func(m obj) bool { return m["name"] == "cdrom" })
 		if hw.CDROM != "" {
-			disks = append(disks, obj{"name": "cdrom", "cdrom": obj{"bus": "sata"}})
+			disks = append(disks, obj{"name": "cdrom", "cdrom": obj{"bus": cdromBus()}})
 			vols = append(vols, obj{"name": "cdrom", "persistentVolumeClaim": obj{"claimName": hw.CDROM, "readOnly": true}})
 		}
 		if err := unstructured.SetNestedSlice(o, disks, append(dom, "devices", "disks")...); err != nil {

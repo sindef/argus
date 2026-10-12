@@ -196,9 +196,7 @@
     <label>vCPUs <input name="cores" type="number" min="1" max="64" value="{{.Cores}}" required></label>
     <label>Memory (MiB) <input name="memory" type="number" min="128" max="262144" step="128" value="{{.MemoryMiB}}" required></label>
     <label>Firmware <select name="firmware">
-      <option value="bios"{{if eq .Firmware "bios"}} selected{{end}}>BIOS</option>
-      <option value="uefi"{{if eq .Firmware "uefi"}} selected{{end}}>UEFI</option>
-      <option value="uefi-secure"{{if eq .Firmware "uefi-secure"}} selected{{end}}>UEFI with Secure Boot</option>
+      {{$fw := .Firmware}}{{range $.Firmwares}}<option value="{{.}}"{{if eq . $fw}} selected{{end}}>{{if eq . "bios"}}BIOS{{else if eq . "uefi"}}UEFI{{else}}UEFI with Secure Boot{{end}}</option>{{end}}
     </select></label>
   </div>
   <div class="row">
