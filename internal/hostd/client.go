@@ -263,3 +263,7 @@ func WithAccess(ctx context.Context, host string) context.Context {
 	}
 	return context.WithValue(ctx, accessKey{}, host)
 }
+
+func (c *Client) Firewall(ctx context.Context, vms []FWVM) error {
+	return c.do(ctx, http.MethodPost, "/firewall", vms, nil)
+}

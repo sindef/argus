@@ -88,6 +88,14 @@ func NewServer() *Server {
 		}
 		reply(w, nil, err)
 	})
+	s.mux.HandleFunc("POST /firewall", func(w http.ResponseWriter, r *http.Request) {
+		var vms []FWVM
+		err := decode(r, &vms)
+		if err == nil {
+			err = applyFirewall(r.Context(), vms)
+		}
+		reply(w, nil, err)
+	})
 	s.mux.HandleFunc("GET /zfs/send", zfsSend)
 	s.mux.HandleFunc("GET /zfs/changes", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()

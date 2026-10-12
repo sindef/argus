@@ -503,6 +503,15 @@ func (s *Server) hostAPIRoutes() {
 			}
 			s.apiOp(w, r, in, func() (any, error) { return nil, l.NetworkOp(accessCtx(r), r.PathValue("op"), req) })
 		},
+		"POST /api/host/firewall": func(w http.ResponseWriter, r *http.Request) {
+			var vms []hostd.FWVM
+			s.apiOp(w, r, &vms, func() (any, error) {
+				if s.hostd == nil {
+					return nil, errNoHostd
+				}
+				return nil, s.hostd.Firewall(r.Context(), vms)
+			})
+		},
 		"POST /api/host/cpu-baseline": func(w http.ResponseWriter, r *http.Request) {
 			var req struct {
 				Model string `json:"model"`

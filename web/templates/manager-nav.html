@@ -15,7 +15,8 @@
   <button class="nav-head">{{template "icon" "network"}}Networking<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-down"/></svg></button>
   <div class="nav-items">
     <a class="nav-link sub{{if eq .Nav "networks"}} active{{end}}" href="/networks">Networks</a>
-    {{if .OrgAdmin}}<a class="nav-link sub{{if eq .Nav "hostnets"}} active{{end}}" href="/network/hosts">Host networks</a>{{end}}
+    {{if .OrgAdmin}}<a class="nav-link sub{{if eq .Nav "hostnets"}} active{{end}}" href="/network/hosts">Host networks</a>
+    <a class="nav-link sub{{if eq .Nav "firewall"}} active{{end}}" href="/firewall">Firewall</a>{{end}}
   </div>
 </div>
 {{if .OrgAdmin}}

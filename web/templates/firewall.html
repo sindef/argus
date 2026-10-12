@@ -1,0 +1,47 @@
+{{define "content"}}
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-shield-check"/></svg>
+  <div><h1>Firewall</h1><div class="crumbs">Networking / Firewall</div></div>
+</div>
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+<div class="panes static">
+<section class="pane">
+  <header><h2>Rules</h2><div class="actions">
+    <form hx-post="/firewall/default" hx-target="#flash" hx-trigger="change" class="inline"><label class="check"><input type="checkbox" name="drop"{{if .Policy.DefaultDrop}} checked{{end}}> Deny unmatched traffic <span class="help" title="Applies only to VMs that some rule targets. Other VMs are not filtered.">?</span></label></form>
+    <button class="btn primary" data-dialog="edit-rule" data-fill='{"i":"-1","name":"","source":"any","dest":"tag:","proto":"tcp","ports":"","action":"allow"}'>{{template "icon" "plus"}}Add rule</button></div></header>
+  <div class="table-wrap"><table>
+    <thead><tr><th>#</th><th>Name</th><th>Source</th><th>Destination</th><th>Service</th><th>Action</th><th></th></tr></thead>
+    <tbody>{{range $i, $r := .Rows}}<tr class="clickable" data-dialog="edit-rule" data-fill='{{.Fill}}'>
+      <td>{{add $i 1}}</td><td>{{.Name}}</td><td class="mono">{{.Source}}</td><td class="mono">{{.Dest}}</td>
+      <td>{{.Proto}}{{with .Ports}} {{range $j, $p := .}}{{if $j}},{{end}}{{$p}}{{end}}{{end}}</td>
+      <td><span class="dot {{if .Allow}}Healthy{{else}}Failed{{end}}">{{if .Allow}}Allow{{else}}Deny{{end}}</span></td>
+      <td class="row-actions"><div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
+        <div class="menu-list" hidden hx-target="#flash">
+          <button hx-post="/firewall/move" hx-vals='{"i":"{{$i}}","dir":"up"}'>{{template "icon" "chevron-up"}}Move up</button>
+          <button hx-post="/firewall/move" hx-vals='{"i":"{{$i}}","dir":"down"}'>{{template "icon" "chevron-down"}}Move down</button>
+          <hr><button class="danger" hx-post="/firewall/delete" hx-vals='{"i":"{{$i}}"}' hx-confirm="Delete rule {{.Name}}?">{{template "icon" "trash-2"}}Delete</button>
+        </div></div></td></tr>
+    {{else}}<tr><td colspan="7" class="muted">No rules. VM traffic is not filtered.</td></tr>{{end}}</tbody>
+  </table></div>
+</section>
+</div>
+<dialog id="edit-rule" class="card">
+  <form hx-post="/firewall/save" hx-target="#rule-error" class="form">
+    <h2>Rule</h2>
+    <p id="rule-error" class="error form-error"></p>
+    <input type="hidden" name="i">
+    <label>Name <input name="name" required maxlength="64"></label>
+    <div class="row">
+      <label>Source <span class="help" title="any, tag:NAME (VMs with that tag on the same network) or cidr:10.0.0.0/8">?</span><input name="source" class="mono" list="fw-tags" required></label>
+      <label>Destination <span class="help" title="any or tag:NAME. Traffic is filtered as it reaches these VMs.">?</span><input name="dest" class="mono" list="fw-tags" required></label>
+    </div>
+    <div class="row">
+      <label>Protocol <select name="proto"><option>tcp</option><option>udp</option><option>icmp</option><option>any</option></select></label>
+      <label>Ports <input name="ports" placeholder="22, 443" class="mono"></label>
+      <label>Action <select name="action"><option value="allow">Allow</option><option value="deny">Deny</option></select></label>
+    </div>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Save</button></div>
+  </form>
+</dialog>
+<datalist id="fw-tags"><option>any</option>{{range .Tags}}<option>tag:{{.}}</option>{{end}}</datalist>
+{{end}}

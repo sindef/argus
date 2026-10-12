@@ -120,6 +120,7 @@ func (m *Manager) poll(ctx context.Context, n Node) {
 	} else {
 		st.Info, st.VMs, st.Error, st.Observed = info, vms, "", time.Now()
 		m.alignCPU(ctx, n, &st.Info)
+		defer m.alignFirewall(ctx, n)
 		var sample kube.MetricsSample
 		if n.Call(ctx, "GET", "/api/metrics", nil, &sample) == nil {
 			m.tel.record(n.Name, info.CPUCores, sample)
