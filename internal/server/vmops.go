@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/gorilla/websocket"
+
 	"argus/internal/auth"
 	"argus/internal/kube"
 	"argus/internal/manager"
@@ -72,6 +74,14 @@ func (l localOps) ScheduleOp(ctx context.Context, ns, name, op string, form map[
 	return l.s.scheduleOp(ctx, ns, name, op, func(k string) string { return form[k] })
 }
 
+func (l localOps) DialConsole(ctx context.Context, ns, name, kind string) (*websocket.Conn, error) {
+	return l.s.kube.DialConsole(ctx, ns, name, kind)
+}
+
+func (o remoteOps) DialConsole(ctx context.Context, ns, name, kind string) (*websocket.Conn, error) {
+	return o.n.DialConsole(ctx, ns, name, kind)
+}
+
 func (o remoteOps) Power(ctx context.Context, ns, name, act string) error {
 	return o.post(ctx, manager.APIPath("/api/vms/%s/%s/%s", ns, name, act), nil)
 }
@@ -130,7 +140,8 @@ func vmAction(ctx context.Context, o hostOps, ns, name, act, prompt string) erro
 func (s *Server) onNode(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		n, err := s.orgNode(r)
-		if err == nil && s.manager.Busy(n.Name, r.PathValue("name")) {
+		change := r.Method != http.MethodGet
+		if err == nil && change && s.manager.Busy(n.Name, r.PathValue("name")) {
 			err = errors.New(r.PathValue("name") + " has a migration in progress")
 		}
 		if err != nil {
@@ -138,7 +149,9 @@ func (s *Server) onNode(h http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		h(w, r.WithContext(context.WithValue(r.Context(), opsKey{}, remoteOps{n})))
-		go s.manager.Refresh(n.Name)
+		if change {
+			go s.manager.Refresh(n.Name)
+		}
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"path"
 	"regexp"
 	"slices"
 	"strconv"
@@ -167,9 +168,9 @@ func (s *Server) console(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) consoleWS(w http.ResponseWriter, r *http.Request) {
-	s.record(s.auditUser(session(r).Org, session(r).User), "open console of "+r.PathValue("ns")+"/"+r.PathValue("name"), true, "")
 	ns, name, kind := r.PathValue("ns"), r.PathValue("name"), r.PathValue("kind")
-	backend, err := s.kube.DialConsole(r.Context(), ns, name, kind)
+	s.record(s.auditUser(session(r).Org, session(r).User), "open console of "+path.Join(r.PathValue("node"), ns, name), true, "")
+	backend, err := s.ops(r).DialConsole(r.Context(), ns, name, kind)
 	if err != nil {
 		log.Printf("%s: %v", session(r).User, err)
 		http.Error(w, err.Error(), http.StatusBadGateway)

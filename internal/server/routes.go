@@ -79,7 +79,7 @@ func (s *Server) managerRoutes() []route {
 		{"GET /nodes/{node}/vms/{ns}/{name}/metrics", auth.VMView, s.managerVMMetrics},
 		{"GET /metrics", auth.VMView, s.managerFleetMetrics},
 		{"GET /nodes/{node}/vms/{ns}/{name}/console", auth.VMConsole, s.managerConsole},
-		{"GET /nodes/{node}/vms/{ns}/{name}/ws/{kind}", auth.VMConsole, s.managerConsoleWS},
+		{"GET /nodes/{node}/vms/{ns}/{name}/ws/{kind}", auth.VMConsole, s.onNode(s.consoleWS)},
 		{"POST /nodes/{node}/vms/{ns}/{name}/migrate", auth.VMMigrate, s.managerMigrate},
 		{"POST /nodes/{node}/vms/{ns}/{name}/protect", auth.VMMigrate, s.managerProtect},
 		{"POST /nodes/{node}/vms/{ns}/{name}/unprotect", auth.VMMigrate, s.managerUnprotect},

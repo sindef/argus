@@ -26,7 +26,6 @@ import (
 	"argus/internal/netguard"
 	"argus/internal/sealed"
 
-	"github.com/gorilla/websocket"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -421,33 +420,6 @@ func (s *Server) managerVM(w http.ResponseWriter, r *http.Request) {
 	}
 	data["Error"] = errText(err)
 	s.render(w, r, "manager-vm.html", "layout", data)
-}
-
-func (s *Server) managerConsoleWS(w http.ResponseWriter, r *http.Request) {
-	s.record(s.auditUser(session(r).Org, session(r).User), "open console of "+r.PathValue("node")+"/"+r.PathValue("ns")+"/"+r.PathValue("name"), true, "")
-	n, err := s.orgNode(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-	backend, err := n.DialConsole(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.PathValue("kind"))
-	if err != nil {
-		log.Printf("%s: %v", session(r).User, err)
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	defer backend.Close()
-	up := websocket.Upgrader{Subprotocols: websocket.Subprotocols(r)}
-	client, err := up.Upgrade(w, r, nil)
-	if err != nil {
-		return
-	}
-	defer client.Close()
-	log.Printf("%s: %s %s/%s on %s", session(r).User, r.PathValue("kind"), r.PathValue("ns"), r.PathValue("name"), n.Name)
-	done := make(chan struct{}, 2)
-	go pipe(client, backend, done)
-	go pipe(backend, client, done)
-	s.waitConsole(r, done)
 }
 
 func (s *Server) managerMigrate(w http.ResponseWriter, r *http.Request) {

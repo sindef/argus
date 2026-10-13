@@ -22,6 +22,7 @@ import (
 	"argus/internal/vsphere"
 	"argus/internal/wire"
 
+	"github.com/gorilla/websocket"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -112,6 +113,7 @@ type hostOps interface {
 	SetTags(ctx context.Context, ns, name string, req wire.TagsRequest) error
 	BackupOp(ctx context.Context, ns, name, op string, form map[string]string) error
 	ScheduleOp(ctx context.Context, ns, name, op string, form map[string]string) error
+	DialConsole(ctx context.Context, ns, name, kind string) (*websocket.Conn, error)
 }
 
 type deviceReq struct {
