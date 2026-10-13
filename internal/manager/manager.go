@@ -477,7 +477,21 @@ func (c *Manager) Jobs(org string) []Job {
 	return out
 }
 
+func (c *Manager) unprotected(ctx context.Context, src Node, vm string) error {
+	ps, err := c.Protected(ctx)
+	if err != nil {
+		return err
+	}
+	if slices.ContainsFunc(ps, func(p Protected) bool { return p.VM == vm && (p.Owner == src.Name || p.Replica == src.Name) }) {
+		return fmt.Errorf("%s is protected by HA; remove protection or use a planned failover to move it", vm)
+	}
+	return nil
+}
+
 func (c *Manager) Migrate(ctx context.Context, src, dst Node, ns, vm string) error {
+	if err := c.unprotected(ctx, src, vm); err != nil {
+		return err
+	}
 	return c.startJob(ctx, &Job{Org: src.Org, Namespace: ns, VM: vm, From: src.Name, To: dst.Name}, 12*time.Hour, func(ctx context.Context, j *Job) error {
 		return c.migrate(ctx, j, src, dst, ns, vm)
 	})
