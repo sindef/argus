@@ -830,6 +830,7 @@ type ImportedVM struct {
 	MemoryMiB int64
 	Firmware  string
 	Network   string
+	Networks  []string
 	Class     string
 	Disks     []ImportedDisk
 	MACs      []string
@@ -842,25 +843,74 @@ type ImportedDisk struct {
 	Source    map[string]any
 }
 
-func (c *Client) CreateImportedVM(ctx context.Context, v ImportedVM) ([]string, error) {
+const importLabel = "argus.io/import"
+
+func importDiskName(vm string, i int) string {
+	if i == 0 {
+		return vm + "-root"
+	}
+	return fmt.Sprintf("%s-disk%d", vm, i)
+}
+
+func (c *Client) CreateImportDisks(ctx context.Context, v ImportedVM) ([]string, error) {
 	if err := c.guard(); err != nil {
 		return nil, err
 	}
 	if len(v.Disks) == 0 {
 		return nil, errors.New("no disks to import")
 	}
+	if _, err := c.dyn.Resource(vmGVR).Namespace(Namespace).Get(ctx, v.Name, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		return nil, fmt.Errorf("%s already exists", v.Name)
+	}
+	if err := c.DeleteImportDisks(ctx, v.Name); err != nil {
+		return nil, err
+	}
+	var dvs []string
+	for i, d := range v.Disks {
+		name := importDiskName(v.Name, i)
+		dv := &unstructured.Unstructured{Object: obj{
+			"apiVersion": "cdi.kubevirt.io/v1beta1",
+			"kind":       "DataVolume",
+			"metadata":   obj{"name": name, "labels": obj{importLabel: v.Name}},
+			"spec":       obj{"source": d.Source, "storage": storageSpec(int((d.SizeBytes+1<<30-1)>>30), v.Class)},
+		}}
+		if _, err := c.dyn.Resource(dvGVR).Namespace(Namespace).Create(ctx, dv, metav1.CreateOptions{}); err != nil {
+			return nil, errors.Join(err, c.DeleteImportDisks(ctx, v.Name))
+		}
+		dvs = append(dvs, name)
+	}
+	return dvs, nil
+}
+
+func (c *Client) DeleteImportDisks(ctx context.Context, vm string) error {
+	list, err := c.dyn.Resource(dvGVR).Namespace(Namespace).List(ctx, metav1.ListOptions{LabelSelector: importLabel + "=" + vm})
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, dv := range list.Items {
+		if len(dv.GetOwnerReferences()) == 0 {
+			errs = append(errs, c.DeleteDataVolume(ctx, Namespace, dv.GetName()))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (c *Client) CreateImportedVM(ctx context.Context, v ImportedVM) error {
+	if err := c.guard(); err != nil {
+		return err
+	}
 	bus, model := "virtio", "virtio"
 	if v.Compat {
 		bus, model = "sata", "e1000e"
 	}
 	var templates, disks, volumes, ifaces, networks []any
-	var dvs []string
 	for i, d := range v.Disks {
 		disk := "root"
 		if i > 0 {
 			disk = fmt.Sprintf("disk%d", i)
 		}
-		dv := v.Name + "-" + disk
+		dv := importDiskName(v.Name, i)
 		gib := int((d.SizeBytes + 1<<30 - 1) >> 30)
 		templates = append(templates, obj{"metadata": obj{"name": dv}, "spec": obj{"source": d.Source, "storage": storageSpec(gib, v.Class)}})
 		dk := obj{"name": disk, "disk": obj{"bus": bus}}
@@ -869,7 +919,6 @@ func (c *Client) CreateImportedVM(ctx context.Context, v ImportedVM) ([]string, 
 		}
 		disks = append(disks, dk)
 		volumes = append(volumes, obj{"name": disk, "dataVolume": obj{"name": dv}})
-		dvs = append(dvs, dv)
 	}
 	if v.CDROM != "" {
 		disks = append(disks, obj{"name": "cdrom", "cdrom": obj{"bus": cdromBus()}})
@@ -887,7 +936,11 @@ func (c *Client) CreateImportedVM(ctx context.Context, v ImportedVM) ([]string, 
 		}
 		nic := fmt.Sprintf("nic%d", i)
 		ifaces = append(ifaces, obj{"name": nic, "model": model, "bridge": obj{}, "macAddress": mac})
-		networks = append(networks, obj{"name": nic, "multus": obj{"networkName": v.Network}})
+		network := v.Network
+		if i < len(v.Networks) && v.Networks[i] != "" {
+			network = v.Networks[i]
+		}
+		networks = append(networks, obj{"name": nic, "multus": obj{"networkName": network}})
 	}
 	domain := obj{
 		"cpu":    obj{"cores": v.Cores},
@@ -919,7 +972,7 @@ func (c *Client) CreateImportedVM(ctx context.Context, v ImportedVM) ([]string, 
 		},
 	}}
 	_, err := c.dyn.Resource(vmGVR).Namespace(Namespace).Create(ctx, vm, metav1.CreateOptions{})
-	return dvs, err
+	return err
 }
 
 func vcpus(vm obj) (total, perSocket int64) {

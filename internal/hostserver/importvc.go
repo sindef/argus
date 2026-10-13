@@ -89,7 +89,7 @@ func (s *Server) importVCenter(ctx context.Context, f func(string) string) (stri
 		c.Logout()
 		return "", err
 	}
-	v := kube.ImportedVM{Name: f("name"), Network: f("network"), Class: class, Cores: max(cfg.Cores, 1), MemoryMiB: max(cfg.MemoryMiB, 128), Firmware: cfg.Firmware,
+	v := kube.ImportedVM{Name: f("name"), Network: f("network"), Networks: importNetworks(f), Class: class, Cores: max(cfg.Cores, 1), MemoryMiB: max(cfg.MemoryMiB, 128), Firmware: cfg.Firmware,
 		CDROM: f("cdrom"), Compat: compatDrivers(f("drivers"), cfg.GuestID)}
 	if v.Name == "" {
 		v.Name = strings.Trim(strings.ToLower(nonName.ReplaceAllString(cfg.Name, "-")), "-")
@@ -106,7 +106,7 @@ func (s *Server) importVCenter(ctx context.Context, f func(string) string) (stri
 		c.Logout()
 		return "", errors.New("valid VM name and network required")
 	}
-	dvs, err := s.kube.CreateImportedVM(ctx, v)
+	dvs, err := s.kube.CreateImportDisks(ctx, v)
 	if err != nil {
 		c.Logout()
 		return "", err
@@ -116,7 +116,7 @@ func (s *Server) importVCenter(ctx context.Context, f func(string) string) (stri
 		defer c.Logout()
 		ctx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
 		defer cancel()
-		err := s.vcenterCopy(ctx, c, tc, f("vm"), cfg.Power == "poweredOn", dvs, total)
+		err := s.finishImport(ctx, v, s.vcenterCopy(ctx, c, tc, f("vm"), cfg.Power == "poweredOn", dvs, total))
 		log.Printf("import of %s from vCenter: %v", v.Name, err)
 		s.tasks.end(t, err)
 	}()

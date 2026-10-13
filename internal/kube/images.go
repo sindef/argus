@@ -391,6 +391,13 @@ func (c *Client) CleanupInterrupted(ctx context.Context) []string {
 			}
 		}
 	}
+	if list, err := c.dyn.Resource(dvGVR).Namespace(Namespace).List(ctx, metav1.ListOptions{LabelSelector: importLabel}); err == nil {
+		for _, dv := range list.Items {
+			if len(dv.GetOwnerReferences()) == 0 && c.DeleteDataVolume(ctx, Namespace, dv.GetName()) == nil {
+				out = append(out, dv.GetName())
+			}
+		}
+	}
 	if list, err := c.dyn.Resource(cmGVR).Namespace(Namespace).List(ctx, metav1.ListOptions{}); err == nil {
 		for _, s := range list.Items {
 			if strings.HasPrefix(s.GetName(), "argus-esxi-") {

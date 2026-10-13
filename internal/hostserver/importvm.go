@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"argus/internal/kube"
+	"argus/internal/lifecycle"
 	"argus/internal/netguard"
 	"argus/internal/ui"
 )
@@ -114,7 +115,7 @@ func (s *Server) streamOVA(ctx context.Context, fields map[string]string, body i
 	if err != nil {
 		return "", err
 	}
-	v := kube.ImportedVM{Name: fields["name"], Network: fields["network"], Class: class, Cores: 1, MemoryMiB: 1024, CDROM: fields["cdrom"],
+	v := kube.ImportedVM{Name: fields["name"], Network: fields["network"], Networks: importNetworks(func(k string) string { return fields[k] }), Class: class, Cores: 1, MemoryMiB: 1024, CDROM: fields["cdrom"],
 		Compat: compatDrivers(fields["drivers"], env.System.OS.Type+" "+env.System.OS.Description)}
 	if v.Name == "" {
 		v.Name = strings.Trim(strings.ToLower(nonName.ReplaceAllString(env.System.Name, "-")), "-")
@@ -147,31 +148,52 @@ func (s *Server) streamOVA(ctx context.Context, fields map[string]string, body i
 		order[files[d.FileRef]] = len(v.Disks)
 		v.Disks = append(v.Disks, kube.ImportedDisk{SizeBytes: ovfBytes(capacity, d.Units), Source: map[string]any{"upload": map[string]any{}}})
 	}
-	dvs, err := s.kube.CreateImportedVM(ctx, v)
+	dvs, err := s.kube.CreateImportDisks(ctx, v)
 	if err != nil {
 		return "", err
 	}
+	return v.Name, s.finishImport(ctx, v, s.uploadOVADisks(ctx, tr, order, dvs))
+}
+
+func (s *Server) uploadOVADisks(ctx context.Context, tr *tar.Reader, order map[string]int, dvs []string) error {
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return v.Name, err
+			return err
 		}
 		i, ok := order[path.Base(hdr.Name)]
 		if !ok {
 			continue
 		}
 		if err := s.kube.Upload(ctx, dvs[i], tr); err != nil {
-			return v.Name, fmt.Errorf("disk %s: %w", hdr.Name, err)
+			return fmt.Errorf("disk %s: %w", hdr.Name, err)
 		}
 		delete(order, path.Base(hdr.Name))
 	}
 	if len(order) > 0 {
-		return v.Name, errors.New("the OVA is missing disk files listed in its descriptor")
+		return errors.New("the OVA is missing disk files listed in its descriptor")
 	}
-	return v.Name, nil
+	return nil
+}
+
+func (s *Server) finishImport(ctx context.Context, v kube.ImportedVM, err error) error {
+	if err == nil {
+		return s.kube.CreateImportedVM(ctx, v)
+	}
+	cctx, cancel := lifecycle.CleanupContext()
+	defer cancel()
+	return errors.Join(err, s.kube.DeleteImportDisks(cctx, v.Name))
+}
+
+func importNetworks(f func(string) string) []string {
+	var out []string
+	for i := 2; i <= 4; i++ {
+		out = append(out, f(fmt.Sprintf("network%d", i)))
+	}
+	return append([]string{f("network")}, out...)
 }
 
 type esxiSource struct {
@@ -348,7 +370,7 @@ func (s *Server) importESXi(ctx context.Context, f func(string) string) (string,
 	if err != nil {
 		return "", err
 	}
-	v := kube.ImportedVM{Name: f("name"), Network: f("network"), Class: class, Cores: 1, MemoryMiB: 1024, Firmware: kv["firmware"], CDROM: f("cdrom"),
+	v := kube.ImportedVM{Name: f("name"), Network: f("network"), Networks: importNetworks(f), Class: class, Cores: 1, MemoryMiB: 1024, Firmware: kv["firmware"], CDROM: f("cdrom"),
 		Compat: compatDrivers(f("drivers"), kv["guestos"])}
 	if v.Name == "" {
 		v.Name = strings.Trim(strings.ToLower(nonName.ReplaceAllString(kv["displayname"], "-")), "-")
@@ -405,7 +427,7 @@ func (s *Server) importESXi(ctx context.Context, f func(string) string) (string,
 		delete(s.esxi.m, token)
 		s.esxi.mu.Unlock()
 	}
-	dvs, err := s.kube.CreateImportedVM(ctx, v)
+	dvs, err := s.kube.CreateImportDisks(ctx, v)
 	if err != nil {
 		cleanup()
 		return "", err
@@ -415,7 +437,7 @@ func (s *Server) importESXi(ctx context.Context, f func(string) string) (string,
 		defer cleanup()
 		ctx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
 		defer cancel()
-		err := s.watchDisks(ctx, t, s.kube.DataVolumes(kube.Namespace, dvs...))
+		err := s.finishImport(ctx, v, s.watchDisks(ctx, t, s.kube.DataVolumes(kube.Namespace, dvs...)))
 		log.Printf("import of %s from ESXi %s finished: %v", v.Name, e.Host, err)
 		s.tasks.end(t, err)
 	}()

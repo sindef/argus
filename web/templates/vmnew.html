@@ -125,11 +125,15 @@
 {{define "import-common"}}
 <div class="row">
   <label>Name <span class="help" title="Defaults to the source VM's name.">?</span><input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?"></label>
-  <label>Network <select name="network" required>{{range .Networks}}<option value="{{.Name}}">{{.Name}}{{if .VLAN}} (VLAN {{.VLAN}}){{end}}</option>{{end}}</select></label>
+  <label>Network <span class="help" title="Network of the first adapter. Set others below.">?</span><select name="network" required>{{range .Networks}}<option value="{{.Name}}">{{.Name}}{{if .VLAN}} (VLAN {{.VLAN}}){{end}}</option>{{end}}</select></label>
   <label>Storage pool <select name="pool">{{range .Pools}}<option value="{{.Name}}">{{.Name}} ({{bytes .Free}} free)</option>{{end}}</select></label>
 </div>
 <div class="row">
   <label>Devices <span class="help" title="Automatic uses SATA disks and e1000e NICs for Windows guests, which lack VirtIO drivers until virtio-win is installed. Other guests use VirtIO.">?</span><select name="drivers"><option value="auto">Automatic</option><option value="virtio">VirtIO</option><option value="compat">SATA + e1000e</option></select></label>
   <label>CD-ROM <span class="help" title="Attach an ISO, e.g. virtio-win, to install drivers after the first boot.">?</span><select name="cdrom"><option value="">None</option>{{range .Images}}<option value="{{.Name}}">{{.Name}}</option>{{end}}</select></label>
 </div>
+<details>
+  <summary>Networks for other adapters</summary>
+  <div class="row spaced">{{range $i := list "2" "3" "4"}}<label>Adapter {{$i}} <select name="network{{$i}}"><option value="">Same as first</option>{{range $.Networks}}<option value="{{.Name}}">{{.Name}}{{if .VLAN}} (VLAN {{.VLAN}}){{end}}</option>{{end}}</select></label>{{end}}</div>
+</details>
 {{end}}
