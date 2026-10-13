@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"argus/internal/auth"
 	"argus/internal/kube"
 	"argus/internal/manager"
 	"argus/internal/ui"
@@ -100,6 +101,10 @@ func (s *Server) profilePage(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) profileSave(w http.ResponseWriter, r *http.Request) {
 	p := manager.Profile{DNS: ui.Fields(r.FormValue("dns")), NTP: ui.Fields(r.FormValue("ntp")), Syslog: strings.TrimSpace(r.FormValue("syslog")), MigrationBridge: strings.TrimSpace(r.FormValue("migration_bridge")), Backup: strings.TrimSpace(r.FormValue("backup")), Networks: r.FormValue("networks") != ""}
+	if err := s.permit(r, auth.Administer, auth.Object{Datacenter: r.FormValue("dc"), Cluster: r.FormValue("cluster")}); err != nil {
+		ui.Flash(w, r, err)
+		return
+	}
 	if err := s.manager.SetProfile(r.Context(), ui.Session(r).Org, r.FormValue("dc"), r.FormValue("cluster"), p); err != nil {
 		ui.Flash(w, r, err)
 		return
@@ -111,6 +116,9 @@ func (s *Server) profileSave(w http.ResponseWriter, r *http.Request) {
 func (s *Server) profileApply(w http.ResponseWriter, r *http.Request) {
 	dc, cl := r.FormValue("dc"), r.FormValue("cluster")
 	p, err := s.manager.Profile(r.Context(), ui.Session(r).Org, dc, cl)
+	if err == nil {
+		err = s.permit(r, auth.Administer, auth.Object{Datacenter: dc, Cluster: cl})
+	}
 	if err != nil {
 		ui.Flash(w, r, err)
 		return

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"argus/internal/auth"
 	"argus/internal/manager"
 	"argus/internal/ui"
 )
@@ -81,6 +82,9 @@ func (s *Server) firewallAction(w http.ResponseWriter, r *http.Request) {
 		default:
 			err = errors.New("unknown operation")
 		}
+	}
+	if err == nil {
+		err = s.permit(r, auth.NetworkConfig, auth.Object{})
 	}
 	if err == nil {
 		err = s.manager.SetFirewall(r.Context(), org, p)

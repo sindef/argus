@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"argus/internal/auth"
 	"argus/internal/manager"
 	"argus/internal/ui"
 )
@@ -68,6 +69,10 @@ func (s *Server) groupModal(w http.ResponseWriter, r *http.Request) {
 func (s *Server) groupAction(w http.ResponseWriter, r *http.Request) {
 	org, op := ui.Session(r).Org, r.PathValue("op")
 	dc, cl, name := r.FormValue("dc"), r.FormValue("cluster"), strings.TrimSpace(r.FormValue("name"))
+	if err := s.permitGroupOp(r, op, dc, cl, name); err != nil {
+		ui.Flash(w, r, err)
+		return
+	}
 	var err error
 	switch op {
 	case "add-datacenter":
@@ -111,6 +116,33 @@ func (s *Server) groupAction(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("HX-Refresh", "true")
 }
 
+func (s *Server) permitGroupOp(r *http.Request, op, dc, cl, name string) error {
+	p := auth.Administer
+	switch op {
+	case "add-datacenter":
+		return s.permit(r, p, auth.Object{Datacenter: name})
+	case "add-cluster":
+		return s.permit(r, p, auth.Object{Datacenter: dc, Cluster: name})
+	case "rename-datacenter":
+		return s.permit(r, p, auth.Object{Datacenter: dc}, auth.Object{Datacenter: name})
+	case "rename-cluster":
+		return s.permit(r, p, auth.Object{Datacenter: dc, Cluster: cl}, auth.Object{Datacenter: dc, Cluster: name})
+	case "delete-datacenter":
+		return s.permit(r, p, auth.Object{Datacenter: dc})
+	case "move-host", "enter-maintenance", "exit-maintenance":
+		n, err := s.manager.NodeIn(r.Context(), ui.Session(r).Org, r.FormValue("host"))
+		if err != nil {
+			return err
+		}
+		objs := []auth.Object{objectOf(n, "")}
+		if op == "move-host" {
+			objs = append(objs, auth.Object{Datacenter: groupName(strings.TrimSpace(r.FormValue("datacenter"))), Cluster: groupName(strings.TrimSpace(r.FormValue("cluster")))})
+		}
+		return s.permit(r, p, objs...)
+	}
+	return s.permit(r, p, auth.Object{Datacenter: dc, Cluster: cl})
+}
+
 func ungroup(name string) string {
 	if name == "Unassigned" {
 		return ""
@@ -129,7 +161,7 @@ func (s *Server) applyClusterNetworks(r *http.Request, dc, cl string) error {
 	}
 	var members []manager.NodeState
 	for _, st := range s.inventory(r) {
-		if inGroup(st.Node, dc, cl) {
+		if inGroup(st.Node, dc, cl) && s.permit(r, auth.NetworkConfig, objectOf(st.Node, "")) == nil {
 			members = append(members, st)
 		}
 	}
@@ -170,6 +202,21 @@ func (s *Server) saveClusterSettings(r *http.Request, dc, cl string) error {
 }
 
 func (s *Server) drsApply(w http.ResponseWriter, r *http.Request) {
+	rec, ok := s.manager.Recommendation(ui.Session(r).Org, r.FormValue("id"))
+	if !ok {
+		ui.Flash(w, r, errors.New("the recommendation is no longer current"))
+		return
+	}
+	for _, h := range []string{rec.From, rec.To} {
+		n, err := s.manager.NodeIn(r.Context(), ui.Session(r).Org, h)
+		if err == nil {
+			err = s.permit(r, auth.Administer, objectOf(n, rec.VM))
+		}
+		if err != nil {
+			ui.Flash(w, r, err)
+			return
+		}
+	}
 	if err := s.manager.ApplyRecommendation(r.Context(), ui.Session(r).Org, r.FormValue("id")); err != nil {
 		ui.Flash(w, r, err)
 		return
@@ -186,6 +233,9 @@ func (s *Server) drsRule(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	org, dc, cl, name := ui.Session(r).Org, r.FormValue("dc"), r.FormValue("cluster"), r.FormValue("name")
 	st, err := s.manager.ClusterSettings(r.Context(), org, dc, cl)
+	if err == nil {
+		err = s.permit(r, auth.Administer, auth.Object{Datacenter: groupName(dc), Cluster: groupName(cl)})
+	}
 	if err == nil {
 		st.Rules = slices.DeleteFunc(st.Rules, func(x manager.Rule) bool { return x.Name == name })
 		if r.PathValue("op") == "add" {

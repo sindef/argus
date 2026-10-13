@@ -1,6 +1,7 @@
 package managerserver
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -72,4 +73,33 @@ func (s *Server) nodeIn(r *http.Request, name string) (manager.Node, error) {
 		return manager.Node{}, errNodeNotFound(name)
 	}
 	return n, nil
+}
+
+func (s *Server) permit(r *http.Request, p auth.Privilege, objs ...auth.Object) error {
+	grants, err := s.Grants(r.Context(), ui.Session(r).Session)
+	if err != nil {
+		return err
+	}
+	for _, o := range objs {
+		if !auth.Allows(grants, p, o) {
+			what := strings.Trim(strings.Join([]string{o.Datacenter, o.Cluster, o.Host, o.VM}, "/"), "/")
+			if what == "" {
+				what = "the whole organization"
+			}
+			return fmt.Errorf("you are not permitted to change %s", what)
+		}
+	}
+	return nil
+}
+
+func scopeObjects(scopes []string) []auth.Object {
+	if len(scopes) == 0 {
+		return []auth.Object{{}}
+	}
+	var out []auth.Object
+	for _, sc := range scopes {
+		dc, cl, _ := strings.Cut(sc, "/")
+		out = append(out, auth.Object{Datacenter: dc, Cluster: cl})
+	}
+	return out
 }

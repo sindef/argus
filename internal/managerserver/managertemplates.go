@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"argus/internal/auth"
 	"argus/internal/kube"
 	"argus/internal/lifecycle"
 	"argus/internal/manager"
@@ -251,7 +252,11 @@ func (s *Server) vmCopy(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) deleteLibraryTemplate(w http.ResponseWriter, r *http.Request) {
 	name := r.FormValue("name")
-	if _, err := s.libraryTemplate(ui.Session(r).Org, name); err != nil {
+	_, err := s.libraryTemplate(ui.Session(r).Org, name)
+	if err == nil {
+		err = s.permit(r, auth.ImageConfig, auth.Object{})
+	}
+	if err != nil {
 		ui.Flash(w, r, err)
 		return
 	}

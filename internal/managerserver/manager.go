@@ -875,6 +875,10 @@ func (s *Server) managerAlarmRule(w http.ResponseWriter, r *http.Request) {
 	num := func(k string) float64 { v, _ := strconv.ParseFloat(r.FormValue(k), 64); return v }
 	rule := manager.AlarmRule{Name: strings.TrimSpace(r.FormValue("name")), Metric: r.FormValue("metric"), Warn: num("warn"), Critical: num("critical"),
 		Minutes: int(num("minutes")), Scope: strings.TrimSpace(r.FormValue("scope")), Tag: strings.TrimSpace(r.FormValue("tag"))}
+	if err := s.permitAlarmRule(r, rule); err != nil {
+		ui.Flash(w, r, err)
+		return
+	}
 	if err := s.manager.SaveAlarmRule(r.Context(), ui.Session(r).Org, r.FormValue("old"), rule, r.PathValue("op") == "delete"); err != nil {
 		ui.Flash(w, r, err)
 		return
@@ -883,11 +887,51 @@ func (s *Server) managerAlarmRule(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("HX-Refresh", "true")
 }
 
+func (s *Server) permitAlarmRule(r *http.Request, rule manager.AlarmRule) error {
+	scopes := []string{rule.Scope}
+	rules, err := s.manager.AlarmRules(r.Context(), ui.Session(r).Org)
+	if err != nil {
+		return err
+	}
+	for _, x := range rules {
+		if x.Name == r.FormValue("old") || x.Name == rule.Name {
+			scopes = append(scopes, x.Scope)
+		}
+	}
+	for _, sc := range scopes {
+		o := auth.Object{}
+		if host, ok := strings.CutPrefix(sc, "host:"); ok {
+			n, err := s.manager.NodeIn(r.Context(), ui.Session(r).Org, host)
+			if err != nil {
+				return err
+			}
+			o = objectOf(n, "")
+		} else if sc != "" {
+			o = scopeObjects([]string{sc})[0]
+		}
+		if err := s.permit(r, auth.Administer, o); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *Server) managerResolve(w http.ResponseWriter, r *http.Request) {
-	visible := slices.ContainsFunc(s.jobs(r), func(j manager.Job) bool { return j.ID == r.PathValue("id") })
-	if !visible {
+	i := slices.IndexFunc(s.jobs(r), func(j manager.Job) bool { return j.ID == r.PathValue("id") })
+	if i < 0 {
 		ui.Flash(w, r, errors.New("no unresolved job with that ID"))
 		return
+	}
+	j := s.jobs(r)[i]
+	for _, h := range []string{j.From, j.To} {
+		n, err := s.manager.NodeIn(r.Context(), ui.Session(r).Org, h)
+		if err == nil {
+			err = s.permit(r, auth.Administer, objectOf(n, j.VM))
+		}
+		if err != nil {
+			ui.Flash(w, r, err)
+			return
+		}
 	}
 	if err := s.manager.Resolve(r.Context(), ui.Session(r).Org, r.PathValue("id")); err != nil {
 		ui.Flash(w, r, err)

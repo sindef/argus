@@ -66,6 +66,12 @@ func (s *Server) managerImageOp(w http.ResponseWriter, r *http.Request) {
 	if r.PathValue("op") != "library-add" {
 		r.ParseForm()
 	}
+	if op := r.PathValue("op"); strings.HasPrefix(op, "library-") || strings.HasPrefix(op, "source-") {
+		if err := s.permit(r, auth.ImageConfig, auth.Object{}); err != nil {
+			ui.Flash(w, r, err)
+			return
+		}
+	}
 	var err error
 	switch r.PathValue("op") {
 	case "copy":
@@ -98,7 +104,13 @@ func (s *Server) managerImageOp(w http.ResponseWriter, r *http.Request) {
 		err = s.setRegistryAddress(r)
 	case "delete":
 		name := r.FormValue("image")
-		if e := fanOut(r.Context(), s.inventory(r), func(ctx context.Context, n manager.Node) error {
+		var targets []manager.NodeState
+		for _, st := range s.inventory(r) {
+			if s.permit(r, auth.ImageConfig, objectOf(st.Node, "")) == nil {
+				targets = append(targets, st)
+			}
+		}
+		if e := fanOut(r.Context(), targets, func(ctx context.Context, n manager.Node) error {
 			var imgs []kube.Image
 			if err := n.Call(ctx, http.MethodGet, "/api/images", nil, &imgs); err != nil {
 				return err

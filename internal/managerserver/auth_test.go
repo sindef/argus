@@ -148,3 +148,36 @@ func TestManagerRouteAuth(t *testing.T) {
 		{"GET", "/api/v1/hosts", "token:metrics", "", forbidden},
 	})
 }
+
+func TestScopedFleetMutations(t *testing.T) {
+	h := newHarness(t)
+	post := func(who, path, form string) string {
+		r := httptest.NewRequest(http.MethodPost, "https://argus.test"+path, strings.NewReader(form))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.Header.Set("Origin", "https://argus.test")
+		r.AddCookie(&http.Cookie{Name: h.s.Cookie, Value: h.cookies[who]})
+		w := httptest.NewRecorder()
+		h.s.ServeHTTP(w, r)
+		return w.Body.String()
+	}
+	for _, c := range []struct {
+		who, path, form string
+		denied          bool
+	}{
+		{"scoped", "/groups/rename-datacenter", "dc=Other&name=Taken", true},
+		{"scoped", "/groups/add-datacenter", "name=New", true},
+		{"scoped", "/groups/rolling-update", "dc=Home&cluster=Other", true},
+		{"admin", "/groups/rename-datacenter", "dc=Other&name=Taken", false},
+		{"scoped", "/firewall/default", "deny=on", true},
+		{"admin", "/firewall/default", "deny=on", false},
+		{"scoped", "/networks", "name=lan2&bridge=br0", true},
+		{"scoped", "/networks", "name=lan2&bridge=br0&scopes=Home/Lab", false},
+		{"scoped", "/alarm-rules/save", "name=r1&metric=host-cpu&warn=90", true},
+		{"scoped", "/alarm-rules/save", "name=r1&metric=host-cpu&warn=90&scope=Home/Lab", false},
+		{"scoped", "/images/source-add", "name=s&kind=http&url=https://example.test/", true},
+	} {
+		if got := strings.Contains(post(c.who, c.path, c.form), "not permitted"); got != c.denied {
+			t.Errorf("%s %s %s: denied=%v, want %v", c.who, c.path, c.form, got, c.denied)
+		}
+	}
+}

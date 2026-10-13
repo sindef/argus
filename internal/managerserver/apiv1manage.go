@@ -151,6 +151,10 @@ func (s *Server) v1SaveNetwork(w http.ResponseWriter, r *http.Request) {
 		ui.APIError(w, r, http.StatusBadRequest, err)
 		return
 	}
+	if err := s.permitNetwork(r, n.Name, n.Scopes, true); err != nil {
+		ui.APIError(w, r, http.StatusForbidden, err)
+		return
+	}
 	if err := s.manager.SaveNetwork(r.Context(), ui.Session(r).Org, n, op == "update"); err != nil {
 		ui.APIError(w, r, http.StatusConflict, err)
 		return
@@ -164,6 +168,10 @@ func (s *Server) v1SaveNetwork(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) v1DeleteNetwork(w http.ResponseWriter, r *http.Request) {
 	n := manager.Network{Name: r.PathValue("name")}
+	if err := s.permitNetwork(r, n.Name, nil, false); err != nil {
+		ui.APIError(w, r, http.StatusForbidden, err)
+		return
+	}
 	if errs := s.pushNetwork(r, "delete", n); errs != "" {
 		ui.APIError(w, r, http.StatusConflict, errors.New(errs))
 		return

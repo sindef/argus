@@ -283,6 +283,16 @@ func (c *Manager) Recommendations(org, dc, cl string) []Recommendation {
 	return out
 }
 
+func (c *Manager) Recommendation(org, id string) (Recommendation, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	i := slices.IndexFunc(c.drs, func(r Recommendation) bool { return r.ID == id && r.Org == org })
+	if i < 0 {
+		return Recommendation{}, false
+	}
+	return c.drs[i], true
+}
+
 func (c *Manager) ApplyRecommendation(ctx context.Context, org, id string) error {
 	c.mu.Lock()
 	i := slices.IndexFunc(c.drs, func(r Recommendation) bool { return r.ID == id && r.Org == org })

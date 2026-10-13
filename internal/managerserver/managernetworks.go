@@ -189,7 +189,13 @@ func networksFor(defs []manager.Network, n manager.Node) []manager.Network {
 }
 
 func (s *Server) pushNetwork(r *http.Request, op string, n manager.Network) string {
-	return fanOut(r.Context(), s.inventory(r), func(ctx context.Context, node manager.Node) error {
+	var targets []manager.NodeState
+	for _, st := range s.inventory(r) {
+		if s.permit(r, auth.NetworkConfig, objectOf(st.Node, "")) == nil {
+			targets = append(targets, st)
+		}
+	}
+	return fanOut(r.Context(), targets, func(ctx context.Context, node manager.Node) error {
 		defer s.manager.Refresh(node.Name)
 		req := netReq(n)
 		if op == "delete" || inScope(n.Scopes, node) {
@@ -215,6 +221,9 @@ func (s *Server) managerAddNetwork(w http.ResponseWriter, r *http.Request) {
 	op := "create"
 	if r.FormValue("edit") != "" {
 		op = "update"
+	}
+	if err == nil {
+		err = s.permitNetwork(r, n.Name, n.Scopes, true)
 	}
 	if err == nil {
 		err = s.manager.SaveNetwork(r.Context(), ui.Session(r).Org, n, op == "update")
@@ -244,6 +253,10 @@ func (s *Server) managerNetworkOp(w http.ResponseWriter, r *http.Request) {
 			n = d
 		}
 	}
+	if err := s.permitNetwork(r, name, nil, false); err != nil {
+		ui.Flash(w, r, err)
+		return
+	}
 	var errs string
 	switch op {
 	case "apply":
@@ -265,6 +278,26 @@ func (s *Server) managerNetworkOp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Server) permitNetwork(r *http.Request, name string, scopes []string, save bool) error {
+	defs, err := s.manager.Networks(r.Context(), ui.Session(r).Org)
+	if err != nil {
+		return err
+	}
+	var objs []auth.Object
+	if save {
+		objs = scopeObjects(scopes)
+	}
+	for _, d := range defs {
+		if d.Name == name {
+			objs = append(objs, scopeObjects(d.Scopes)...)
+		}
+	}
+	if len(objs) == 0 {
+		objs = scopeObjects(nil)
+	}
+	return s.permit(r, auth.NetworkConfig, objs...)
 }
 
 func checkNetworkDef(n manager.Network) error {
