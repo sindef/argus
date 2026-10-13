@@ -42,7 +42,9 @@ func validSelector(s string, cidr bool) error {
 	switch {
 	case s == "any":
 		return nil
-	case strings.HasPrefix(s, "tag:") && len(s) > 4:
+	case strings.HasPrefix(s, "tag:") && len(s) > 4, strings.HasPrefix(s, "host:") && len(s) > 5, strings.HasPrefix(s, "net:") && len(s) > 4:
+		return nil
+	case strings.HasPrefix(s, "vm:") && strings.Count(s, "/") == 1:
 		return nil
 	case cidr && strings.HasPrefix(s, "cidr:"):
 		if _, err := netip.ParsePrefix(strings.TrimPrefix(s, "cidr:")); err != nil {
@@ -50,7 +52,7 @@ func validSelector(s string, cidr bool) error {
 		}
 		return nil
 	}
-	return fmt.Errorf("selector %q must be any, tag:NAME%s", s, map[bool]string{true: " or cidr:A.B.C.D/N"}[cidr])
+	return fmt.Errorf("selector %q must be any, vm:HOST/NAME, tag:NAME, net:NAME, host:NAME%s", s, map[bool]string{true: " or cidr:A.B.C.D/N"}[cidr])
 }
 
 func (c *Manager) SetFirewall(ctx context.Context, org string, p FirewallPolicy) error {
@@ -78,12 +80,27 @@ func (c *Manager) SetFirewall(ctx context.Context, org string, p FirewallPolicy)
 
 type fwVM struct {
 	host string
+	name string
 	macs []string
 	tags []string
+	nets []string
 }
 
-func selects(sel string, tags []string) bool {
-	return sel == "any" || strings.HasPrefix(sel, "tag:") && slices.Contains(tags, strings.TrimPrefix(sel, "tag:"))
+func selects(sel string, v fwVM) bool {
+	kind, val, _ := strings.Cut(sel, ":")
+	switch kind {
+	case "any":
+		return true
+	case "tag":
+		return slices.Contains(v.tags, val)
+	case "net":
+		return slices.Contains(v.nets, val)
+	case "host":
+		return v.host == val
+	case "vm":
+		return val == v.host+"/"+v.name
+	}
+	return false
 }
 
 func compileFirewall(p FirewallPolicy, vms []fwVM) map[string][]hostd.FWVM {
@@ -91,7 +108,7 @@ func compileFirewall(p FirewallPolicy, vms []fwVM) map[string][]hostd.FWVM {
 	for _, v := range vms {
 		var rules []hostd.FWRule
 		for _, r := range p.Rules {
-			if !selects(r.Dest, v.tags) {
+			if !selects(r.Dest, v) {
 				continue
 			}
 			fr := hostd.FWRule{Proto: r.Proto, Ports: r.Ports, Allow: r.Allow}
@@ -102,7 +119,7 @@ func compileFirewall(p FirewallPolicy, vms []fwVM) map[string][]hostd.FWVM {
 				fr.SrcCIDRs = []string{strings.TrimPrefix(r.Source, "cidr:")}
 			default:
 				for _, o := range vms {
-					if selects(r.Source, o.tags) {
+					if selects(r.Source, o) {
 						fr.SrcMACs = append(fr.SrcMACs, o.macs...)
 					}
 				}
@@ -112,7 +129,7 @@ func compileFirewall(p FirewallPolicy, vms []fwVM) map[string][]hostd.FWVM {
 			}
 			rules = append(rules, fr)
 		}
-		if len(rules) == 0 && !slices.ContainsFunc(p.Rules, func(r FirewallRule) bool { return selects(r.Dest, v.tags) }) {
+		if len(rules) == 0 && !slices.ContainsFunc(p.Rules, func(r FirewallRule) bool { return selects(r.Dest, v) }) {
 			continue
 		}
 		for _, mac := range v.macs {
@@ -130,13 +147,14 @@ func (c *Manager) alignFirewall(ctx context.Context, n Node) {
 	var vms []fwVM
 	for _, st := range c.Inventory(n.Org) {
 		for _, v := range st.VMs {
-			var macs []string
+			var macs, nets []string
 			for _, nic := range v.NICs {
 				if nic.MAC != "" {
 					macs = append(macs, strings.ToLower(nic.MAC))
 				}
+				nets = append(nets, nic.Network)
 			}
-			vms = append(vms, fwVM{host: st.Node.Name, macs: macs, tags: v.Tags})
+			vms = append(vms, fwVM{host: st.Node.Name, name: v.Name, macs: macs, tags: v.Tags, nets: nets})
 		}
 	}
 	rules := compileFirewall(p, vms)[n.Name]

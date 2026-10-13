@@ -370,3 +370,7 @@ tr.acked td:not(.row-actions) { opacity: .55; }
 .taskbar > summary::-webkit-details-marker { display: none; }
 .taskbar .table-wrap { max-height: 32vh; overflow-y: auto; margin: 0 28px 12px; }
 .badge.bad { background: rgba(239, 68, 68, .16); color: var(--bad); }
+.selector { display: flex; flex-direction: column; gap: 6px; font-weight: 500; font-size: 13.5px; flex: 1; min-width: 0; }
+.selector-row { display: flex; gap: 8px; }
+.selector-row > * { flex: 1; min-width: 0; }
+.selector-row > [data-kind] { flex: 0 0 160px; }

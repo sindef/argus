@@ -122,6 +122,7 @@
         else d.querySelector(`[name="${k}"]`).value = v;
       }
       d.querySelectorAll("form").forEach(archCheck);
+      d.querySelectorAll("[data-selector]").forEach(loadSelector);
       d.showModal();
       return;
     }
@@ -323,6 +324,28 @@
     if (e.target.closest("[data-nav-toggle]")) document.body.classList.toggle("nav-open");
     else if (!e.target.closest(".sidebar") || e.target.closest(".sidebar a")) document.body.classList.remove("nav-open");
   });
+  const syncSelector = (sel) => {
+    const kind = sel.querySelector("[data-kind]").value;
+    sel.querySelectorAll("[data-for]").forEach((el) => { el.hidden = el.dataset.for !== kind; });
+    const v = sel.querySelector(`[data-for="${kind}"]`);
+    sel.querySelector("input[type=hidden]").value = kind === "any" ? "any" : kind + ":" + (v ? v.value : "");
+  };
+  function loadSelector(sel) {
+    const [kind, ...rest] = sel.querySelector("input[type=hidden]").value.split(":");
+    const k = sel.querySelector("[data-kind]");
+    k.value = [...k.options].some((o) => o.value === kind) ? kind : "any";
+    const v = sel.querySelector(`[data-for="${k.value}"]`);
+    const val = rest.join(":");
+    if (v && val) {
+      if (v.tagName === "SELECT" && ![...v.options].some((o) => o.value === val)) v.add(new Option(val, val));
+      v.value = val;
+    }
+    syncSelector(sel);
+  }
+  ["change", "input"].forEach((t) => document.addEventListener(t, (e) => {
+    const sel = e.target.closest("[data-selector]");
+    if (sel) syncSelector(sel);
+  }));
   let tasksAt = Date.now();
   setInterval(() => {
     const bar = document.getElementById("taskbar");
