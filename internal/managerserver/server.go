@@ -48,6 +48,7 @@ func New(a *auth.Store, o Options) (*Server, error) {
 		s.port = port
 	}
 	core.Mode = s
+	s.manager.PullMeter = s.pullPercent
 	s.sso.m = map[string]ssoFlow{}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	err = s.startRegistry(ctx)

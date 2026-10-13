@@ -31,7 +31,7 @@ func (s *Server) jobTask(j manager.Job) wire.Task {
 	if j.To != "" && host != "" {
 		host += " → "
 	}
-	return wire.Task{ID: j.ID, Kind: kind, VM: j.VM, Host: host + j.To, User: j.User, Status: j.Status, Started: j.Started, Ended: j.Ended, Done: j.Done, Failed: j.Failed, Hold: j.Attention}
+	return wire.Task{ID: j.ID, Kind: kind, VM: j.VM, Host: host + j.To, User: j.User, Status: j.Status, Started: j.Started, Ended: j.Ended, Done: j.Done, Failed: j.Failed, Hold: j.Attention, Percent: wire.Percent(j.Status)}
 }
 
 func (s *Server) seeVM(r *http.Request) func(host, vm string) bool {

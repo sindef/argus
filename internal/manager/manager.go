@@ -50,6 +50,7 @@ type Node struct {
 type NodeInfo = kube.NodeInfo
 
 type Manager struct {
+	PullMeter    func(kube.RegistrySource) float64
 	store        store.Secrets
 	storeMu      sync.Mutex
 	replications chan struct{}

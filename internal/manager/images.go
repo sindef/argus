@@ -49,7 +49,7 @@ func (c *Manager) SendImage(ctx context.Context, org, image, size string, target
 			if err != nil {
 				return err
 			}
-			if err := c.importTo(ctx, j, t, image, map[string]any{"name": image, "size": size, "registry": src}); err != nil {
+			if err := c.importTo(ctx, j, t, image, wire.ImageImportRequest{Name: image, Size: size, Registry: &src}); err != nil {
 				return err
 			}
 		}
@@ -100,7 +100,13 @@ func (c *Manager) Pull(ctx context.Context, progress func(string), t Node, image
 		if i < 0 {
 			return false, fmt.Errorf("%s disappeared on %s", image, t.Name)
 		}
-		progress(strings.TrimSpace("Copying " + image + " to " + t.Name + " " + strings.TrimSuffix(imgs[i].Progress, "N/A")))
+		pct := strings.TrimSuffix(imgs[i].Progress, "N/A")
+		if r, ok := req.(wire.ImageImportRequest); ok && pct == "" && r.Registry != nil && c.PullMeter != nil {
+			if p := c.PullMeter(*r.Registry); p >= 0 {
+				pct = fmt.Sprintf("%.0f%%", p)
+			}
+		}
+		progress(strings.TrimSpace("Copying " + image + " to " + t.Name + " " + pct))
 		return imgs[i].Phase == "Succeeded", nil
 	})
 	if post {

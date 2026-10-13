@@ -81,7 +81,7 @@
 <div class="table-wrap"><table>
   <thead><tr><th>Task</th><th>Object</th>{{if .Manager}}<th>Host</th>{{end}}<th>Status</th><th>User</th><th>Started</th><th></th></tr></thead>
   <tbody>{{range .Tasks}}<tr><td>{{.Kind}}</td><td>{{or .VM .Object}}</td>{{if $.Manager}}<td>{{.Host}}</td>{{end}}
-    <td class="clip" title="{{.Status}}"><span class="dot {{if .Hold}}Warning{{else if .Failed}}Failed{{else if .Done}}Succeeded{{else}}Migrating{{end}}">{{.Status}}</span></td>
+    <td class="clip" title="{{.Status}}"><span class="dot {{if .Hold}}Warning{{else if .Failed}}Failed{{else if .Done}}Succeeded{{else}}Migrating{{end}}">{{.Status}}</span>{{if not .Done}}<span class="progress{{if not .Percent}} busy{{end}}"><span style="width:{{.Percent}}%"></span></span>{{end}}</td>
     <td>{{or .User "System"}}</td><td title="{{.Started.Local.Format "2006-01-02 15:04:05"}}">{{.Started.Local.Format "15:04"}}</td>
     <td class="row-actions">{{if .Hold}}<a class="link" href="/events">Resolve</a>{{else if .Failed}}<button class="link" hx-post="/tasks/dismiss" hx-vals='{"id":"{{.ID}}","host":"{{.Node}}"}' hx-target="#taskbar">Dismiss</button>{{end}}</td></tr>
   {{else}}<tr><td colspan="7" class="muted">No recent tasks</td></tr>{{end}}</tbody>

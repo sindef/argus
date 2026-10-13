@@ -2,6 +2,8 @@ package wire
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -237,4 +239,16 @@ type Task struct {
 	Done    bool      `json:"done"`
 	Failed  bool      `json:"failed"`
 	Hold    bool      `json:"hold,omitempty"`
+	Percent float64   `json:"percent,omitempty"`
+}
+
+var percentRE = regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
+
+func Percent(status string) float64 {
+	m := percentRE.FindAllStringSubmatch(status, -1)
+	if len(m) == 0 {
+		return 0
+	}
+	p, _ := strconv.ParseFloat(m[len(m)-1][1], 64)
+	return min(p, 100)
 }

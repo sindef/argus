@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"argus/internal/kube"
+	"argus/internal/wire"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -84,6 +85,7 @@ var funcs = template.FuncMap{
 	},
 	"has":     slices.Contains[[]string],
 	"unacked": Unacked,
+	"percent": wire.Percent,
 	"add":     func(a, b int) int { return a + b },
 	"sub":     func(a, b int) int { return a - b },
 	"add64":   func(a, b int64) int64 { return a + b },

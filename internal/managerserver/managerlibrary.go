@@ -19,6 +19,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -69,6 +70,33 @@ type registryAuth struct {
 type pullGrant struct {
 	repo    string
 	expires time.Time
+	sent    *atomic.Int64
+}
+
+type countingWriter struct {
+	http.ResponseWriter
+	n *atomic.Int64
+}
+
+func (c countingWriter) Write(b []byte) (int, error) {
+	n, err := c.ResponseWriter.Write(b)
+	c.n.Add(int64(n))
+	return n, err
+}
+
+func (s *Server) pullPercent(src kube.RegistrySource) float64 {
+	s.regAuth.mu.Lock()
+	g, ok := s.regAuth.pulls[secretKey(src.Pass)]
+	s.regAuth.mu.Unlock()
+	if !ok {
+		return -1
+	}
+	for _, img := range s.registry.List(g.repo) {
+		if strings.HasSuffix(src.Image, "/"+img.Repo+":"+img.Tag) && img.Size > 0 {
+			return min(100, 100*float64(g.sent.Load())/float64(img.Size))
+		}
+	}
+	return -1
 }
 
 type userGrant struct {
@@ -165,7 +193,7 @@ func (s *Server) newPull(repo string) (string, string) {
 			delete(s.regAuth.pulls, k)
 		}
 	}
-	s.regAuth.pulls[secretKey(tok)] = pullGrant{repo: repo, expires: time.Now().Add(12 * time.Hour)}
+	s.regAuth.pulls[secretKey(tok)] = pullGrant{repo: repo, expires: time.Now().Add(12 * time.Hour), sent: new(atomic.Int64)}
 	return pullUser, tok
 }
 
@@ -234,6 +262,14 @@ func (s *Server) serveRegistry(w http.ResponseWriter, r *http.Request) {
 		org, name := s.registryUser(r)
 		s.Record(s.AuditUser(org, name), "registry "+r.Method+" "+strings.TrimPrefix(r.URL.Path, "/v2/"), status < 400, "")
 		return
+	}
+	if user, pass, ok := r.BasicAuth(); ok && user == pullUser && r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/blobs/") {
+		s.regAuth.mu.Lock()
+		g, found := s.regAuth.pulls[secretKey(pass)]
+		s.regAuth.mu.Unlock()
+		if found {
+			w = countingWriter{w, g.sent}
+		}
 	}
 	s.registry.ServeHTTP(w, r)
 }
