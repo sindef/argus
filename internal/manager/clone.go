@@ -28,7 +28,7 @@ func (c *Manager) CopyVM(ctx context.Context, src, dst Node, ns, vm, name, pool 
 	}
 	return c.startJob(ctx, &Job{Org: src.Org, Kind: kind, Namespace: ns, VM: vm, From: src.Name, To: dst.Name}, 12*time.Hour, func(ctx context.Context, j *Job) error {
 		if src.Name == dst.Name && pool == "" {
-			c.update(j, "Cloning", false, false)
+			c.progress(j, "Cloning")
 			if err := src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "meta/clone"), wire.MetaRequest{Value: name, Template: template}, nil); err != nil {
 				return err
 			}
@@ -45,7 +45,7 @@ func (c *Manager) CopyVM(ctx context.Context, src, dst Node, ns, vm, name, pool 
 				return err
 			}
 		}
-		c.update(j, "Exporting", false, false)
+		c.progress(j, "Exporting")
 		base := src.URL
 		if src.Name == dst.Name {
 			base = "self"

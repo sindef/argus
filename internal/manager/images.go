@@ -73,7 +73,7 @@ func (c *Manager) ImportImage(ctx context.Context, org, from string, req wire.Im
 }
 
 func (c *Manager) importTo(ctx context.Context, j *Job, t Node, image string, req any) error {
-	return c.Pull(ctx, func(s string) { c.update(j, s, false, false) }, t, image, req, false)
+	return c.Pull(ctx, func(s string) { c.progress(j, s) }, t, image, req, false)
 }
 
 func (c *Manager) Pull(ctx context.Context, progress func(string), t Node, image string, req any, reuse bool) error {
@@ -114,6 +114,6 @@ func (c *Manager) Pull(ctx context.Context, progress func(string), t Node, image
 
 func (c *Manager) Task(ctx context.Context, j Job, lock string, run func(ctx context.Context, progress func(string)) error) error {
 	return c.startTask(ctx, &j, lock, 12*time.Hour, func(ctx context.Context, j *Job) error {
-		return run(ctx, func(status string) { c.update(j, status, false, false) })
+		return run(ctx, func(status string) { c.progress(j, status) })
 	})
 }

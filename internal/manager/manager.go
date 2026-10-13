@@ -539,7 +539,7 @@ func (c *Manager) carry(ctx context.Context, src, dst Node, ns, vm string) (map[
 }
 
 func (c *Manager) importAndWait(ctx context.Context, j *Job, dst Node, name, pool string, template bool, ex kube.Export, meta map[string]string) error {
-	c.update(j, "Importing", false, false)
+	c.progress(j, "Importing")
 	if err := dst.do(ctx, http.MethodPost, "/api/import", wire.ImportRequest{Name: name, Operation: j.ID, Export: ex, Pool: pool, Template: template, Metadata: meta}, nil); err != nil {
 		return err
 	}
@@ -556,7 +556,7 @@ func (c *Manager) importAndWait(ctx context.Context, j *Job, dst Node, name, poo
 	if err := c.waitDisks(ctx, j, dst, name); err != nil {
 		return rollback(err)
 	}
-	c.update(j, "Cleaning up", false, false)
+	c.progress(j, "Cleaning up")
 	return dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, name, "imported"), nil, nil)
 }
 
@@ -576,7 +576,7 @@ func (c *Manager) waitDisks(ctx context.Context, j *Job, dst Node, name string) 
 	list := func(ctx context.Context) ([]kube.DiskStatus, error) {
 		disks, err := fetch(ctx)
 		if err != nil && ctx.Err() == nil {
-			c.update(j, "Copying (waiting for "+dst.Name+")", false, false)
+			c.progress(j, "Copying (waiting for "+dst.Name+")")
 			return nil, nil
 		}
 		return disks, err
@@ -586,7 +586,7 @@ func (c *Manager) waitDisks(ctx context.Context, j *Job, dst Node, name string) 
 		for _, d := range disks {
 			progress = append(progress, d.Name+" "+d.Progress)
 		}
-		c.update(j, "Copying "+strings.Join(progress, ", "), false, false)
+		c.progress(j, "Copying "+strings.Join(progress, ", "))
 	})
 	if failed != "" {
 		return fmt.Errorf("disk %s failed to copy", failed)
@@ -602,7 +602,7 @@ func (c *Manager) migrate(ctx context.Context, j *Job, src, dst Node, ns, vm str
 	if err != nil {
 		return err
 	}
-	c.update(j, "Exporting", false, false)
+	c.progress(j, "Exporting")
 	var ex kube.Export
 	if err := src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "export"), wire.ExportRequest{BaseURL: src.URL}, &ex); err != nil {
 		return err

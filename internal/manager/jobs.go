@@ -92,9 +92,9 @@ func (c *Manager) startJob(ctx context.Context, j *Job, timeout time.Duration, r
 			c.mu.Lock()
 			j.Attention = errors.Is(err, errUnknown)
 			c.mu.Unlock()
-			c.update(j, "Failed: "+err.Error(), true, true)
+			c.finish(j, err)
 		} else {
-			c.update(j, "Completed", true, false)
+			c.finish(j, nil)
 		}
 		c.mu.Lock()
 		if !j.Attention {
@@ -107,13 +107,24 @@ func (c *Manager) startJob(ctx context.Context, j *Job, timeout time.Duration, r
 	return nil
 }
 
-func (c *Manager) update(j *Job, status string, done, failed bool) {
+func (c *Manager) progress(j *Job, status string) {
 	c.mu.Lock()
-	j.Status, j.Done, j.Failed = status, done, failed
-	if done {
-		j.Ended = time.Now()
+	j.Status = status
+	c.mu.Unlock()
+	c.persistJobs()
+}
+
+func (c *Manager) finish(j *Job, err error) {
+	c.mu.Lock()
+	j.Status, j.Done, j.Failed, j.Ended = "Completed", true, err != nil, time.Now()
+	if err != nil {
+		j.Status = "Failed: " + err.Error()
 	}
 	c.mu.Unlock()
+	c.persistJobs()
+}
+
+func (c *Manager) persistJobs() {
 	if err := c.saveJobs(); err != nil {
 		log.Printf("jobs: %v", err)
 	}
@@ -246,6 +257,6 @@ func (c *Manager) Resolve(ctx context.Context, org, id string) error {
 	delete(c.busy, busyKey(j.From, j.VM))
 	delete(c.busy, busyKey(j.To, j.VM))
 	c.mu.Unlock()
-	c.update(j, "Rolled back: "+j.VM+" kept on "+j.From, true, true)
+	c.finish(j, errors.New("rolled back: "+j.VM+" kept on "+j.From))
 	return nil
 }

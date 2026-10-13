@@ -237,7 +237,7 @@ func (c *Manager) liveMigrate(ctx context.Context, j *Job, src, dst Node, ns, vm
 	if err != nil {
 		return err
 	}
-	c.update(j, "Exchanging certificates", false, false)
+	c.progress(j, "Exchanging certificates")
 	if err := c.syncCAs(ctx, src, dst); err != nil {
 		return err
 	}
@@ -264,12 +264,12 @@ func (c *Manager) liveMigrate(ctx context.Context, j *Job, src, dst Node, ns, vm
 		return err == nil && v.Running
 	}
 
-	c.update(j, "Preparing target", false, false)
+	c.progress(j, "Preparing target")
 	var recv wire.ReceiveResponse
 	if err := dst.do(ctx, http.MethodPost, "/api/receive", wire.ReceiveRequest{Name: vm, MigrationID: j.ID, Spec: spec, Metadata: meta}, &recv); err != nil {
 		return abort(err)
 	}
-	c.update(j, "Migrating", false, false)
+	c.progress(j, "Migrating")
 	sendErr := src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "send"), wire.SendRequest{MigrationID: j.ID, ConnectURL: recv.SyncAddress}, nil)
 	phasePath := vmPathIn(ns, vm, "migration") + "?operation=" + j.ID
 	lastPhase, since := "", time.Now()
@@ -278,7 +278,7 @@ func (c *Manager) liveMigrate(ctx context.Context, j *Job, src, dst Node, ns, vm
 		err := src.do(ctx, http.MethodGet, phasePath, nil, &st)
 		switch {
 		case err != nil:
-			c.update(j, "Migrating (source status unavailable, retrying)", false, false)
+			c.progress(j, "Migrating (source status unavailable, retrying)")
 		case st.Phase == "Succeeded":
 			return c.finishLive(ctx, j, src, dst, ns, vm, cleanup)
 		case st.Phase == "Failed" || (st.Phase == "" && sendErr != nil):
@@ -305,12 +305,12 @@ func (c *Manager) liveMigrate(ctx context.Context, j *Job, src, dst Node, ns, vm
 			if st.Phase != lastPhase {
 				lastPhase, since = st.Phase, time.Now()
 			} else if (st.Phase == "Pending" || st.Phase == "Scheduling") && time.Since(since) > 90*time.Second {
-				c.update(j, "Migrating (stalled in "+st.Phase+", checking sync controllers)", false, false)
+				c.progress(j, "Migrating (stalled in "+st.Phase+", checking sync controllers)")
 				lifecycle.LogCleanup("sync controller on "+src.Name, src.do(ctx, http.MethodPost, "/api/sync-controller", nil, nil))
 				lifecycle.LogCleanup("sync controller on "+dst.Name, dst.do(ctx, http.MethodPost, "/api/sync-controller", nil, nil))
 				since = time.Now()
 			}
-			c.update(j, "Migrating ("+st.Phase+")", false, false)
+			c.progress(j, "Migrating ("+st.Phase+")")
 		}
 		select {
 		case <-ctx.Done():
@@ -321,10 +321,10 @@ func (c *Manager) liveMigrate(ctx context.Context, j *Job, src, dst Node, ns, vm
 }
 
 func (c *Manager) finishLive(ctx context.Context, j *Job, src, dst Node, ns, vm string, cleanup func(context.Context)) error {
-	c.update(j, "Confirming target", false, false)
+	c.progress(j, "Confirming target")
 	for i := 0; i < 60; i++ {
 		if v, err := vmState(ctx, dst, kube.Namespace, vm); err == nil && v.Running {
-			c.update(j, "Cleaning up", false, false)
+			c.progress(j, "Cleaning up")
 			cleanup(ctx)
 			return src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "delete"), nil, nil)
 		}
@@ -338,7 +338,7 @@ func (c *Manager) finishLive(ctx context.Context, j *Job, src, dst Node, ns, vm 
 }
 
 func (c *Manager) cancelLive(j *Job, src, dst Node, ns, vm string, op wire.OperationRequest, abort func(error) error, sourceRunning func(context.Context) bool) error {
-	c.update(j, "Cancelling", false, false)
+	c.progress(j, "Cancelling")
 	cctx, cancel := lifecycle.CleanupContext()
 	defer cancel()
 	if err := src.do(cctx, http.MethodPost, vmPathIn(ns, vm, "migration-cleanup"), op, nil); err != nil {

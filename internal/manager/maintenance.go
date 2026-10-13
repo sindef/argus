@@ -63,9 +63,9 @@ func (c *Manager) startTask(ctx context.Context, j *Job, lock string, timeout ti
 		defer cancel()
 		if err := run(ctx, j); err != nil {
 			log.Printf("task %s %s: %v", j.Kind, j.From, err)
-			c.update(j, "Failed: "+err.Error(), true, true)
+			c.finish(j, err)
 		} else {
-			c.update(j, "Completed", true, false)
+			c.finish(j, nil)
 		}
 		c.mu.Lock()
 		delete(c.busy, key)
@@ -183,7 +183,7 @@ func (c *Manager) evacuate(ctx context.Context, j *Job, n Node, shutdown bool) e
 		}
 		label := v.Namespace + "/" + v.Name
 		if i := slices.IndexFunc(ps, func(p Protected) bool { return p.VM == v.Name && p.Owner == n.Name }); i >= 0 {
-			c.update(j, "Failing over "+v.Name+" to "+ps[i].Replica, false, false)
+			c.progress(j, "Failing over "+v.Name+" to "+ps[i].Replica)
 			if err := c.plannedFailover(ctx, n, ps[i]); err != nil {
 				return fmt.Errorf("%s: %w", v.Name, err)
 			}
@@ -201,7 +201,7 @@ func (c *Manager) evacuate(ctx context.Context, j *Job, n Node, shutdown bool) e
 			if a, b := c.arch(n.Name), c.arch(dst.Name); a != b {
 				status += " (warning: " + b + " host, VM came from " + a + ")"
 			}
-			c.update(j, status, false, false)
+			c.progress(j, status)
 			mj := &Job{Org: n.Org, Namespace: v.Namespace, VM: v.Name, From: n.Name, To: dst.Name, Live: true, User: j.User}
 			if err := c.startJob(ctx, mj, 6*time.Hour, func(ctx context.Context, mj *Job) error {
 				return c.liveMigrate(ctx, mj, n, dst, v.Namespace, v.Name)
@@ -220,7 +220,7 @@ func (c *Manager) evacuate(ctx context.Context, j *Job, n Node, shutdown bool) e
 		if !shutdown {
 			return fmt.Errorf("no host in the cluster can take %s; allow shutting down VMs that cannot move", v.Name)
 		}
-		c.update(j, "Shutting down "+v.Name, false, false)
+		c.progress(j, "Shutting down "+v.Name)
 		if err := n.Action(ctx, v.Namespace, v.Name, "stop"); err != nil {
 			return fmt.Errorf("%s: %w", v.Name, err)
 		}
@@ -232,7 +232,7 @@ func (c *Manager) evacuate(ctx context.Context, j *Job, n Node, shutdown bool) e
 			return err
 		}
 	}
-	c.update(j, "Waiting for VMs to stop", false, false)
+	c.progress(j, "Waiting for VMs to stop")
 	return waitFor(ctx, 10*time.Minute, func() (bool, error) {
 		var st wire.HostStatus
 		return n.do(ctx, http.MethodGet, "/api/host/status", nil, &st) == nil && st.Running == 0, nil
@@ -316,7 +316,7 @@ func (c *Manager) leave(ctx context.Context, j *Job, n Node) error {
 	}
 	for _, label := range n.Parked {
 		ns, vm, _ := strings.Cut(label, "/")
-		c.update(j, "Starting "+vm, false, false)
+		c.progress(j, "Starting "+vm)
 		if err := waitFor(ctx, 10*time.Minute, func() (bool, error) {
 			return n.Action(ctx, ns, vm, "start") == nil, nil
 		}); err != nil {
@@ -354,7 +354,7 @@ func (c *Manager) RollingUpdate(ctx context.Context, org, dc, cluster, image str
 	return c.startTask(ctx, &Job{Org: org, Kind: kind, From: groupLabel(dc, cluster)}, "cluster:"+dc+"/"+cluster, 24*time.Hour, func(ctx context.Context, j *Job) error {
 		for i, n := range members {
 			prefix := fmt.Sprintf("%s (%d/%d): ", n.Name, i+1, len(members))
-			step := func(s string) { c.update(j, prefix+s, false, false) }
+			step := func(s string) { c.progress(j, prefix+s) }
 			if err := c.cycleHost(ctx, n, image, shutdown, step); err != nil {
 				return fmt.Errorf("%s%w; %s left in maintenance", prefix, err, n.Name)
 			}
