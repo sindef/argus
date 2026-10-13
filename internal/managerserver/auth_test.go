@@ -12,6 +12,7 @@ import (
 	"argus/internal/auth"
 	"argus/internal/dbstore"
 	"argus/internal/manager"
+	"argus/internal/registry"
 	"argus/internal/tlscert"
 	"argus/web"
 )
@@ -259,5 +260,28 @@ func TestOpenAPIMatchesRoutes(t *testing.T) {
 		if !served[d] {
 			t.Errorf("openapi.json documents %s, which is not served", d)
 		}
+	}
+}
+
+func TestRegistryUsesCurrentGrants(t *testing.T) {
+	h := newHarness(t)
+	can := func(user string, a registry.Access) bool {
+		r := httptest.NewRequest(http.MethodGet, "https://argus.test/v2/", nil)
+		r.SetBasicAuth("default/"+user, "correct-horse-battery-staple")
+		return h.s.registryAuthorize(r, "default/img", a)
+	}
+	for _, c := range []struct {
+		user       string
+		pull, push bool
+	}{{"operator", true, true}, {"viewer", true, false}, {"scoped", true, false}, {"readonly", true, false}} {
+		if can(c.user, registry.Pull) != c.pull || can(c.user, registry.Push) != c.push {
+			t.Errorf("%s: pull/push not %v/%v", c.user, c.pull, c.push)
+		}
+	}
+	if err := h.s.Auth.ForOrg(manager.DefaultOrg).Delete(context.Background(), "operator"); err != nil {
+		t.Fatal(err)
+	}
+	if can("operator", registry.Push) {
+		t.Error("deleted user kept cached push access")
 	}
 }

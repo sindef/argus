@@ -72,8 +72,6 @@ type pullGrant struct {
 }
 
 type userGrant struct {
-	role    auth.Role
-	scoped  bool
 	expires time.Time
 }
 
@@ -207,7 +205,7 @@ func (s *Server) registryAuthorize(r *http.Request, repo string, a registry.Acce
 		if s.Limiter.Blocked(ip) {
 			return false
 		}
-		u, ok, err := s.Auth.ForOrg(org).Verify(r.Context(), name, pass)
+		_, ok, err := s.Auth.ForOrg(org).Verify(r.Context(), name, pass)
 		if !ok {
 			if err == nil {
 				s.Limiter.Fail(ip)
@@ -215,12 +213,19 @@ func (s *Server) registryAuthorize(r *http.Request, repo string, a registry.Acce
 			return false
 		}
 		s.Limiter.Succeed(ip)
-		g = userGrant{role: u.Role, scoped: len(u.Scopes) > 0, expires: time.Now().Add(5 * time.Minute)}
+		g = userGrant{expires: time.Now().Add(5 * time.Minute)}
 		s.regAuth.mu.Lock()
 		s.regAuth.users[key] = g
 		s.regAuth.mu.Unlock()
 	}
-	return a == registry.Pull || g.role.Can(auth.Operator) && !g.scoped
+	grants, err := s.Auth.ForOrg(org).Grants(r.Context(), name)
+	if err != nil {
+		return false
+	}
+	if a == registry.Pull {
+		return auth.AllowsAnywhere(grants, auth.VMView) || auth.AllowsAnywhere(grants, auth.ImageConfig)
+	}
+	return auth.Allows(grants, auth.ImageConfig, auth.Object{})
 }
 
 func (s *Server) serveRegistry(w http.ResponseWriter, r *http.Request) {
