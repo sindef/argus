@@ -98,7 +98,7 @@ func (c *Client) SetMigrationNetwork(ctx context.Context, m MigrationNetwork) (s
 		"bridge":     c.MigrationBridge(ctx),
 		"ipam": obj{
 			"type":   "host-local",
-			"ranges": []interface{}{[]interface{}{obj{"subnet": m.Subnet, "rangeStart": m.RangeStart, "rangeEnd": m.RangeEnd}}},
+			"ranges": []any{[]any{obj{"subnet": m.Subnet, "rangeStart": m.RangeStart, "rangeEnd": m.RangeEnd}}},
 		},
 	}
 	if m.VLAN > 0 {

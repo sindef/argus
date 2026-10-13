@@ -337,7 +337,7 @@ func (c *Client) EnsurePoolClass(ctx context.Context, pool string) error {
 	if cls, ok := classes[pool]; ok {
 		name = cls
 	}
-	spec := obj{"cloneStrategy": "copy", "claimPropertySets": []interface{}{obj{"accessModes": []interface{}{"ReadWriteOnce"}, "volumeMode": "Block"}}}
+	spec := obj{"cloneStrategy": "copy", "claimPropertySets": []any{obj{"accessModes": []any{"ReadWriteOnce"}, "volumeMode": "Block"}}}
 	res := c.dyn.Resource(profileGVR)
 	prof, err := res.Get(ctx, name, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {

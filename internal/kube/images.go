@@ -69,20 +69,20 @@ func (c *Client) ListImages(ctx context.Context) ([]Image, error) {
 }
 
 func (c *Client) CreateImage(ctx context.Context, name, size, url string) error {
-	source := map[string]interface{}{"upload": map[string]interface{}{}}
+	source := map[string]any{"upload": map[string]any{}}
 	if url != "" {
-		source = map[string]interface{}{"http": map[string]interface{}{"url": url}}
+		source = map[string]any{"http": map[string]any{"url": url}}
 	}
-	dv := &unstructured.Unstructured{Object: map[string]interface{}{
+	dv := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "cdi.kubevirt.io/v1beta1",
 		"kind":       "DataVolume",
-		"metadata": map[string]interface{}{
+		"metadata": map[string]any{
 			"name":   name,
-			"labels": map[string]interface{}{imageLabel: "true"},
+			"labels": map[string]any{imageLabel: "true"},
 		},
-		"spec": map[string]interface{}{
+		"spec": map[string]any{
 			"source":  source,
-			"storage": map[string]interface{}{"resources": map[string]interface{}{"requests": map[string]interface{}{"storage": size}}},
+			"storage": map[string]any{"resources": map[string]any{"requests": map[string]any{"storage": size}}},
 		},
 	}}
 	_, err := c.dyn.Resource(dvGVR).Namespace(Namespace).Create(ctx, dv, metav1.CreateOptions{})
@@ -147,11 +147,11 @@ func (c *Client) Upload(ctx context.Context, name string, body io.Reader) error 
 	if err := c.waitUploadReady(ctx, name); err != nil {
 		return err
 	}
-	utr := &unstructured.Unstructured{Object: map[string]interface{}{
+	utr := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "upload.cdi.kubevirt.io/v1beta1",
 		"kind":       "UploadTokenRequest",
-		"metadata":   map[string]interface{}{"name": name},
-		"spec":       map[string]interface{}{"pvcName": name},
+		"metadata":   map[string]any{"name": name},
+		"spec":       map[string]any{"pvcName": name},
 	}}
 	res, err := c.dyn.Resource(utrGVR).Namespace(Namespace).Create(ctx, utr, metav1.CreateOptions{})
 	if err != nil {

@@ -94,7 +94,7 @@ func storageSpec(sizeGiB int, class string) obj {
 	return st
 }
 
-type obj = map[string]interface{}
+type obj = map[string]any
 
 func (c *Client) CreateVM(ctx context.Context, s VMSpec) error {
 	if err := c.guard(); err != nil {
@@ -109,8 +109,8 @@ func (c *Client) CreateVM(ctx context.Context, s VMSpec) error {
 	if s.Image == "" && s.CDROM != "" {
 		rootBoot, cdBoot = 2, 1
 	}
-	disks := []interface{}{obj{"name": "root", "bootOrder": rootBoot, "disk": obj{"bus": "virtio"}}}
-	volumes := []interface{}{obj{"name": "root", "dataVolume": obj{"name": root}}}
+	disks := []any{obj{"name": "root", "bootOrder": rootBoot, "disk": obj{"bus": "virtio"}}}
+	volumes := []any{obj{"name": "root", "dataVolume": obj{"name": root}}}
 	if s.CDROM != "" {
 		disks = append(disks, obj{"name": "cdrom", "bootOrder": cdBoot, "cdrom": obj{"bus": cdromBus()}})
 		volumes = append(volumes, obj{"name": "cdrom", "persistentVolumeClaim": obj{"claimName": s.CDROM, "readOnly": true}})
@@ -157,7 +157,7 @@ func (c *Client) CreateVM(ctx context.Context, s VMSpec) error {
 		"metadata":   obj{"name": s.Name},
 		"spec": obj{
 			"runStrategy": strategy,
-			"dataVolumeTemplates": []interface{}{obj{
+			"dataVolumeTemplates": []any{obj{
 				"metadata": obj{"name": root},
 				"spec": obj{
 					"source":  source,
@@ -173,10 +173,10 @@ func (c *Client) CreateVM(ctx context.Context, s VMSpec) error {
 						"devices": obj{
 							"autoattachPodInterface": false,
 							"disks":                  disks,
-							"interfaces":             []interface{}{obj{"name": "nic0", "model": model, "bridge": obj{}, "macAddress": mac}},
+							"interfaces":             []any{obj{"name": "nic0", "model": model, "bridge": obj{}, "macAddress": mac}},
 						},
 					},
-					"networks": []interface{}{obj{"name": "nic0", "multus": obj{"networkName": s.Network}}},
+					"networks": []any{obj{"name": "nic0", "multus": obj{"networkName": s.Network}}},
 					"volumes":  volumes,
 				},
 			},
@@ -347,7 +347,7 @@ func diskEntry(disk, dv string, running bool) (obj, obj) {
 	return obj{"name": disk, "dataVolume": obj{"name": dv}}, obj{"name": disk, "disk": obj{"bus": "virtio"}}
 }
 
-func without(items []interface{}, drop func(obj) bool) []interface{} {
+func without(items []any, drop func(obj) bool) []any {
 	out := items[:0]
 	for _, it := range items {
 		if m, ok := it.(obj); ok && drop(m) {

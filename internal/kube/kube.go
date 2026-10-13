@@ -161,15 +161,15 @@ func (s Secrets) Update(ctx context.Context, name, resourceVersion string, data 
 }
 
 func secret(name, typ, resourceVersion string, data map[string][]byte) *unstructured.Unstructured {
-	enc := make(map[string]interface{}, len(data))
+	enc := make(map[string]any, len(data))
 	for k, v := range data {
 		enc[k] = base64.StdEncoding.EncodeToString(v)
 	}
-	meta := map[string]interface{}{"name": name}
+	meta := map[string]any{"name": name}
 	if resourceVersion != "" {
 		meta["resourceVersion"] = resourceVersion
 	}
-	return &unstructured.Unstructured{Object: map[string]interface{}{
+	return &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "v1",
 		"kind":       "Secret",
 		"metadata":   meta,
@@ -383,7 +383,7 @@ func toVM(v, vmi *unstructured.Unstructured) VM {
 	vm.Status, _, _ = unstructured.NestedString(o, "status", "printableStatus")
 	templates, _, _ := unstructured.NestedSlice(o, "spec", "dataVolumeTemplates")
 	for _, t := range templates {
-		if q, ok, _ := unstructured.NestedString(t.(map[string]interface{}), "spec", "storage", "resources", "requests", "storage"); ok {
+		if q, ok, _ := unstructured.NestedString(t.(map[string]any), "spec", "storage", "resources", "requests", "storage"); ok {
 			if qty, err := resource.ParseQuantity(q); err == nil {
 				vm.StorageBytes += qty.Value()
 			}
@@ -404,9 +404,9 @@ func toVM(v, vmi *unstructured.Unstructured) VM {
 	classes, sizes := map[string]string{}, map[string]int64{}
 	tpls, _, _ := unstructured.NestedSlice(o, "spec", "dataVolumeTemplates")
 	for _, t := range tpls {
-		n, _, _ := unstructured.NestedString(t.(map[string]interface{}), "metadata", "name")
-		classes[n], _, _ = unstructured.NestedString(t.(map[string]interface{}), "spec", "storage", "storageClassName")
-		if q, ok, _ := unstructured.NestedString(t.(map[string]interface{}), "spec", "storage", "resources", "requests", "storage"); ok {
+		n, _, _ := unstructured.NestedString(t.(map[string]any), "metadata", "name")
+		classes[n], _, _ = unstructured.NestedString(t.(map[string]any), "spec", "storage", "storageClassName")
+		if q, ok, _ := unstructured.NestedString(t.(map[string]any), "spec", "storage", "resources", "requests", "storage"); ok {
 			if qty, err := resource.ParseQuantity(q); err == nil {
 				sizes[n] = qty.Value()
 			}
@@ -415,14 +415,14 @@ func toVM(v, vmi *unstructured.Unstructured) VM {
 	sources, volumeClass, volumeSize := map[string]string{}, map[string]string{}, map[string]int64{}
 	vols, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")
 	for _, x := range vols {
-		m, _ := x.(map[string]interface{})
+		m, _ := x.(map[string]any)
 		n, _ := m["name"].(string)
 		for k, val := range m {
 			if k == "name" {
 				continue
 			}
 			src := k
-			if mm, ok := val.(map[string]interface{}); ok {
+			if mm, ok := val.(map[string]any); ok {
 				if s, ok := mm["name"].(string); ok {
 					src += ": " + s
 				} else if s, ok := mm["claimName"].(string); ok {
@@ -431,18 +431,18 @@ func toVM(v, vmi *unstructured.Unstructured) VM {
 			}
 			sources[n] = src
 		}
-		if dv, ok := m["dataVolume"].(map[string]interface{}); ok {
+		if dv, ok := m["dataVolume"].(map[string]any); ok {
 			volumeClass[n] = classes[fmt.Sprint(dv["name"])]
 			volumeSize[n] = sizes[fmt.Sprint(dv["name"])]
 		}
 	}
 	disks, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "domain", "devices", "disks")
 	for _, x := range disks {
-		m, _ := x.(map[string]interface{})
+		m, _ := x.(map[string]any)
 		d := Disk{}
 		d.Name, _ = m["name"].(string)
 		for _, t := range []string{"disk", "cdrom", "lun"} {
-			if mm, ok := m[t].(map[string]interface{}); ok {
+			if mm, ok := m[t].(map[string]any); ok {
 				d.Bus, _ = mm["bus"].(string)
 			}
 		}
@@ -453,9 +453,9 @@ func toVM(v, vmi *unstructured.Unstructured) VM {
 	nets := map[string]string{}
 	ns, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "networks")
 	for _, x := range ns {
-		m, _ := x.(map[string]interface{})
+		m, _ := x.(map[string]any)
 		n, _ := m["name"].(string)
-		if mm, ok := m["multus"].(map[string]interface{}); ok {
+		if mm, ok := m["multus"].(map[string]any); ok {
 			nets[n], _ = mm["networkName"].(string)
 		} else if _, ok := m["pod"]; ok {
 			nets[n] = "pod"
@@ -463,7 +463,7 @@ func toVM(v, vmi *unstructured.Unstructured) VM {
 	}
 	ifaces, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "domain", "devices", "interfaces")
 	for _, x := range ifaces {
-		m, _ := x.(map[string]interface{})
+		m, _ := x.(map[string]any)
 		n := NIC{}
 		n.Name, _ = m["name"].(string)
 		n.MAC, _ = m["macAddress"].(string)
@@ -485,7 +485,7 @@ func toVM(v, vmi *unstructured.Unstructured) VM {
 	vm.Started = vmi.GetCreationTimestamp().Time
 	st, _, _ := unstructured.NestedSlice(vmi.Object, "status", "interfaces")
 	for _, x := range st {
-		m, _ := x.(map[string]interface{})
+		m, _ := x.(map[string]any)
 		name, _ := m["name"].(string)
 		mac, _ := m["mac"].(string)
 		ips, _, _ := unstructured.NestedStringSlice(m, "ipAddresses")

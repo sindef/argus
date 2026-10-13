@@ -97,11 +97,11 @@ func (c *Client) CreateNetwork(ctx context.Context, n Network) error {
 	if err != nil {
 		return err
 	}
-	nad := &unstructured.Unstructured{Object: map[string]interface{}{
+	nad := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "k8s.cni.cncf.io/v1",
 		"kind":       "NetworkAttachmentDefinition",
-		"metadata":   map[string]interface{}{"name": n.Name},
-		"spec":       map[string]interface{}{"config": cfg},
+		"metadata":   map[string]any{"name": n.Name},
+		"spec":       map[string]any{"config": cfg},
 	}}
 	_, err = c.dyn.Resource(nadGVR).Namespace(Namespace).Create(ctx, nad, metav1.CreateOptions{})
 	return err

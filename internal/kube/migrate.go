@@ -265,7 +265,7 @@ func (c *Client) createImportVM(ctx context.Context, ns, name, operation, src st
 		if !ok {
 			return fmt.Errorf("no export for disk %s", dv)
 		}
-		source := obj{"http": obj{"url": u, "certConfigMap": src, "secretExtraHeaders": []interface{}{src}}}
+		source := obj{"http": obj{"url": u, "certConfigMap": src, "secretExtraHeaders": []any{src}}}
 		if err := unstructured.SetNestedMap(asObj(t), source, "spec", "source"); err != nil {
 			return err
 		}
