@@ -207,7 +207,21 @@ func (c *Client) createSnapshot(ctx context.Context, ns, vm, name string, labels
 	return name, c.markCurrent(ctx, ns, items, name)
 }
 
+func (c *Client) ownSnapshot(ctx context.Context, ns, vm, snapshot string) (*unstructured.Unstructured, error) {
+	snap, err := c.dyn.Resource(vmSnapGVR).Namespace(ns).Get(ctx, snapshot, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	if src, _, _ := unstructured.NestedString(snap.Object, "spec", "source", "name"); src != vm {
+		return nil, fmt.Errorf("snapshot %s does not belong to %s", snapshot, vm)
+	}
+	return snap, nil
+}
+
 func (c *Client) RestoreSnapshot(ctx context.Context, ns, vm, snapshot string) error {
+	if _, err := c.ownSnapshot(ctx, ns, vm, snapshot); err != nil {
+		return err
+	}
 	if _, err := c.dyn.Resource(vmiGVR).Namespace(ns).Get(ctx, vm, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
 		return fmt.Errorf("power off %s first", vm)
 	}
@@ -230,15 +244,14 @@ func (c *Client) RestoreSnapshot(ctx context.Context, ns, vm, snapshot string) e
 	return c.markCurrent(ctx, ns, items, snapshot)
 }
 
-func (c *Client) DeleteSnapshot(ctx context.Context, ns, snapshot string) error {
-	snap, err := c.dyn.Resource(vmSnapGVR).Namespace(ns).Get(ctx, snapshot, metav1.GetOptions{})
+func (c *Client) DeleteSnapshot(ctx context.Context, ns, vm, snapshot string) error {
+	snap, err := c.ownSnapshot(ctx, ns, vm, snapshot)
 	if err != nil {
 		return err
 	}
 	if err := c.dyn.Resource(vmSnapGVR).Namespace(ns).Delete(ctx, snapshot, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
-	vm, _, _ := unstructured.NestedString(snap.Object, "spec", "source", "name")
 	items, err := c.vmSnapshots(ctx, ns, vm)
 	if err != nil {
 		return err

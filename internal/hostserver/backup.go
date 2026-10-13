@@ -204,7 +204,7 @@ func (s *Server) snapshotDue(ctx context.Context, ns, name string, p wire.Backup
 	}
 	for i, sn := range auto {
 		if i >= max(p.SnapKeep, 1) && sn.Name != "" {
-			lifecycle.LogCleanup("snapshot "+sn.Name, s.kube.DeleteSnapshot(ctx, ns, sn.Name))
+			lifecycle.LogCleanup("snapshot "+sn.Name, s.kube.DeleteSnapshot(ctx, ns, name, sn.Name))
 		}
 	}
 }

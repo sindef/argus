@@ -32,7 +32,7 @@ func (l localOps) SnapshotOp(ctx context.Context, ns, name, snap, op string) err
 	case op == "restore":
 		return l.s.kube.RestoreSnapshot(ctx, ns, name, snap)
 	case op == "delete":
-		return l.s.kube.DeleteSnapshot(ctx, ns, snap)
+		return l.s.kube.DeleteSnapshot(ctx, ns, name, snap)
 	}
 	return errors.New("unknown snapshot operation")
 }

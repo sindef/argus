@@ -227,7 +227,7 @@ func (c *Client) DeleteVM(ctx context.Context, ns, name string) error {
 		return err
 	}
 	for _, sn := range snaps {
-		if err := c.DeleteSnapshot(ctx, ns, sn.Name); err != nil && !apierrors.IsNotFound(err) {
+		if err := c.DeleteSnapshot(ctx, ns, name, sn.Name); err != nil && !apierrors.IsNotFound(err) {
 			return err
 		}
 	}
