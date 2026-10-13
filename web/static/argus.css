@@ -4,6 +4,7 @@
 @font-face { font-family: Inter; font-weight: 700; font-display: swap; src: url(/static/vendor/inter/inter-latin-700-normal.woff2) format("woff2"); }
 
 :root {
+  --drawer-w: clamp(440px, 32vw, 760px);
   --bg: #071327;
   --bg-2: #0a1830;
   --panel: #0d1d38;
@@ -46,7 +47,7 @@ h2 { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
 .shell { display: flex; padding-top: 56px; min-height: 100vh; }
 .sidebar { position: fixed; top: 56px; bottom: 0; width: 260px; overflow-y: auto; background: var(--bg-2); border-right: 1px solid var(--line); padding: 12px 10px; }
 .content { margin-left: 260px; flex: 1; min-width: 0; padding: 24px 28px; }
-.content.with-drawer { margin-right: 360px; }
+.content.with-drawer { margin-right: var(--drawer-w); }
 
 .nav-section { margin-bottom: 6px; }
 .nav-head, .nav-link { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 6px; color: var(--fg); background: none; border: 0; font: inherit; cursor: pointer; text-align: left; }
@@ -148,8 +149,10 @@ td .i { color: var(--muted); margin-right: 8px; }
 .tabs a, .tabs button { padding: 10px 2px; color: var(--muted); background: none; border: 0; border-bottom: 2px solid transparent; font: inherit; cursor: pointer; }
 .tabs .active { color: var(--accent-2); border-bottom-color: var(--accent); font-weight: 500; }
 
-.drawer { position: fixed; top: 56px; right: 0; bottom: 0; width: 360px; overflow-y: auto; background: var(--bg-2); border-left: 1px solid var(--line); padding: 20px; z-index: 10; }
+.drawer { position: fixed; top: 56px; right: 0; bottom: 0; width: var(--drawer-w); overflow-y: auto; overflow-x: hidden; background: var(--bg-2); border-left: 1px solid var(--line); padding: 20px; z-index: 10; }
 .drawer:empty { display: none; }
+.drawer .tabs { flex-wrap: wrap; column-gap: 18px; }
+.drawer.resizing { user-select: none; }
 .drawer-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 18px; }
 .drawer-head h2 { font-size: 20px; margin: 0; }
 .drawer-head .close { margin-left: auto; }

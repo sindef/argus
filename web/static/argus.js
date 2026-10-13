@@ -3,6 +3,35 @@
     get(k) { try { return localStorage.getItem(k); } catch { return null; } },
     set(k, v) { try { localStorage.setItem(k, v); } catch {} },
   };
+  const drawerWidth = store.get("drawerWidth");
+  if (drawerWidth) document.documentElement.style.setProperty("--drawer-w", drawerWidth + "px");
+  const nearEdge = (d, e) => e.clientX - d.getBoundingClientRect().left < 8;
+  document.addEventListener("pointerdown", (e) => {
+    const d = e.target.closest(".drawer");
+    if (!d || !nearEdge(d, e)) return;
+    d.setPointerCapture(e.pointerId);
+    d.classList.add("resizing");
+    e.preventDefault();
+  });
+  document.addEventListener("pointermove", (e) => {
+    const d = e.target.closest(".drawer");
+    if (!d) return;
+    if (!d.classList.contains("resizing")) { d.style.cursor = nearEdge(d, e) ? "col-resize" : ""; return; }
+    const w = Math.round(Math.min(Math.max(window.innerWidth - e.clientX, 360), window.innerWidth * 0.8));
+    document.documentElement.style.setProperty("--drawer-w", w + "px");
+  });
+  document.addEventListener("pointerup", (e) => {
+    const d = e.target.closest(".drawer.resizing");
+    if (!d) return;
+    d.classList.remove("resizing");
+    store.set("drawerWidth", parseInt(getComputedStyle(document.documentElement).getPropertyValue("--drawer-w"), 10));
+  });
+  document.addEventListener("dblclick", (e) => {
+    const d = e.target.closest(".drawer");
+    if (!d || !nearEdge(d, e)) return;
+    document.documentElement.style.removeProperty("--drawer-w");
+    store.set("drawerWidth", "");
+  });
   const closeMenus = (except) => {
     document.querySelectorAll(".menu-list:not([hidden])").forEach((m) => { if (m !== except) m.hidden = true; });
   };
