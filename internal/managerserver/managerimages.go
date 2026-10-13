@@ -57,7 +57,7 @@ func (s *Server) managerImages(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		errs = strings.TrimSpace(errs + " " + err.Error())
 	}
-	s.Render(w, r, "manager-images.html", "layout", map[string]any{"Nav": "images", "Rows": out, "HostNames": hosts, "CanOperate": ui.Session(r).Role.Can(auth.Operator), "Error": errs,
+	s.Render(w, r, "manager-images.html", "layout", map[string]any{"Nav": "images", "Rows": out, "HostNames": hosts, "Error": errs,
 		"Library": s.library(ui.Session(r).Org), "HostArch": arch, "Templates": s.libraryTemplates(ui.Session(r).Org), "HostTemplates": s.hostTemplates(r), "Sources": sources, "Address": s.registryAddress(r.Context()), "AutoAddress": auto, "Org": ui.Session(r).Org, "Super": superAdmin(r)})
 }
 

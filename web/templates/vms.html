@@ -4,25 +4,28 @@
   <div><h1>Virtual Machines</h1><div class="sub">Manage and monitor your virtual machines.</div></div>
 </div>
 <div class="toolbar">
-  {{if .CanOperate}}
+  {{if .Can.Provision}}
   <button class="btn" hx-get="/vms/import" hx-target="#modal">{{template "icon" "download"}}Import</button>
   <button class="btn primary" hx-get="/vms/new" hx-target="#modal">{{template "icon" "plus"}}Create VM</button>
+  {{end}}
+  {{if .Can.Power}}
   <div class="menu">
     <button class="btn" data-menu data-needs-selection>{{template "icon" "power"}}Power{{template "icon" "chevron-down"}}</button>
     <div class="menu-list" hidden>
       {{range $a := .PowerActions}}<button hx-post="/vms/bulk/{{index $a 0}}" hx-include="input[name=sel]:checked" hx-target="#flash">{{template "icon" (index $a 2)}}{{index $a 1}}</button>{{end}}
     </div>
   </div>
-  <button class="btn" data-needs-selection hx-post="/vms/bulk/snapshot" hx-include="input[name=sel]:checked" hx-target="#flash">{{template "icon" "camera"}}Snapshot</button>
-  <button class="btn" disabled title="Moving VMs between hosts is done from Argus Manager">{{template "icon" "arrow-right-left"}}Migrate</button>
+  {{end}}
+  {{if .Can.Snapshot}}<button class="btn" data-needs-selection hx-post="/vms/bulk/snapshot" hx-include="input[name=sel]:checked" hx-target="#flash">{{template "icon" "camera"}}Snapshot</button>{{end}}
+  {{if or .Can.Provision .Can.Config .Can.Delete}}
   <div class="menu">
     <button class="btn" data-menu data-needs-selection>{{template "icon" "ellipsis"}}More{{template "icon" "chevron-down"}}</button>
     <div class="menu-list" hidden>
-      <button hx-post="/vms/bulk/clone" hx-include="input[name=sel]:checked" hx-target="#flash" data-prompt="Clone" data-prompt-placeholder="Name for the clone">{{template "icon" "copy"}}Clone</button>
-      <button hx-post="/vms/bulk/template-copy" hx-include="input[name=sel]:checked" hx-target="#flash" data-prompt="Create template" data-prompt-placeholder="Template name">{{template "icon" "layers"}}Create template</button>
-      <button hx-post="/vms/bulk/rename" hx-include="input[name=sel]:checked" hx-target="#flash" data-prompt="Rename" data-prompt-placeholder="Display name" data-prompt-optional>{{template "icon" "pencil"}}Rename</button>
-      <hr>
-      <button class="danger" hx-post="/vms/bulk/delete" hx-include="input[name=sel]:checked" hx-target="#flash" hx-confirm="Delete the selected VMs and their disks?">{{template "icon" "trash-2"}}Delete</button>
+      {{if .Can.Provision}}<button hx-post="/vms/bulk/clone" hx-include="input[name=sel]:checked" hx-target="#flash" data-prompt="Clone" data-prompt-placeholder="Name for the clone">{{template "icon" "copy"}}Clone</button>
+      <button hx-post="/vms/bulk/template-copy" hx-include="input[name=sel]:checked" hx-target="#flash" data-prompt="Create template" data-prompt-placeholder="Template name">{{template "icon" "layers"}}Create template</button>{{end}}
+      {{if .Can.Config}}<button hx-post="/vms/bulk/rename" hx-include="input[name=sel]:checked" hx-target="#flash" data-prompt="Rename" data-prompt-placeholder="Display name" data-prompt-optional>{{template "icon" "pencil"}}Rename</button>{{end}}
+      {{if .Can.Delete}}<hr>
+      <button class="danger" hx-post="/vms/bulk/delete" hx-include="input[name=sel]:checked" hx-target="#flash" hx-confirm="Delete the selected VMs and their disks?">{{template "icon" "trash-2"}}Delete</button>{{end}}
     </div>
   </div>
   {{end}}
@@ -41,7 +44,7 @@
 <div class="card empty">
   {{template "icon" "monitor"}}
   <h2>No virtual machines</h2>
-  {{if .CanOperate}}<div class="actions"><button class="btn" hx-get="/vms/import" hx-target="#modal">{{template "icon" "download"}}Import</button><button class="btn primary" hx-get="/vms/new" hx-target="#modal">{{template "icon" "plus"}}Create VM</button></div>{{end}}
+  {{if .Can.Provision}}<div class="actions"><button class="btn" hx-get="/vms/import" hx-target="#modal">{{template "icon" "download"}}Import</button><button class="btn primary" hx-get="/vms/new" hx-target="#modal">{{template "icon" "plus"}}Create VM</button></div>{{end}}
 </div>
 {{end}}
 {{with .Open}}<div hx-get="/vms/{{.Namespace}}/{{.Name}}/drawer" hx-target="#drawer" hx-trigger="load" data-opens-drawer></div>{{end}}
@@ -52,14 +55,14 @@
 <div class="table-wrap">
 <table>
   <thead><tr>
-    {{if .CanOperate}}<th style="width:40px"><input type="checkbox" data-select-all aria-label="Select all"></th>{{end}}
+    {{if .Can.Power}}<th style="width:40px"><input type="checkbox" data-select-all aria-label="Select all"></th>{{end}}
     <th>Name</th><th>Status</th><th>IP Address</th><th>Host</th><th>vCPUs</th><th>Memory</th><th>Storage</th>
   </tr></thead>
   <tbody>
   {{range .VMs}}
-  <tr class="clickable{{if $.Selected.Has .Namespace .Name}} selected{{end}}" data-href="/vms/{{.Namespace}}/{{.Name}}/drawer" data-page="/vms/{{.Namespace}}/{{.Name}}"{{if $.CanOperate}} data-context{{end}}>
-    {{if $.CanOperate}}<td><input type="checkbox" name="sel" value="{{.Namespace}}/{{.Name}}"{{if $.Selected.Has .Namespace .Name}} checked{{end}} aria-label="Select {{.Label}}"></td>{{end}}
-    <td>{{template "icon" "monitor"}}{{.Label}}{{if .Template}} <span class="badge">template</span>{{end}}{{range .Tags}} <span class="badge muted-badge">{{.}}</span>{{end}}{{if $.CanOperate}}{{template "vm-ctx" .}}{{end}}</td>
+  <tr class="clickable{{if $.Selected.Has .Namespace .Name}} selected{{end}}" data-href="/vms/{{.Namespace}}/{{.Name}}/drawer" data-page="/vms/{{.Namespace}}/{{.Name}}"{{if $.Can.Power}} data-context{{end}}>
+    {{if $.Can.Power}}<td><input type="checkbox" name="sel" value="{{.Namespace}}/{{.Name}}"{{if $.Selected.Has .Namespace .Name}} checked{{end}} aria-label="Select {{.Label}}"></td>{{end}}
+    <td>{{template "icon" "monitor"}}{{.Label}}{{if .Template}} <span class="badge">template</span>{{end}}{{range .Tags}} <span class="badge muted-badge">{{.}}</span>{{end}}{{if $.Can.Power}}{{template "vm-ctx" .}}{{end}}</td>
     <td><span class="dot {{.Status}}">{{.Status}}</span></td>
     <td>{{range .IPs}}{{.}} {{else}}<span class="muted">—</span>{{end}}</td>
     <td>{{if .Node}}{{.Node}}{{else}}<span class="muted">{{$.NodeName}}</span>{{end}}</td>
@@ -75,7 +78,7 @@
 {{end}}
 
 {{define "nav-vms"}}
-{{range .VMs}}<a class="nav-vm" href="/vms/{{.Namespace}}/{{.Name}}"{{if $.CanOperate}} data-context{{end}}>{{template "icon" "monitor"}}<span>{{.Label}}</span><small><span class="dot {{.Status}}">{{.Status}}</span></small>{{if $.CanOperate}}{{template "vm-ctx" .}}{{end}}</a>{{end}}
+{{range .VMs}}<a class="nav-vm" href="/vms/{{.Namespace}}/{{.Name}}"{{if $.Can.Power}} data-context{{end}}>{{template "icon" "monitor"}}<span>{{.Label}}</span><small><span class="dot {{.Status}}">{{.Status}}</span></small>{{if $.Can.Power}}{{template "vm-ctx" .}}{{end}}</a>{{end}}
 {{end}}
 
 {{define "drawer"}}
@@ -85,7 +88,7 @@
   <div><h2>{{.Label}}</h2><span class="dot {{.Status}}">{{.Status}}</span>{{if .PendingRestart}} <span class="badge" title="Some hardware changes apply when the VM next restarts.">Restart required</span>{{end}}</div>
   <button class="icon-btn close" data-close-drawer aria-label="Close">{{template "icon" "x"}}</button>
 </div>
-{{if $.CanOperate}}
+{{if $.Can.Power}}
 <div class="inline" style="margin-bottom:14px" hx-target="#flash">
   {{if .Running}}
   <a class="btn sm" href="/vms/{{.Namespace}}/{{.Name}}/console">{{template "icon" "terminal"}}Console</a>
@@ -116,13 +119,13 @@
   {{template "icon" "clock"}}<dt>Running for</dt><dd>{{if .Running}}{{since .Started}}{{else}}<span class="muted">—</span>{{end}}</dd>
 </dl>
 {{else if eq $.Tab "hardware"}}
-<h2>Disks{{if $.CanOperate}} <a class="btn sm" href="/vms/{{.Namespace}}/{{.Name}}/export.ovf" title="OVF descriptor for VMware; download each disk as VMDK into the same folder">{{template "icon" "download"}}OVF</a>{{end}}</h2>
+<h2>Disks{{if $.Can.Backup}} <a class="btn sm" href="/vms/{{.Namespace}}/{{.Name}}/export.ovf" title="OVF descriptor for VMware; download each disk as VMDK into the same folder">{{template "icon" "download"}}OVF</a>{{end}}</h2>
 <div class="table-wrap"><table>
   <thead><tr><th>Name</th><th>Pool</th><th>Source</th><th></th></tr></thead>
   <tbody>{{range .Disks}}<tr><td>{{.Name}}</td><td>{{index $.PoolOf .StorageClass}}</td><td class="clip">{{.Source}}</td>
-    <td class="row-actions">{{if $.CanOperate}}<button class="link" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/disks/{{.Name}}/download" hx-target="#flash">Download</button><button class="link" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/disks/{{.Name}}/download" hx-vals='{"format":"vmdk"}' hx-target="#flash">VMDK</button>{{end}}{{if and $.CanOperate (not $.VM.Running)}}<button class="link" data-dialog="move-disk" data-fill='{"disk":"{{.Name}}"}'>Move</button>{{if ne .Name "root"}}<button class="link danger" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/disks/{{.Name}}/delete" hx-target="#flash" hx-confirm="Remove {{.Name}}?">Remove</button>{{end}}{{end}}</td></tr>{{end}}</tbody>
+    <td class="row-actions">{{if $.Can.Backup}}<button class="link" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/disks/{{.Name}}/download" hx-target="#flash">Download</button><button class="link" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/disks/{{.Name}}/download" hx-vals='{"format":"vmdk"}' hx-target="#flash">VMDK</button>{{end}}{{if and $.Can.Backup (not $.VM.Running)}}<button class="link" data-dialog="move-disk" data-fill='{"disk":"{{.Name}}"}'>Move</button>{{if ne .Name "root"}}<button class="link danger" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/disks/{{.Name}}/delete" hx-target="#flash" hx-confirm="Remove {{.Name}}?">Remove</button>{{end}}{{end}}</td></tr>{{end}}</tbody>
 </table></div>
-{{if and $.CanOperate (not .Running)}}
+{{if and $.Can.Config (not .Running)}}
 <button class="btn sm spaced" hx-get="/vms/{{.Namespace}}/{{.Name}}/disks/new" hx-target="#modal">{{template "icon" "plus"}}Add disk</button>
 <button class="btn sm spaced" hx-get="/vms/{{.Namespace}}/{{.Name}}/hardware" hx-target="#modal">{{template "icon" "settings"}}Edit hardware</button>
 {{end}}
@@ -131,17 +134,17 @@
   <thead><tr><th>Name</th><th>Network</th><th>MAC</th></tr></thead>
   <tbody>{{range .NICs}}<tr><td>{{.Name}}</td><td>{{.Network}}</td><td class="mono">{{.MAC}}</td></tr>{{end}}</tbody>
 </table></div>
-{{if $.CanOperate}}{{template "move-disk" $.Move}}{{end}}
+{{if $.Can.Config}}{{template "move-disk" $.Move}}{{end}}
 {{else if eq $.Tab "snapshots"}}
 {{with $.Snapshots}}
 <div class="table-wrap"><table>
   <thead><tr><th>Created</th><th>Status</th><th></th></tr></thead>
   <tbody>{{range .}}<tr><td title="{{.Name}}">{{.Created.Local.Format "2006-01-02 15:04"}}</td>
     <td><span class="dot {{if .Ready}}Ready{{else}}{{.Phase}}{{end}}">{{if .Ready}}Ready{{else}}{{.Phase}}{{end}}</span>{{if .Quiesced}} <span class="badge" title="The guest agent froze file systems, so applications saw a clean point in time.">Quiesced</span>{{end}}</td>
-    <td class="row-actions">{{if $.CanOperate}}{{if not $.VM.Running}}<button class="link" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/snapshots/{{.Name}}/restore" hx-target="#flash" hx-confirm="Restore {{$.VM.Label}} to this snapshot? Current disk contents are lost.">Restore</button>{{end}}<button class="link danger" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/snapshots/{{.Name}}/delete" hx-target="#flash" hx-confirm="Delete this snapshot?">Delete</button>{{end}}</td></tr>{{end}}</tbody>
+    <td class="row-actions">{{if $.Can.Snapshot}}{{if not $.VM.Running}}<button class="link" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/snapshots/{{.Name}}/restore" hx-target="#flash" hx-confirm="Restore {{$.VM.Label}} to this snapshot? Current disk contents are lost.">Restore</button>{{end}}<button class="link danger" hx-post="/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/snapshots/{{.Name}}/delete" hx-target="#flash" hx-confirm="Delete this snapshot?">Delete</button>{{end}}</td></tr>{{end}}</tbody>
 </table></div>
 {{else}}<p class="muted">No snapshots.</p>{{end}}
-{{if $.CanOperate}}<button class="btn sm spaced" hx-post="/vms/{{.Namespace}}/{{.Name}}/snapshots" hx-target="#flash">{{template "icon" "camera"}}Take snapshot</button>{{end}}
+{{if $.Can.Snapshot}}<button class="btn sm spaced" hx-post="/vms/{{.Namespace}}/{{.Name}}/snapshots" hx-target="#flash">{{template "icon" "camera"}}Take snapshot</button>{{end}}
 {{else if eq $.Tab "backups"}}
 {{template "vm-backups" $.Backups}}
 {{else if eq $.Tab "logs"}}

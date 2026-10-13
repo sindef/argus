@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strings"
 
-	"argus/internal/auth"
 	"argus/internal/hostd"
 	"argus/internal/hostui"
 	"argus/internal/ui"
@@ -33,7 +32,7 @@ func (s *Server) networks(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	s.Render(w, r, "networks.html", "layout", map[string]any{"Nav": "networks", "Networks": nets, "Attached": attached, "Bridges": s.bridges(r.Context()), "CanEdit": ui.Session(r).Role.Can(auth.Admin), "Error": ui.ErrText(err)})
+	s.Render(w, r, "networks.html", "layout", map[string]any{"Nav": "networks", "Networks": nets, "Attached": attached, "Bridges": s.bridges(r.Context()), "Error": ui.ErrText(err)})
 }
 
 func (s *Server) createNetwork(w http.ResponseWriter, r *http.Request) {

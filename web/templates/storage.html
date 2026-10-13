@@ -36,7 +36,7 @@
   <div class="chart" data-src="/metrics?range=7d" data-window="604800" data-cols="poolUsed,poolFree" data-labels="Used,Free" data-unit="B" data-height="220"></div>
 </section>
 <section class="pane" id="s-volumes" data-icon="hard-drive">
-  <header><h2>Volumes</h2>{{if .CanOperate}}<div class="actions"><button class="btn primary" data-dialog="new-volume">{{template "icon" "plus"}}New volume</button></div>{{end}}</header>
+  <header><h2>Volumes</h2>{{if .Can.Config}}<div class="actions"><button class="btn primary" data-dialog="new-volume">{{template "icon" "plus"}}New volume</button></div>{{end}}</header>
 {{template "volume-table" .}}
 </section>
 </div>

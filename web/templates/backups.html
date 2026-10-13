@@ -9,7 +9,7 @@
   <div class="table-wrap"><table>
     <thead><tr><th>VM</th><th>Taken</th><th>Target</th><th>Size</th><th></th></tr></thead>
     <tbody>{{range .Catalog.Backups}}<tr><td>{{.VM}}</td><td>{{stamp .Stamp}}</td><td>{{.Target}}</td><td>{{bytes .Size}}</td>
-      <td class="row-actions">{{if and $.CanOperate .Complete}}<button class="link" data-dialog="restore-catalog" data-fill='{"stamp":"{{.Stamp}}","store":"{{.Target}}","vm":"{{.VM}}","target":"{{.VM}}"}'>Restore</button>{{else if not .Complete}}<span class="muted">Incomplete</span>{{end}}</td></tr>
+      <td class="row-actions">{{if and $.Can.Backup .Complete}}<button class="link" data-dialog="restore-catalog" data-fill='{"stamp":"{{.Stamp}}","store":"{{.Target}}","vm":"{{.VM}}","target":"{{.VM}}"}'>Restore</button>{{else if not .Complete}}<span class="muted">Incomplete</span>{{end}}</td></tr>
     {{else}}<tr><td colspan="5" class="muted">No backups.</td></tr>{{end}}</tbody>
   </table></div>
 </div>

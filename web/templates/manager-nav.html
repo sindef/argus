@@ -36,34 +36,32 @@
 
 {{define "twisty"}}<svg class="i twisty"><use href="/static/vendor/lucide/icons.svg#i-chevron-down"/></svg>{{end}}
 
-{{define "vm-menu"}}{{$v := .V}}
+{{define "vm-menu"}}{{$v := .V}}{{$c := .Can}}
 <div class="menu-list" hidden hx-target="#flash">
   <a href="{{.Page}}">{{template "icon" "monitor"}}Open</a>
-  {{if .CanOperate}}
-  <hr>
+  {{if or $c.Power $c.Console $c.Provision}}<hr>{{end}}
   {{if $v.Running}}
-  <button hx-post="{{.Page}}/stop" hx-confirm="Shut down {{$v.Label}}?">{{template "icon" "power"}}Shut down</button>
+  {{if $c.Power}}<button hx-post="{{.Page}}/stop" hx-confirm="Shut down {{$v.Label}}?">{{template "icon" "power"}}Shut down</button>
   <button hx-post="{{.Page}}/restart" hx-confirm="Restart {{$v.Label}}?">{{template "icon" "rotate-cw"}}Restart</button>
-  <button hx-post="{{.Page}}/pause">{{template "icon" "pause"}}Pause</button>
-  <a href="{{.Page}}/console">{{template "icon" "terminal"}}Open Console</a>
+  <button hx-post="{{.Page}}/pause">{{template "icon" "pause"}}Pause</button>{{end}}
+  {{if $c.Console}}<a href="{{.Page}}/console">{{template "icon" "terminal"}}Open Console</a>{{end}}
   {{else if eq $v.Status "Paused"}}
-  <button hx-post="{{.Page}}/unpause">{{template "icon" "play"}}Resume</button>
+  {{if $c.Power}}<button hx-post="{{.Page}}/unpause">{{template "icon" "play"}}Resume</button>{{end}}
   {{else if $v.Template}}
-  <button hx-get="/vm-copy?mode=deploy&host={{$v.Host}}&ns={{$v.Namespace}}&vm={{$v.Name}}" hx-target="#modal">{{template "icon" "plus"}}Deploy VM…</button>
-  <button hx-post="{{.Page}}/untemplate">{{template "icon" "monitor"}}Convert to VM</button>
+  {{if $c.Provision}}<button hx-get="/vm-copy?mode=deploy&host={{$v.Host}}&ns={{$v.Namespace}}&vm={{$v.Name}}" hx-target="#modal">{{template "icon" "plus"}}Deploy VM…</button>
+  <button hx-post="{{.Page}}/untemplate">{{template "icon" "monitor"}}Convert to VM</button>{{end}}
   {{else}}
-  <button hx-post="{{.Page}}/start">{{template "icon" "play"}}Power on</button>
-  <button hx-post="{{.Page}}/template" hx-confirm="Convert {{$v.Label}} to a template?">{{template "icon" "copy"}}Convert to template</button>
+  {{if $c.Power}}<button hx-post="{{.Page}}/start">{{template "icon" "play"}}Power on</button>{{end}}
+  {{if $c.Provision}}<button hx-post="{{.Page}}/template" hx-confirm="Convert {{$v.Label}} to a template?">{{template "icon" "copy"}}Convert to template</button>{{end}}
   {{end}}
-  <hr>
-  {{if .IsAdmin}}<a href="{{.Page}}#migrate">{{template "icon" "arrow-right-left"}}Migrate</a>{{end}}
-  <button hx-get="/vm-copy?mode=clone&host={{$v.Host}}&ns={{$v.Namespace}}&vm={{$v.Name}}" hx-target="#modal">{{template "icon" "copy"}}Clone…</button>
-  <button hx-get="/vm-copy?mode=template&host={{$v.Host}}&ns={{$v.Namespace}}&vm={{$v.Name}}" hx-target="#modal">{{template "icon" "layers"}}Create template…</button>
-  <button hx-post="{{.Page}}/snapshot">{{template "icon" "camera"}}Snapshot</button>
-  <button hx-post="{{.Page}}/rename" data-prompt="Rename" data-prompt-placeholder="Display name" data-prompt-value="{{$v.DisplayName}}" data-prompt-optional>{{template "icon" "pencil"}}Rename</button>
-  <button data-dialog="vm-tags" data-fill='{"action":"{{.Page}}/tags","tags":"{{join $v.Tags ", "}}","folder":{{jsonStr $v.Folder}},"attributes":{{jsonStr (attrText $v.Attributes)}}}'>{{template "icon" "tag"}}Organize…</button>
-  {{if .IsAdmin}}<hr><button class="danger" hx-post="{{.Page}}/delete" hx-confirm="Delete {{$v.Label}} and its disks?">{{template "icon" "trash-2"}}Delete</button>{{end}}
-  {{end}}
+  {{if or $c.Migrate $c.Provision $c.Snapshot $c.Config}}<hr>{{end}}
+  {{if $c.Migrate}}<a href="{{.Page}}#migrate">{{template "icon" "arrow-right-left"}}Migrate</a>{{end}}
+  {{if $c.Provision}}<button hx-get="/vm-copy?mode=clone&host={{$v.Host}}&ns={{$v.Namespace}}&vm={{$v.Name}}" hx-target="#modal">{{template "icon" "copy"}}Clone…</button>
+  <button hx-get="/vm-copy?mode=template&host={{$v.Host}}&ns={{$v.Namespace}}&vm={{$v.Name}}" hx-target="#modal">{{template "icon" "layers"}}Create template…</button>{{end}}
+  {{if $c.Snapshot}}<button hx-post="{{.Page}}/snapshot">{{template "icon" "camera"}}Snapshot</button>{{end}}
+  {{if $c.Config}}<button hx-post="{{.Page}}/rename" data-prompt="Rename" data-prompt-placeholder="Display name" data-prompt-value="{{$v.DisplayName}}" data-prompt-optional>{{template "icon" "pencil"}}Rename</button>
+  <button data-dialog="vm-tags" data-fill='{"action":"{{.Page}}/tags","tags":"{{join $v.Tags ", "}}","folder":{{jsonStr $v.Folder}},"attributes":{{jsonStr (attrText $v.Attributes)}}}'>{{template "icon" "tag"}}Organize…</button>{{end}}
+  {{if $c.Delete}}<hr><button class="danger" hx-post="{{.Page}}/delete" hx-confirm="Delete {{$v.Label}} and its disks?">{{template "icon" "trash-2"}}Delete</button>{{end}}
 </div>
 {{end}}
 

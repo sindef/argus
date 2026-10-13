@@ -6,7 +6,7 @@
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
 <div class="panes wide">
 <section class="pane" id="s-images" data-icon="image">
-  <header><h2>Images</h2>{{if .CanOperate}}<div class="actions"><button class="btn primary" data-dialog="library-add">{{template "icon" "plus"}}Add image</button></div>{{end}}</header>
+  <header><h2>Images</h2>{{if .Can.Images}}<div class="actions"><button class="btn primary" data-dialog="library-add">{{template "icon" "plus"}}Add image</button></div>{{end}}</header>
 <div class="table-wrap">
 <table>
   <thead><tr><th>Library</th><th>Tag</th><th>Architecture</th><th>Size</th><th>Added</th><th></th></tr></thead>
@@ -15,7 +15,7 @@
     <td class="row-actions"><div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
       <div class="menu-list" hidden hx-target="#flash">
         <button data-dialog="image-details" data-fill='{{$d}}'>{{template "icon" "file-text"}}Details</button>
-        {{if $.CanOperate}}<button data-dialog="send-image" data-fill='{"image":"{{.Name}}:{{.Tag}}","name":"{{.HostName}}","size":"{{.SizeGiB}}","arch":"{{.Arch}}"}'>{{template "icon" "upload"}}Pre-stage on hosts…</button>
+        {{if $.Can.Images}}<button data-dialog="send-image" data-fill='{"image":"{{.Name}}:{{.Tag}}","name":"{{.HostName}}","size":"{{.SizeGiB}}","arch":"{{.Arch}}"}'>{{template "icon" "upload"}}Pre-stage on hosts…</button>
         <hr><button class="danger" hx-post="/images/library-delete" hx-vals='{"image":"{{.Name}}:{{.Tag}}"}' hx-confirm="Delete {{.Name}}:{{.Tag}} from the library?">{{template "icon" "trash-2"}}Delete</button>{{end}}
       </div></div></td>
   </tr>{{else}}<tr><td colspan="6" class="muted">No images in the library.</td></tr>{{end}}</tbody>
@@ -28,7 +28,7 @@
   <tbody>{{range $row := .Rows}}<tr>
     <td>{{template "icon" "image"}}{{.Name}}</td><td>{{size .Size}}</td>
     {{range $h := $.HostNames}}<td>{{with index $row.Hosts $h}}<span class="dot {{.Phase}}">{{if eq .Phase "Succeeded"}}Ready{{else}}{{.Phase}} {{.Progress}}{{end}}</span>{{else}}<span class="muted">—</span>{{end}}</td>{{end}}
-    <td class="row-actions">{{if $.CanOperate}}<button class="link" data-dialog="copy-image" data-fill='{"image":"{{.Name}}"}'>Copy to hosts</button><button class="link danger" hx-post="/images/delete" hx-vals='{"image":"{{.Name}}"}' hx-target="#flash" hx-confirm="Delete {{.Name}} from every host?">Delete</button>{{end}}</td>
+    <td class="row-actions">{{if $.Can.Images}}<button class="link" data-dialog="copy-image" data-fill='{"image":"{{.Name}}"}'>Copy to hosts</button><button class="link danger" hx-post="/images/delete" hx-vals='{"image":"{{.Name}}"}' hx-target="#flash" hx-confirm="Delete {{.Name}} from every host?">Delete</button>{{end}}</td>
   </tr>{{else}}<tr><td colspan="9" class="muted">No images on hosts.</td></tr>{{end}}</tbody>
 </table>
 </div>
@@ -39,17 +39,17 @@
 <table>
   <thead><tr><th>Name</th><th>Stored on</th><th>Architecture</th><th>vCPUs</th><th>Memory</th><th>Size</th><th></th></tr></thead>
   <tbody>
-  {{range .Templates}}<tr{{if $.CanOperate}} class="clickable" hx-get="/vm-copy?mode=deploy-library&vm={{.Name}}" hx-target="#modal" hx-trigger="click[!event.target.closest('.menu')]"{{end}}>
+  {{range .Templates}}<tr{{if $.Can.Images}} class="clickable" hx-get="/vm-copy?mode=deploy-library&vm={{.Name}}" hx-target="#modal" hx-trigger="click[!event.target.closest('.menu')]"{{end}}>
     <td>{{template "icon" "layers"}}{{.Name}}</td><td>Argus Manager</td><td>{{.Arch}}</td><td class="muted">—</td><td class="muted">—</td><td>{{bytes .Bytes}}</td>
-    <td class="row-actions">{{if $.CanOperate}}<div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
+    <td class="row-actions">{{if $.Can.Images}}<div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
       <div class="menu-list" hidden hx-target="#flash">
         <button hx-get="/vm-copy?mode=deploy-library&vm={{.Name}}" hx-target="#modal">{{template "icon" "plus"}}Deploy VM…</button>
         <hr><button class="danger" hx-post="/templates/delete" hx-vals='{"name":"{{.Name}}"}' hx-confirm="Delete template {{.Name}}?">{{template "icon" "trash-2"}}Delete</button>
       </div></div>{{end}}</td>
   </tr>{{end}}
-  {{range .HostTemplates}}<tr{{if $.CanOperate}} class="clickable" hx-get="/vm-copy?mode=deploy&host={{.Host}}&ns={{.Namespace}}&vm={{.Name}}" hx-target="#modal" hx-trigger="click[!event.target.closest('.menu')]"{{end}}>
+  {{range .HostTemplates}}<tr{{if $.Can.Images}} class="clickable" hx-get="/vm-copy?mode=deploy&host={{.Host}}&ns={{.Namespace}}&vm={{.Name}}" hx-target="#modal" hx-trigger="click[!event.target.closest('.menu')]"{{end}}>
     <td>{{template "icon" "layers"}}{{.Label}}</td><td>{{.Host}}</td><td>{{index $.HostArch .Host}}</td><td>{{.Cores}}</td><td>{{size .Memory}}</td><td>{{bytes .StorageBytes}}</td>
-    <td class="row-actions">{{if $.CanOperate}}<div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
+    <td class="row-actions">{{if $.Can.Images}}<div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
       <div class="menu-list" hidden hx-target="#flash">
         <button hx-get="/vm-copy?mode=deploy&host={{.Host}}&ns={{.Namespace}}&vm={{.Name}}" hx-target="#modal">{{template "icon" "plus"}}Deploy VM…</button>
         <button hx-get="/vm-copy?mode=template&host={{.Host}}&ns={{.Namespace}}&vm={{.Name}}" hx-target="#modal">{{template "icon" "copy"}}Copy template…</button>
@@ -62,7 +62,7 @@
 </div>
 </section>
 <section class="pane" id="s-sources" data-icon="database">
-  <header><h2>Image sources</h2>{{if .CanOperate}}<div class="actions"><button class="btn" data-dialog="import-image">{{template "icon" "download"}}Import to hosts</button><button class="btn primary" data-dialog="add-source">{{template "icon" "plus"}}Add source</button></div>{{end}}</header>
+  <header><h2>Image sources</h2>{{if .Can.Images}}<div class="actions"><button class="btn" data-dialog="import-image">{{template "icon" "download"}}Import to hosts</button><button class="btn primary" data-dialog="add-source">{{template "icon" "plus"}}Add source</button></div>{{end}}</header>
 <div class="table-wrap">
 <table>
   <thead><tr><th>Name</th><th>Type</th><th>Location</th><th></th></tr></thead>
@@ -72,9 +72,9 @@
     <td class="mono">{{if .Address}}{{.Address}}/{{.Org}}{{else if .AutoAddress}}{{.AutoAddress}}/{{.Org}} <span class="muted">(auto)</span>{{else}}<span class="muted">Automatic</span>{{end}}</td>
     <td class="row-actions">{{if .Super}}<button class="link" data-dialog="registry-address" data-fill='{"address":"{{.Address}}"}'>Set address</button>{{end}}</td>
   </tr>
-  {{range .Sources}}<tr{{if $.CanOperate}} class="clickable" data-dialog="add-source" data-fill='{"name":"{{.Name}}","kind":"{{.Kind}}","url":"{{.URL}}","ca":"{{.CA}}"}'{{end}}>
+  {{range .Sources}}<tr{{if $.Can.Images}} class="clickable" data-dialog="add-source" data-fill='{"name":"{{.Name}}","kind":"{{.Kind}}","url":"{{.URL}}","ca":"{{.CA}}"}'{{end}}>
     <td>{{template "icon" "globe"}}{{.Name}}</td><td>{{if eq .Kind "registry"}}Registry{{else}}HTTP{{end}}</td><td class="mono">{{.URL}}</td>
-    <td class="row-actions">{{if $.CanOperate}}<div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
+    <td class="row-actions">{{if $.Can.Images}}<div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
       <div class="menu-list" hidden hx-target="#flash">
         <button data-dialog="add-source" data-fill='{"name":"{{.Name}}","kind":"{{.Kind}}","url":"{{.URL}}","ca":"{{.CA}}"}'>{{template "icon" "pencil"}}Edit…</button>
         <button data-dialog="import-image" data-fill='{"source":"{{.Name}}"}'>{{template "icon" "download"}}Import to hosts…</button>
@@ -97,7 +97,7 @@
     <div class="actions"><button class="btn" type="button" data-close-dialog>Close</button></div>
   </div>
 </dialog>
-{{if .CanOperate}}
+{{if .Can.Images}}
 <dialog id="library-add" class="card">
   <form id="library-form" data-progress="library-progress" hx-post="/images/library-add" hx-target="#library-error" hx-encoding="multipart/form-data" hx-disabled-elt="find button[type=submit]" class="form library-form">
     <h2>Add image</h2>

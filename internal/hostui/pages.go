@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"argus/internal/auth"
 	"argus/internal/hostd"
 	"argus/internal/kube"
 	"argus/internal/ui"
@@ -305,7 +304,7 @@ func (s *UI) backupsPage(w http.ResponseWriter, r *http.Request) {
 	if err == nil && c.Error != "" {
 		err = errors.New(c.Error)
 	}
-	s.Render(w, r, "backups.html", "layout", map[string]any{"Nav": "backups", "Tab": "backups", "Catalog": c, "CanOperate": ui.Permits(r, auth.VMBackup), "Error": ui.ErrText(err)})
+	s.Render(w, r, "backups.html", "layout", map[string]any{"Nav": "backups", "Tab": "backups", "Catalog": c, "Error": ui.ErrText(err)})
 }
 
 func (s *UI) restoreFromCatalog(w http.ResponseWriter, r *http.Request) {

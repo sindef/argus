@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strings"
 
-	"argus/internal/auth"
 	"argus/internal/kube"
 	"argus/internal/ui"
 )
@@ -64,7 +63,6 @@ func (s *Server) vmData(r *http.Request) map[string]any {
 		"VMs":          filterVMs(vms, r.FormValue("q")),
 		"Selected":     sel,
 		"PowerActions": powerActions,
-		"CanOperate":   ui.Session(r).Role.Can(auth.Operator),
 		"Error":        ui.ErrText(err),
 	}
 }
@@ -86,7 +84,7 @@ func (s *Server) vmTable(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) navVMs(w http.ResponseWriter, r *http.Request) {
 	vms, _ := s.kube.ListVMs(r.Context())
-	s.Render(w, r, "vms.html", "nav-vms", map[string]any{"VMs": vms, "CanOperate": ui.Session(r).Role.Can(auth.Operator)})
+	s.Render(w, r, "vms.html", "nav-vms", map[string]any{"VMs": vms})
 }
 
 func (s *Server) vmDrawer(w http.ResponseWriter, r *http.Request) {
@@ -99,7 +97,7 @@ func (s *Server) vmDrawer(w http.ResponseWriter, r *http.Request) {
 	if !slices.Contains(drawerTabs, tab) {
 		tab = "overview"
 	}
-	data := map[string]any{"VM": vm, "Tab": tab, "Tabs": drawerTabs, "CanOperate": ui.Session(r).Role.Can(auth.Operator)}
+	data := map[string]any{"VM": vm, "Tab": tab, "Tabs": drawerTabs}
 	switch tab {
 	case "snapshots":
 		data["Snapshots"], err = s.kube.ListSnapshots(r.Context(), vm.Namespace, vm.Name)
@@ -110,7 +108,7 @@ func (s *Server) vmDrawer(w http.ResponseWriter, r *http.Request) {
 		data["Move"] = map[string]any{"P": "/vms/" + vm.Namespace + "/" + vm.Name, "Pools": pools}
 		data["PoolOf"] = poolNames(pools)
 	case "backups":
-		data["Backups"] = map[string]any{"B": s.vmBackupInfo(r.Context(), vm.Namespace, vm.Name), "P": "/vms/" + vm.Namespace + "/" + vm.Name, "H": "/vms/" + vm.Namespace + "/" + vm.Name, "Name": vm.Name, "CanOperate": data["CanOperate"]}
+		data["Backups"] = map[string]any{"B": s.vmBackupInfo(r.Context(), vm.Namespace, vm.Name), "P": "/vms/" + vm.Namespace + "/" + vm.Name, "H": "/vms/" + vm.Namespace + "/" + vm.Name, "Name": vm.Name, "Can": s.Can(r)}
 	}
 	data["Error"] = ui.ErrText(err)
 	s.Render(w, r, "vms.html", "drawer", data)

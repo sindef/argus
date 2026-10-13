@@ -6,7 +6,7 @@
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
 <div class="panes wide">
 <section class="pane" id="s-volumes" data-icon="hard-drive">
-  <header><h2>Volumes</h2>{{if .CanOperate}}<div class="actions"><button class="btn primary" data-dialog="new-volume">{{template "icon" "plus"}}New volume</button></div>{{end}}</header>
+  <header><h2>Volumes</h2>{{if .Can.Config}}<div class="actions"><button class="btn primary" data-dialog="new-volume">{{template "icon" "plus"}}New volume</button></div>{{end}}</header>
 {{if not .Manager}}{{range .Pools}}
 <div class="stats">
   <div class="stat">{{template "icon" "database"}}<div><div class="label">Pool {{.Name}}</div><div class="value">{{pct .Used (add64 .Used .Free)}}%</div><div class="detail">{{bytes .Used}} of {{bytes (add64 .Used .Free)}} used</div><div class="bar"><span style="width:{{min100 (pct .Used (add64 .Used .Free))}}%"></span></div></div></div>

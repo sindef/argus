@@ -32,6 +32,14 @@ type vmRow struct {
 	Cluster    string
 	Protected  *manager.Protected
 	Replica    bool
+	can        *ui.Can
+}
+
+func (v vmRow) Capabilities() (ui.Can, bool) {
+	if v.can == nil {
+		return ui.Can{}, false
+	}
+	return *v.can, true
 }
 
 func (v vmRow) Page() string {
@@ -118,6 +126,7 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 		protected[p.Replica+"/"+p.VM] = p
 		haList = append(haList, haRow{Protected: p, OwnerDown: s.manager.Down(p.Owner)})
 	}
+	grants := s.UserGrants(r)
 	var rows []vmRow
 	var hosts []hostRow
 	var cores, mem, coresUsed, memUsed int64
@@ -133,7 +142,9 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 			mem += st.Info.MemoryBytes
 		}
 		for _, v := range st.VMs {
-			row := vmRow{VM: v, Host: st.Node.Name, Datacenter: groupName(st.Node.Datacenter), Cluster: groupName(st.Node.Cluster)}
+			obj := objectOf(st.Node, v.Name)
+			can := ui.Capabilities(grants, &obj)
+			row := vmRow{VM: v, Host: st.Node.Name, Datacenter: groupName(st.Node.Datacenter), Cluster: groupName(st.Node.Cluster), can: &can}
 			if p, ok := protected[st.Node.Name+"/"+v.Name]; ok {
 				row.Protected = &p
 				row.Replica = p.Replica == st.Node.Name
@@ -190,8 +201,6 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 		"CoresUsed":    coresUsed,
 		"Mem":          mem,
 		"MemUsed":      memUsed,
-		"CanOperate":   ui.Session(r).Role.Can(auth.Operator),
-		"IsAdmin":      ui.Session(r).Role.Can(auth.Admin),
 		"Super":        superAdmin(r),
 	}
 }
@@ -409,7 +418,9 @@ func (s *Server) managerVM(w http.ResponseWriter, r *http.Request) {
 	}
 	data := s.managerData(r)
 	data["Node"], data["VM"], data["Tab"], data["Tabs"], data["Range"] = n, vm, tab, vmTabs, r.URL.Query().Get("range")
-	data["Ctx"] = map[string]any{"V": vmRow{VM: vm, Host: n.Name}, "Page": fmt.Sprintf("/nodes/%s/vms/%s/%s", n.Name, ns, name), "CanOperate": data["CanOperate"], "IsAdmin": data["IsAdmin"]}
+	obj := objectOf(n, name)
+	data["Can"] = ui.Capabilities(s.UserGrants(r), &obj)
+	data["Ctx"] = map[string]any{"V": vmRow{VM: vm, Host: n.Name}, "Page": fmt.Sprintf("/nodes/%s/vms/%s/%s", n.Name, ns, name), "Can": data["Can"]}
 	data["Nav"] = "vm:" + n.Name + "/" + name
 	if st, ok := s.manager.NodeState(n.Name); ok {
 		data["Arch"] = st.Arch()
@@ -434,7 +445,7 @@ func (s *Server) managerVM(w http.ResponseWriter, r *http.Request) {
 	case "backups":
 		var b wire.VMBackups
 		err = n.Call(r.Context(), http.MethodGet, manager.APIPath("/api/vms/%s/%s/backups", ns, name), nil, &b)
-		data["Backups"] = map[string]any{"B": b, "P": fmt.Sprintf("/nodes/%s/vms/%s/%s", n.Name, ns, name), "H": fmt.Sprintf("/hosts/%s/vms/%s/%s", n.Name, ns, name), "Name": name, "CanOperate": data["CanOperate"]}
+		data["Backups"] = map[string]any{"B": b, "P": fmt.Sprintf("/nodes/%s/vms/%s/%s", n.Name, ns, name), "H": fmt.Sprintf("/hosts/%s/vms/%s/%s", n.Name, ns, name), "Name": name, "Can": data["Can"]}
 	}
 	data["Error"] = ui.ErrText(err)
 	s.Render(w, r, "manager-vm.html", "layout", data)

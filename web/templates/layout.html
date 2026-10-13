@@ -109,7 +109,7 @@
 <div class="nav-section" id="storage">
   <button class="nav-head">{{template "icon" "database"}}Storage<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-down"/></svg></button>
   <div class="nav-items">
-    {{if eq .Session.Role "admin"}}<a class="nav-link sub{{if eq .Nav "pools"}} active{{end}}" href="/pools">Pools</a>
+    {{if .Can.Host}}<a class="nav-link sub{{if eq .Nav "pools"}} active{{end}}" href="/pools">Pools</a>
     <a class="nav-link sub{{if eq .Nav "disks"}} active{{end}}" href="/disks">Disks</a>
     <a class="nav-link sub{{if eq .Nav "devices"}} active{{end}}" href="/devices">Devices</a>{{end}}
     <a class="nav-link sub{{if eq .Nav "images"}} active{{end}}" href="/images">Images</a>
@@ -121,10 +121,10 @@
   <button class="nav-head">{{template "icon" "network"}}Network<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-down"/></svg></button>
   <div class="nav-items">
     <a class="nav-link sub{{if eq .Nav "networks"}} active{{end}}" href="/networks">Networks</a>
-    {{if eq .Session.Role "admin"}}<a class="nav-link sub{{if eq .Nav "hostnet"}} active{{end}}" href="/network/host">Host network</a>{{end}}
+    {{if .Can.Host}}<a class="nav-link sub{{if eq .Nav "hostnet"}} active{{end}}" href="/network/host">Host network</a>{{end}}
   </div>
 </div>
-{{if eq .Session.Role "admin"}}
+{{if .Can.Host}}
 <div class="nav-sep"></div>
 <div class="nav-section" id="settings">
   <button class="nav-head">{{template "icon" "settings"}}Settings<svg class="i chev"><use href="/static/vendor/lucide/icons.svg#i-chevron-down"/></svg></button>
@@ -142,7 +142,7 @@
 {{define "vm-backups"}}{{$b := .B}}
 {{with $b.Error}}<p class="error">{{.}}</p>{{end}}
 <div class="card">
-  <div class="card-head"><h2>Protection</h2>{{if .CanOperate}}<div class="actions"><button class="btn" type="button" form="backup-policy" hx-post="{{.P}}/backups/now" hx-include="#backup-policy" hx-target="#flash"{{if not $b.Targets}} disabled{{end}}>{{template "icon" "upload"}}Back up now</button><button class="btn primary" type="submit" form="backup-policy">Save</button></div>{{end}}</div>
+  <div class="card-head"><h2>Protection</h2>{{if .Can.Backup}}<div class="actions"><button class="btn" type="button" form="backup-policy" hx-post="{{.P}}/backups/now" hx-include="#backup-policy" hx-target="#flash"{{if not $b.Targets}} disabled{{end}}>{{template "icon" "upload"}}Back up now</button><button class="btn primary" type="submit" form="backup-policy">Save</button></div>{{end}}</div>
   <form id="backup-policy" hx-post="{{.P}}/backups/policy" hx-target="#flash" class="form policy">
     <span class="kind">Snapshots <span class="help" title="Crash-consistent snapshots on this host's pool. Fast to take and restore; lost with the host.">?</span></span>
     {{template "interval" (dict "name" "snap" "value" $b.Policy.SnapEvery)}}
@@ -155,11 +155,11 @@
   </form>
 </div>
 <div class="card spaced">
-  <div class="card-head"><h2>Scheduled tasks</h2>{{if .CanOperate}}<div class="actions"><button class="btn" data-dialog="add-task">{{template "icon" "plus"}}Add task</button></div>{{end}}</div>
+  <div class="card-head"><h2>Scheduled tasks</h2>{{if .Can.Power}}<div class="actions"><button class="btn" data-dialog="add-task">{{template "icon" "plus"}}Add task</button></div>{{end}}</div>
   <div class="table-wrap"><table>
     <thead><tr><th>Action</th><th>When (UTC)</th><th></th></tr></thead>
     <tbody>{{range $i, $t := $b.Schedules}}<tr><td>{{$t.Action}}</td><td>{{if $t.Days}}{{range $j, $d := $t.Days}}{{if $j}}, {{end}}{{$d}}{{end}}{{else}}Every day{{end}} at {{$t.At}}</td>
-    <td class="row-actions">{{if $.CanOperate}}<button class="link danger" hx-post="{{$.P}}/schedule/delete" hx-vals='{"index":"{{$i}}"}' hx-target="#flash">Delete</button>{{end}}</td></tr>
+    <td class="row-actions">{{if $.Can.Power}}<button class="link danger" hx-post="{{$.P}}/schedule/delete" hx-vals='{"index":"{{$i}}"}' hx-target="#flash">Delete</button>{{end}}</td></tr>
   {{else}}<tr><td colspan="3" class="muted">No scheduled tasks.</td></tr>{{end}}</tbody></table></div>
 </div>
 <dialog id="add-task" class="card">
@@ -179,7 +179,7 @@
   <div class="table-wrap"><table>
     <thead><tr><th>Taken</th><th>Target</th><th>Size</th><th></th></tr></thead>
     <tbody>{{range $b.Backups}}<tr><td title="{{.Stamp}}">{{stamp .Stamp}}{{if not .Complete}} <span class="dot Warning">Incomplete</span> <span class="help" title="No completion manifest. The copy is still being written or was interrupted.">?</span>{{end}}</td><td>{{.Target}}</td><td>{{bytes .Size}}</td>
-      <td class="row-actions">{{if $.CanOperate}}{{if .Complete}}<button class="link" hx-post="{{$.H}}/files" hx-vals='{"store":"{{.Target}}","stamp":"{{.Stamp}}"}' hx-target="#flash">Browse files</button><button class="link" data-dialog="restore-backup" data-fill='{"stamp":"{{.Stamp}}","store":"{{.Target}}"}'>Restore</button>{{end}}<button class="link danger" hx-post="{{$.P}}/backups/delete" hx-vals='{"stamp":"{{.Stamp}}","store":"{{.Target}}"}' hx-target="#flash" hx-confirm="Delete this backup from {{.Target}}?"{{if eq $b.Status "Running"}} disabled title="A backup of this VM is running"{{end}}>Delete</button>{{end}}</td></tr>
+      <td class="row-actions">{{if $.Can.Backup}}{{if .Complete}}<button class="link" hx-post="{{$.H}}/files" hx-vals='{"store":"{{.Target}}","stamp":"{{.Stamp}}"}' hx-target="#flash">Browse files</button><button class="link" data-dialog="restore-backup" data-fill='{"stamp":"{{.Stamp}}","store":"{{.Target}}"}'>Restore</button>{{end}}<button class="link danger" hx-post="{{$.P}}/backups/delete" hx-vals='{"stamp":"{{.Stamp}}","store":"{{.Target}}"}' hx-target="#flash" hx-confirm="Delete this backup from {{.Target}}?"{{if eq $b.Status "Running"}} disabled title="A backup of this VM is running"{{end}}>Delete</button>{{end}}</td></tr>
     {{else}}<tr><td colspan="4" class="muted">{{if $b.Targets}}No backups yet.{{else}}Add a backup target in host settings.{{end}}</td></tr>{{end}}</tbody>
   </table></div>
 </div>
@@ -260,7 +260,7 @@
     <td>{{with .UsedBy}}{{.}}{{else}}{{with .Owner}}{{.}}{{else}}<span class="muted">—</span>{{end}}{{end}}</td>
     <td>{{len .Snapshots}}</td>
     <td><span class="dot {{.Phase}}">{{.Phase}}{{if and .Progress (ne .Phase "Succeeded")}} {{.Progress}}{{end}}</span></td>
-    <td class="row-actions">{{if $.CanOperate}}
+    <td class="row-actions">{{if $.Can.Config}}
       <div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
         <div class="menu-list" hidden hx-target="#flash">
           {{if .Dataset}}<button hx-post="{{$base}}/{{.Name}}/files" title="Read-only. VM disks only while the VM is off.">{{template "icon" "file-text"}}Browse files</button>{{end}}
@@ -291,14 +291,14 @@
     <p id="volume-edit-error" class="error form-error"></p>
     <div class="row"><label>Name <input name="name" readonly></label><label>Type <input name="kind" readonly></label></div>
     <div class="row"><label>Used by <input name="usedby" readonly></label><label>Snapshots <input name="snaps" readonly></label><label>Status <input name="phase" readonly></label></div>
-    <label>Size (GiB) <span class="help" title="Volumes can only grow. Resize VM disks from the VM's hardware settings.">?</span><input name="size" type="number" min="1" max="4096"{{if not .CanOperate}} readonly{{end}}></label>
-    <div class="actions"><button class="btn" type="button" data-close-dialog>Close</button>{{if .CanOperate}}<button class="btn primary" type="submit">Resize</button>{{end}}</div>
+    <label>Size (GiB) <span class="help" title="Volumes can only grow. Resize VM disks from the VM's hardware settings.">?</span><input name="size" type="number" min="1" max="4096"{{if not .Can.Config}} readonly{{end}}></label>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Close</button>{{if .Can.Config}}<button class="btn primary" type="submit">Resize</button>{{end}}</div>
   </form>
 </dialog>
 {{end}}
 
 {{define "volume-dialog"}}
-{{if .CanOperate}}
+{{if .Can.Config}}
 <dialog id="new-volume" class="card">
   <form class="form" hx-post="{{if .Manager}}/volumes{{else}}/volumes/create{{end}}" hx-target="#volume-error">
     <h2>New volume</h2>

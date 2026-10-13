@@ -4,7 +4,7 @@
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-{{if .Cluster}}layers{{else if .DC}}building-2{{else}}layers{{end}}"/></svg>
   <div><h1>{{if .Cluster}}{{.Cluster}}{{else if .DC}}{{.DC}}{{else}}Infrastructure{{end}}</h1><div class="crumbs">{{if .Cluster}}{{.DC}} / {{.Cluster}}{{else if .DC}}Datacenter{{else}}All datacenters{{end}}</div></div>
   {{if and .DC .OrgAdmin}}<div class="actions"><div class="menu"><button class="btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button><div class="menu-list" hidden hx-target="#flash">{{if .Cluster}}{{template "cluster-menu" (dict "DC" .DC "Cluster" .Cluster)}}{{else}}{{template "dc-menu" (dict "DC" .DC)}}{{end}}</div></div></div>{{end}}
-  {{if and (eq .Tab "vms") .CanOperate}}<div class="actions"><button class="btn" hx-get="/vm-new?what=import" hx-target="#modal">{{template "icon" "download"}}Import</button><button class="btn primary" hx-get="/vm-new" hx-target="#modal">{{template "icon" "plus"}}New VM</button></div>{{end}}
+  {{if and (eq .Tab "vms") .Can.Provision}}<div class="actions"><button class="btn" hx-get="/vm-new?what=import" hx-target="#modal">{{template "icon" "download"}}Import</button><button class="btn primary" hx-get="/vm-new" hx-target="#modal">{{template "icon" "plus"}}New VM</button></div>{{end}}
 </div>
 <div class="panes static wide">
 <nav class="panes-nav">
@@ -17,7 +17,7 @@
 <div class="panes-body">
 {{if eq .Tab "hosts"}}
 <div class="card">
-  <div class="card-head"><h2>Hosts</h2>{{if .IsAdmin}}<a class="right" href="/hosts">View all hosts</a>{{end}}</div>
+  <div class="card-head"><h2>Hosts</h2>{{if .OrgAdmin}}<a class="right" href="/hosts">View all hosts</a>{{end}}</div>
   <div class="table-wrap"><table>
     <thead><tr><th>Name</th><th>Cluster</th><th>Status</th><th>CPU</th><th>Memory</th><th>vCPU allocated</th><th>VMs</th><th>Uptime</th></tr></thead>
     <tbody>{{range .Hosts}}<tr>
@@ -41,7 +41,7 @@
   <div class="table-wrap"><table>
     <thead><tr><th>VM</th><th>From</th><th>To</th><th>Reason</th><th></th></tr></thead>
     <tbody>{{range .Recommendations}}<tr><td>{{.VM}}</td><td>{{.From}}</td><td>{{.To}}</td><td class="muted">{{.Reason}}</td>
-      <td class="row-actions">{{if $.IsAdmin}}<button class="btn" hx-post="/drs/apply" hx-vals='{"id":"{{.ID}}"}' hx-target="#flash">Apply</button>{{end}}</td></tr>
+      <td class="row-actions">{{if $.Can.Admin}}<button class="btn" hx-post="/drs/apply" hx-vals='{"id":"{{.ID}}"}' hx-target="#flash">Apply</button>{{end}}</td></tr>
     {{else}}<tr><td colspan="5" class="muted">{{if .ClusterSettings.DRS}}No moves recommended.{{else}}Load balancing is off for this cluster.{{end}}</td></tr>{{end}}</tbody>
   </table></div>
 </div>
@@ -146,7 +146,7 @@
   <div class="card">
     <div class="card-head"><h2>High Availability</h2></div>
     {{with .HAList}}
-    {{range .}}<div class="cluster-row"><span class="dot {{if .OwnerDown}}Failed{{else if .LastError}}Failed{{else if .LastSync.IsZero}}Pending{{else}}Protected{{end}}" title="{{.LastError}}"></span><div><div>{{.VM}}</div><div class="muted">{{.Owner}} → {{.Replica}}{{if not .LastSync.IsZero}} | synced {{since .LastSync}} ago{{end}}</div></div>{{if and .OwnerDown (not .LastSync.IsZero) $.IsAdmin}}<button class="btn sm danger right" hx-post="/ha/failover" hx-vals='{"owner":"{{.Owner}}","vm":"{{.VM}}"}' hx-target="#flash" hx-confirm="Start {{.VM}} on {{.Replica}}? Only continue if {{.Owner}} is powered off or isolated; otherwise two copies will run.">Fail over</button>{{end}}</div>{{end}}
+    {{range .}}<div class="cluster-row"><span class="dot {{if .OwnerDown}}Failed{{else if .LastError}}Failed{{else if .LastSync.IsZero}}Pending{{else}}Protected{{end}}" title="{{.LastError}}"></span><div><div>{{.VM}}</div><div class="muted">{{.Owner}} → {{.Replica}}{{if not .LastSync.IsZero}} | synced {{since .LastSync}} ago{{end}}</div></div>{{if and .OwnerDown (not .LastSync.IsZero) $.Can.Admin}}<button class="btn sm danger right" hx-post="/ha/failover" hx-vals='{"owner":"{{.Owner}}","vm":"{{.VM}}"}' hx-target="#flash" hx-confirm="Start {{.VM}} on {{.Replica}}? Only continue if {{.Owner}} is powered off or isolated; otherwise two copies will run.">Fail over</button>{{end}}</div>{{end}}
     {{else}}<p class="muted">No VMs protected.</p>{{end}}
   </div>
 </div>
@@ -175,8 +175,8 @@
     <li data-id="cl:{{.Name}}"><span class="row{{if eq $.Nav (printf "cl:%s/%s" $dc .Name)}} active{{end}}"{{if $.OrgAdmin}} data-context{{end}}>{{template "twisty"}}<a href="/datacenters/{{$dc}}/clusters/{{.Name}}">{{template "icon" "layers"}}{{.Name}}</a>
       {{if $.OrgAdmin}}<span class="menu-list" hidden hx-target="#flash">{{template "cluster-menu" (dict "DC" $dc "Cluster" .Name)}}</span>{{end}}</span>
       <ul>{{range .Hosts}}{{$h := .}}
-      <li data-id="h:{{.Node.Name}}"><span class="row{{if eq $.Nav (printf "host:%s" .Node.Name)}} active{{end}}" title="{{.Error}}"{{if $.IsAdmin}} data-context{{end}}>{{template "twisty"}}<a href="/hosts/{{.Node.Name}}/dashboard">{{template "icon" "server"}}<span class="dot {{.Status}}"></span>{{.Node.Name}}</a>
-        {{if $.IsAdmin}}<span class="menu-list" hidden hx-target="#flash">
+      <li data-id="h:{{.Node.Name}}"><span class="row{{if eq $.Nav (printf "host:%s" .Node.Name)}} active{{end}}" title="{{.Error}}"{{if $.Can.Admin}} data-context{{end}}>{{template "twisty"}}<a href="/hosts/{{.Node.Name}}/dashboard">{{template "icon" "server"}}<span class="dot {{.Status}}"></span>{{.Node.Name}}</a>
+        {{if $.Can.Admin}}<span class="menu-list" hidden hx-target="#flash">
           <a href="/hosts/{{.Node.Name}}/dashboard">{{template "icon" "gauge"}}Summary</a>
           <a href="/hosts/{{.Node.Name}}/pools">{{template "icon" "database"}}Pools</a>
           <a href="/hosts/{{.Node.Name}}/disks">{{template "icon" "hard-drive"}}Disks</a>

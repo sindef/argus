@@ -7,18 +7,18 @@
 {{if .Manager}}{{template "fleet-networks" .}}{{else}}
 <div class="panes wide">
 <section class="pane" id="s-networks" data-icon="network">
-  <header><h2>Networks</h2>{{if .CanEdit}}<div class="actions"><button class="btn primary" data-dialog="new-network">{{template "icon" "plus"}}Add network</button></div>{{end}}</header>
+  <header><h2>Networks</h2>{{if .Can.Networks}}<div class="actions"><button class="btn primary" data-dialog="new-network">{{template "icon" "plus"}}Add network</button></div>{{end}}</header>
 <div class="table-wrap">
 <table>
   <thead><tr><th>Name</th><th>VLAN</th><th>Bridge</th><th>Attached VMs</th><th></th></tr></thead>
   <tbody>
   {{range .Networks}}
-  <tr{{if $.CanEdit}} class="clickable" data-dialog="edit-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.Bridge}}","rate":"{{if .RateMbps}}{{.RateMbps}}{{end}}","spoofcheck":[{{if .SpoofCheck}}"on"{{end}}]}'{{end}}>
+  <tr{{if $.Can.Networks}} class="clickable" data-dialog="edit-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.Bridge}}","rate":"{{if .RateMbps}}{{.RateMbps}}{{end}}","spoofcheck":[{{if .SpoofCheck}}"on"{{end}}]}'{{end}}>
     <td>{{template "icon" "network"}}{{.Name}}</td>
     <td>{{if .VLAN}}{{.VLAN}}{{else}}<span class="muted">untagged</span>{{end}}</td>
     <td>{{.Bridge}}</td>
     <td>{{index $.Attached .Name}}</td>
-    <td class="row-actions">{{if $.CanEdit}}<div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
+    <td class="row-actions">{{if $.Can.Networks}}<div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
       <div class="menu-list" hidden hx-target="#flash">
         <button data-dialog="edit-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.Bridge}}","rate":"{{if .RateMbps}}{{.RateMbps}}{{end}}","spoofcheck":[{{if .SpoofCheck}}"on"{{end}}]}'>{{template "icon" "pencil"}}Edit…</button>
         <hr><button class="danger" hx-post="/networks/{{.Name}}/delete" hx-confirm="Delete network {{.Name}}?">{{template "icon" "trash-2"}}Delete</button>
@@ -30,7 +30,7 @@
 </div>
 </section>
 </div>
-{{if .CanEdit}}
+{{if .Can.Networks}}
 <dialog id="new-network" class="card">
   <form class="form" hx-post="/networks" hx-target="#network-form-error">
     <h2>Add network</h2>
@@ -67,11 +67,11 @@
 {{define "fleet-networks"}}
 <div class="panes wide">
 <section class="pane" id="s-networks" data-icon="network">
-  <header><h2>Networks</h2>{{if .CanEdit}}<div class="actions"><button class="btn primary" data-dialog="new-network">{{template "icon" "plus"}}Define network</button></div>{{end}}</header>
+  <header><h2>Networks</h2>{{if .Can.Networks}}<div class="actions"><button class="btn primary" data-dialog="new-network">{{template "icon" "plus"}}Define network</button></div>{{end}}</header>
 <div class="table-wrap">
 <table>
   <thead><tr><th>Name</th><th>VLAN</th><th>Bridge</th><th>Scope</th><th>CIDR</th><th>Gateway</th><th>Applied</th><th>Attached VMs</th><th></th></tr></thead>
-  <tbody>{{range .Rows}}<tr{{if $.CanEdit}} class="clickable" data-dialog="{{if .Defined}}edit-network{{else}}new-network{{end}}" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.BridgeName}}","cidr":"{{.CIDR}}","gateway":"{{.Gateway}}","description":"{{.Description}}","scopes":"{{join .Scopes ", "}}","rate":"{{if .RateMbps}}{{.RateMbps}}{{end}}","spoofcheck":[{{if .SpoofCheck}}"on"{{end}}]}'{{end}}>
+  <tbody>{{range .Rows}}<tr{{if $.Can.Networks}} class="clickable" data-dialog="{{if .Defined}}edit-network{{else}}new-network{{end}}" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.BridgeName}}","cidr":"{{.CIDR}}","gateway":"{{.Gateway}}","description":"{{.Description}}","scopes":"{{join .Scopes ", "}}","rate":"{{if .RateMbps}}{{.RateMbps}}{{end}}","spoofcheck":[{{if .SpoofCheck}}"on"{{end}}]}'{{end}}>
     <td>{{template "icon" "network"}}{{.Name}}{{with .Description}} <span class="muted">{{.}}</span>{{end}}{{if not .Defined}} <span class="badge" title="Exists on a host but is not defined in Argus Manager">host only</span>{{end}}</td>
     <td>{{if .VLAN}}{{.VLAN}}{{else}}<span class="muted">untagged</span>{{end}}</td>
     <td class="mono">{{.BridgeName}}</td>
@@ -80,7 +80,7 @@
     <td>{{with .Gateway}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
     <td><span class="dot {{if eq .Applied .InScope}}Applied{{else}}Warning{{end}}" title="{{range $h, $st := .Hosts}}{{$h}}: {{$st}}&#10;{{end}}">{{.Applied}} / {{.InScope}} hosts</span></td>
     <td>{{.Attached}}</td>
-    <td class="row-actions">{{if $.CanEdit}}<div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
+    <td class="row-actions">{{if $.Can.Networks}}<div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
       <div class="menu-list" hidden hx-target="#flash">
         {{if .Defined}}<button data-dialog="edit-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.BridgeName}}","cidr":"{{.CIDR}}","gateway":"{{.Gateway}}","description":"{{.Description}}","scopes":"{{join .Scopes ", "}}","rate":"{{if .RateMbps}}{{.RateMbps}}{{end}}","spoofcheck":[{{if .SpoofCheck}}"on"{{end}}]}'>{{template "icon" "pencil"}}Edit…</button>{{else}}<button data-dialog="new-network" data-fill='{"name":"{{.Name}}","vlan":"{{if .VLAN}}{{.VLAN}}{{end}}","bridge":"{{.BridgeName}}","cidr":"{{.CIDR}}","gateway":"{{.Gateway}}","description":"{{.Description}}","scopes":"{{join .Scopes ", "}}","rate":"{{if .RateMbps}}{{.RateMbps}}{{end}}","spoofcheck":[{{if .SpoofCheck}}"on"{{end}}]}'>{{template "icon" "plus"}}Define…</button>{{end}}
         {{if and .Defined (ne .Applied .InScope)}}<button hx-post="/networks/{{.Name}}/apply">{{template "icon" "refresh-cw"}}Apply to hosts in scope</button>{{end}}
@@ -103,7 +103,7 @@
     <td class="row-actions"><div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
       <div class="menu-list" hidden>
         <button hx-get="/switches/{{.Name}}/ports" hx-target="#switch-ports-body" data-dialog="switch-ports">{{template "icon" "list"}}Ports…</button>
-        {{if $.CanEdit}}{{with index .Uplinks 0}}<button data-dialog="switch-teaming" data-fill='{"name":"{{$sw}}","mode":"{{or .Mode "active-backup"}}","hash":"{{.Hash}}","primary":"{{.Primary}}","mtu":"{{.MTU}}"}'>{{template "icon" "pencil"}}Teaming…</button>{{end}}{{end}}
+        {{if $.Can.Networks}}{{with index .Uplinks 0}}<button data-dialog="switch-teaming" data-fill='{"name":"{{$sw}}","mode":"{{or .Mode "active-backup"}}","hash":"{{.Hash}}","primary":"{{.Primary}}","mtu":"{{.MTU}}"}'>{{template "icon" "pencil"}}Teaming…</button>{{end}}{{end}}
       </div></div></td>
   </tr>{{else}}<tr><td colspan="5" class="muted">No reachable hosts.</td></tr>{{end}}</tbody>
 </table>
@@ -114,7 +114,7 @@
   <div id="switch-ports-body"><p class="muted">Loading…</p></div>
   <div class="actions"><button class="btn" type="button" data-close-dialog>Close</button></div>
 </dialog>
-{{if .CanEdit}}
+{{if .Can.Networks}}
 <dialog id="switch-teaming" class="card">
   <form class="form" hx-post="/switches/teaming" hx-target="#teaming-result" hx-disabled-elt="find button[type=submit]">
     <h2>Uplink teaming</h2>

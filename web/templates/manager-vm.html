@@ -7,9 +7,9 @@
     <h1 class="inline">{{.Label}} <span class="dot {{.Status}}">{{.Status}}</span>{{if .PendingRestart}} <span class="badge" title="Some hardware changes apply when the VM next restarts.">Restart required</span>{{end}}</h1>
     <div class="crumbs">{{with $.Node.Cluster}}{{.}} / {{end}}{{$.Node.Name}} / {{.Name}}</div>
   </div>
-  {{if $.CanOperate}}
   <div class="actions" hx-target="#flash">
-    {{if .Running}}
+    {{if not $.Can.Power}}
+    {{else if .Running}}
     <button class="btn" hx-post="{{$p}}/restart" hx-confirm="Restart {{.Label}}?">{{template "icon" "rotate-cw"}}Restart</button>
     <button class="btn" hx-post="{{$p}}/stop" hx-confirm="Shut down {{.Label}}?">{{template "icon" "power"}}Shut down</button>
     <button class="btn danger" hx-post="{{$p}}/poweroff" hx-confirm="Power off {{.Label}} without a guest shutdown?">{{template "icon" "power"}}Power off</button>
@@ -18,21 +18,20 @@
     {{else}}
     <button class="btn primary" hx-post="{{$p}}/start">{{template "icon" "power"}}Power on</button>
     {{end}}
-    <button class="btn" hx-post="{{$p}}/snapshot">{{template "icon" "camera"}}Snapshot</button>
-    {{if $.IsAdmin}}<button class="btn" data-dialog="migrate">{{template "icon" "arrow-right-left"}}Migrate</button>{{end}}
-    <button class="btn" hx-get="/vm-copy?mode=clone&host={{$.Node.Name}}&ns={{.Namespace}}&vm={{.Name}}" hx-target="#modal">{{template "icon" "copy"}}Clone</button>
-    {{if .Running}}<a class="btn" href="{{$p}}/console">{{template "icon" "terminal"}}Open Console</a>{{end}}
+    {{if $.Can.Snapshot}}<button class="btn" hx-post="{{$p}}/snapshot">{{template "icon" "camera"}}Snapshot</button>{{end}}
+    {{if $.Can.Migrate}}<button class="btn" data-dialog="migrate">{{template "icon" "arrow-right-left"}}Migrate</button>{{end}}
+    {{if $.Can.Provision}}<button class="btn" hx-get="/vm-copy?mode=clone&host={{$.Node.Name}}&ns={{.Namespace}}&vm={{.Name}}" hx-target="#modal">{{template "icon" "copy"}}Clone</button>{{end}}
+    {{if and .Running $.Can.Console}}<a class="btn" href="{{$p}}/console">{{template "icon" "terminal"}}Open Console</a>{{end}}
     <div class="menu">
       <button class="btn" data-menu aria-label="More">{{template "icon" "ellipsis"}}</button>
       {{template "vm-menu" $.Ctx}}
     </div>
   </div>
-  {{end}}
 </div>
 <div class="panes static">
 <nav class="panes-nav">
   {{range $t := $.Tabs}}{{$i := "gauge"}}{{if eq $t "hardware"}}{{$i = "cpu"}}{{else if eq $t "snapshots"}}{{$i = "camera"}}{{else if eq $t "backups"}}{{$i = "download"}}{{else if eq $t "logs"}}{{$i = "file-text"}}{{end}}<a href="?tab={{$t}}"{{if eq $t $.Tab}} class="active"{{end}}>{{template "icon" $i}}{{title $t}}</a>{{end}}
-  {{if and $.CanOperate .Running}}<a href="{{$p}}/console">{{template "icon" "terminal"}}Console</a>{{end}}
+  {{if and $.Can.Console .Running}}<a href="{{$p}}/console">{{template "icon" "terminal"}}Console</a>{{end}}
 </nav>
 <div class="panes-body">
 {{with $.Error}}<p class="error">{{.}}</p>{{end}}
@@ -54,7 +53,7 @@
       <dt>Uptime</dt><dd>{{if .Running}}{{since .Started}}{{else}}<span class="muted">—</span>{{end}}</dd>
       <dt>HA</dt><dd>{{with $.HA}}<span class="dot {{if .LastError}}Failed{{else if .LastSync.IsZero}}Pending{{else}}Protected{{end}}" title="{{.LastError}}">Replica on {{.Replica}}{{if not .LastSync.IsZero}}, synced {{since .LastSync}} ago{{end}}{{with .Priority}}, {{.}} priority{{end}}</span>{{else}}<span class="muted">Off</span>{{end}}</dd>
     </dl>
-    {{if $.IsAdmin}}
+    {{if $.Can.Migrate}}
     <div class="spaced">
     {{if $.HA}}
     <button class="btn sm" hx-post="{{$p}}/unprotect" hx-target="#flash" hx-confirm="Turn off HA for {{.Label}}? The replica is deleted.">{{template "icon" "shield-check"}}Turn off HA</button>
@@ -89,13 +88,13 @@
 {{else if eq $.Tab "hardware"}}
 <div class="grid vm-summary">
   <div class="card"><div class="card-head">{{template "icon" "hard-drive"}}<h2>Disks</h2></div>{{template "disks" .}}
-    {{if $.CanOperate}}<div class="spaced">{{range .Disks}}<button class="btn sm" hx-post="/hosts/{{$.Node.Name}}/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/disks/{{.Name}}/download" hx-target="#flash">{{template "icon" "download"}}{{.Name}}</button> {{end}}</div>
+    {{if $.Can.Backup}}<div class="spaced">{{range .Disks}}<button class="btn sm" hx-post="/hosts/{{$.Node.Name}}/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/disks/{{.Name}}/download" hx-target="#flash">{{template "icon" "download"}}{{.Name}}</button> {{end}}</div>
     <div class="spaced">Export for VMware <span class="help" title="Download the OVF descriptor and every VMDK into one folder, then deploy the .ovf in vSphere.">?</span> <a class="btn sm" href="/hosts/{{$.Node.Name}}/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/export.ovf">{{template "icon" "download"}}OVF</a> {{range .Disks}}<button class="btn sm" hx-post="/hosts/{{$.Node.Name}}/vms/{{$.VM.Namespace}}/{{$.VM.Name}}/disks/{{.Name}}/download" hx-vals='{"format":"vmdk"}' hx-target="#flash">{{template "icon" "download"}}{{.Name}}.vmdk</button> {{end}}</div>{{end}}
-    {{if and $.CanOperate (not .Running)}}<div class="spaced"><button class="btn sm" hx-get="/hosts/{{$.Node.Name}}/vms/{{.Namespace}}/{{.Name}}/hardware" hx-target="#modal">{{template "icon" "settings"}}Edit hardware</button> {{range .Disks}}<button class="btn sm" data-dialog="move-disk" data-fill='{"disk":"{{.Name}}"}'>{{template "icon" "arrow-right-left"}}Move {{.Name}}</button> {{if ne .Name "root"}}<button class="btn sm" hx-post="{{$p}}/disks/{{.Name}}/delete" hx-target="#flash" hx-confirm="Detach {{.Name}}? Disks created with the VM are deleted; attached volumes are kept.">{{template "icon" "x"}}Detach {{.Name}}</button> {{end}}{{end}}</div>{{end}}
+    {{if and $.Can.Config (not .Running)}}<div class="spaced"><button class="btn sm" hx-get="/hosts/{{$.Node.Name}}/vms/{{.Namespace}}/{{.Name}}/hardware" hx-target="#modal">{{template "icon" "settings"}}Edit hardware</button> {{range .Disks}}<button class="btn sm" data-dialog="move-disk" data-fill='{"disk":"{{.Name}}"}'>{{template "icon" "arrow-right-left"}}Move {{.Name}}</button> {{if ne .Name "root"}}<button class="btn sm" hx-post="{{$p}}/disks/{{.Name}}/delete" hx-target="#flash" hx-confirm="Detach {{.Name}}? Disks created with the VM are deleted; attached volumes are kept.">{{template "icon" "x"}}Detach {{.Name}}</button> {{end}}{{end}}</div>{{end}}
   </div>
   <div class="card"><div class="card-head">{{template "icon" "network"}}<h2>Network</h2></div>{{template "nics" .}}</div>
 </div>
-{{if and $.CanOperate $.Move}}{{template "move-disk" $.Move}}{{end}}
+{{if and $.Can.Config $.Move}}{{template "move-disk" $.Move}}{{end}}
 {{else if eq $.Tab "backups"}}
 {{template "vm-backups" $.Backups}}
 {{else if eq $.Tab "snapshots"}}
@@ -104,7 +103,7 @@
   <thead><tr><th>Name</th><th>Created</th><th>Status</th><th></th></tr></thead>
   <tbody>{{range .}}<tr><td class="mono snap-node{{if .Depth}} child{{end}}" style="--depth: {{.Depth}}">{{.Name}}{{if .Current}} <span class="badge" title="The VM's disks have changed since this snapshot; the next snapshot becomes its child.">You are here</span>{{end}}</td><td>{{.Created.Local.Format "2006-01-02 15:04"}}</td>
     <td><span class="dot {{if .Ready}}Ready{{else}}{{.Phase}}{{end}}">{{if .Ready}}Ready{{else}}{{.Phase}}{{end}}</span>{{if .Quiesced}} <span class="badge" title="The guest agent froze file systems, so applications saw a clean point in time.">Quiesced</span>{{end}}</td>
-    <td class="row-actions">{{if $.CanOperate}}{{if not $.VM.Running}}<button class="link" hx-post="{{$p}}/snapshots/{{.Name}}/restore" hx-target="#flash" hx-confirm="Restore {{$.VM.Label}} to this snapshot? Current disk contents are lost.">Restore</button>{{end}}<button class="link danger" hx-post="{{$p}}/snapshots/{{.Name}}/delete" hx-target="#flash" hx-confirm="Delete this snapshot?">Delete</button>{{end}}</td></tr>{{end}}</tbody>
+    <td class="row-actions">{{if $.Can.Snapshot}}{{if not $.VM.Running}}<button class="link" hx-post="{{$p}}/snapshots/{{.Name}}/restore" hx-target="#flash" hx-confirm="Restore {{$.VM.Label}} to this snapshot? Current disk contents are lost.">Restore</button>{{end}}<button class="link danger" hx-post="{{$p}}/snapshots/{{.Name}}/delete" hx-target="#flash" hx-confirm="Delete this snapshot?">Delete</button>{{end}}</td></tr>{{end}}</tbody>
 </table></div>
 {{else}}<p class="muted">No snapshots.</p>{{end}}
 {{else if eq $.Tab "logs"}}
@@ -112,7 +111,7 @@
 {{end}}
 </div>
 </div>
-{{if $.IsAdmin}}
+{{if $.Can.Migrate}}
 <dialog id="migrate" class="card">
   <form hx-post="{{$p}}/migrate" hx-target="#migrate-error" class="form" data-arch="{{$.Arch}}">
     <h2>Migrate {{.Label}}</h2>

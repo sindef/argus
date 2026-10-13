@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"strings"
 
-	"argus/internal/auth"
 	"argus/internal/lifecycle"
 	"argus/internal/netguard"
 	"argus/internal/registry"
@@ -24,7 +23,7 @@ func (s *Server) images(w http.ResponseWriter, r *http.Request) {
 		tmpl = "table"
 	}
 	imgs, err := s.kube.ListImages(r.Context())
-	s.Render(w, r, "images.html", tmpl, map[string]any{"Nav": "images", "Images": imgs, "CanOperate": ui.Session(r).Role.Can(auth.Operator), "Error": ui.ErrText(err)})
+	s.Render(w, r, "images.html", tmpl, map[string]any{"Nav": "images", "Images": imgs, "Error": ui.ErrText(err)})
 }
 
 func (s *Server) importImage(w http.ResponseWriter, r *http.Request) {

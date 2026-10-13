@@ -10,7 +10,7 @@
   <div class="table-wrap"><table>
     <thead><tr><th>Severity</th>{{if $.Manager}}<th>Host</th>{{end}}<th>Object</th><th>Message</th><th>Since</th><th></th></tr></thead>
     <tbody>{{range .}}<tr{{if .AckBy}} class="acked"{{end}}><td><span class="dot {{if eq .Severity "critical"}}Failed{{else}}Warning{{end}}">{{.Severity}}</span></td>{{if $.Manager}}<td>{{.Host}}</td>{{end}}<td>{{.Object}}</td><td>{{.Message}}</td><td>{{since .Since}}</td>
-      <td class="row-actions">{{if .AckBy}}<span class="muted" title="{{.AckAt.Local.Format "2006-01-02 15:04"}}">Acknowledged by {{.AckBy}}</span>{{else if eq $.Session.Role "admin"}}<button class="link" hx-post="/alarms/ack" hx-vals='{"key":"{{.Key}}"}' hx-target="#flash">Acknowledge</button>{{end}}</td></tr>{{end}}{{if not (unacked .)}}<tr class="all-acked"><td colspan="6" class="muted">All alarms acknowledged.</td></tr>{{end}}</tbody>
+      <td class="row-actions">{{if .AckBy}}<span class="muted" title="{{.AckAt.Local.Format "2006-01-02 15:04"}}">Acknowledged by {{.AckBy}}</span>{{else if $.Can.Admin}}<button class="link" hx-post="/alarms/ack" hx-vals='{"key":"{{.Key}}"}' hx-target="#flash">Acknowledge</button>{{end}}</td></tr>{{end}}{{if not (unacked .)}}<tr class="all-acked"><td colspan="6" class="muted">All alarms acknowledged.</td></tr>{{end}}</tbody>
   </table></div>
 </div>
 {{end}}
@@ -52,7 +52,7 @@
     <thead><tr><th>Task</th><th>From</th><th>To</th><th>Started</th><th>Status</th><th></th></tr></thead>
     <tbody>{{range .}}<tr><td>{{with .Kind}}{{.}}{{else}}{{.VM}}{{if .Live}} <span class="muted">(live migration)</span>{{end}}{{end}}</td><td>{{.From}}</td><td>{{.To}}</td><td>{{.Started.Local.Format "15:04"}}</td>
       <td class="clip" title="{{.Status}}"><span class="dot {{if .Attention}}Warning{{else if .Failed}}Failed{{else if .Done}}Succeeded{{else}}Migrating{{end}}">{{.Status}}</span></td>
-      <td class="row-actions">{{if and .Attention (eq $.Session.Role "admin")}}<button class="link" hx-post="/jobs/{{.ID}}/resolve" hx-target="#flash" hx-confirm="Roll back {{.VM}}: keep it on {{.From}} and remove what this job created on {{.To}}?">Resolve</button>{{end}}</td></tr>{{end}}</tbody>
+      <td class="row-actions">{{if and .Attention $.Can.Admin}}<button class="link" hx-post="/jobs/{{.ID}}/resolve" hx-target="#flash" hx-confirm="Roll back {{.VM}}: keep it on {{.From}} and remove what this job created on {{.To}}?">Resolve</button>{{end}}</td></tr>{{end}}</tbody>
   </table></div>
 </div>
 {{end}}

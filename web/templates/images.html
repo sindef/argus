@@ -5,11 +5,11 @@
 </div>
 <div class="panes wide">
 <section class="pane" id="s-images" data-icon="image">
-  <header><h2>Images</h2>{{if .CanOperate}}<div class="actions"><button class="btn" data-dialog="import-image">{{template "icon" "download"}}Import from URL</button><button class="btn primary" data-dialog="upload-image">{{template "icon" "upload"}}Upload</button></div>{{end}}</header>
+  <header><h2>Images</h2>{{if .Can.Images}}<div class="actions"><button class="btn" data-dialog="import-image">{{template "icon" "download"}}Import from URL</button><button class="btn primary" data-dialog="upload-image">{{template "icon" "upload"}}Upload</button></div>{{end}}</header>
 <div hx-get="/images" hx-trigger="every 5s">{{template "table" .}}</div>
 </section>
 </div>
-{{if .CanOperate}}
+{{if .Can.Images}}
 <dialog id="import-image" class="card">
   <form hx-post="/images" hx-target="#import-error" class="form">
     <h2>Import from URL</h2>
@@ -50,7 +50,7 @@
     <td>{{size .Size}}</td>
     <td><span class="dot {{.Phase}}">{{.Phase}}</span>{{if and .Progress (ne .Phase "Succeeded")}} <span class="muted">{{.Progress}}</span>{{end}}</td>
     <td class="clip">{{.Source}}</td>
-    <td class="row-actions">{{if $.CanOperate}}<button class="link danger" hx-post="/images/{{.Name}}/delete" hx-target="#flash" hx-confirm="Delete image {{.Name}}?">Delete</button>{{end}}</td>
+    <td class="row-actions">{{if $.Can.Images}}<button class="link danger" hx-post="/images/{{.Name}}/delete" hx-target="#flash" hx-confirm="Delete image {{.Name}}?">Delete</button>{{end}}</td>
   </tr>
   {{else}}<tr><td colspan="5" class="muted">No images.</td></tr>{{end}}
   </tbody>

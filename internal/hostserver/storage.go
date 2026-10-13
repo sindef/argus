@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"time"
 
-	"argus/internal/auth"
 	"argus/internal/hostui"
 	"argus/internal/kube"
 	"argus/internal/lifecycle"
@@ -81,7 +80,7 @@ func (s *Server) volumesPage(w http.ResponseWriter, r *http.Request) {
 	for i, v := range st.Volumes {
 		rows[i] = hostui.HostVolume{Volume: v}
 	}
-	s.Render(w, r, "volumes.html", "layout", map[string]any{"Nav": "volumes", "Pools": st.Pools, "Volumes": rows, "Attachable": map[string][]string{"": hostui.StoppedVMs(vms)}, "PoolChoices": s.poolChoices(r.Context()), "CanOperate": ui.Session(r).Role.Can(auth.Operator), "Error": ui.ErrText(err),
+	s.Render(w, r, "volumes.html", "layout", map[string]any{"Nav": "volumes", "Pools": st.Pools, "Volumes": rows, "Attachable": map[string][]string{"": hostui.StoppedVMs(vms)}, "PoolChoices": s.poolChoices(r.Context()), "Error": ui.ErrText(err),
 		"PoolNames": hostui.VolumePools(rows), "PoolFilter": r.FormValue("pool")})
 }
 

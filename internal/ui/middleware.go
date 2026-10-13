@@ -59,6 +59,9 @@ func (s *Core) Render(w http.ResponseWriter, r *http.Request, page, tmpl string,
 	}
 	data["Base"] = Base(r)
 	data["Session"] = Session(r)
+	if _, ok := data["Can"]; !ok {
+		data["Can"] = s.Can(r)
+	}
 	data["Alarms"] = s.ActiveAlarms()
 	data["OrgAdmin"] = Session(r).Role.Can(auth.Admin) && len(Session(r).Scopes) == 0
 	data["Query"] = r.FormValue("q")

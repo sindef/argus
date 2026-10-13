@@ -88,7 +88,13 @@ var funcs = template.FuncMap{
 	"sub":     func(a, b int) int { return a - b },
 	"add64":   func(a, b int64) int64 { return a + b },
 	"vmCtx": func(v interface{ Page() string }, root map[string]any) map[string]any {
-		return map[string]any{"V": v, "Page": v.Page(), "CanOperate": root["CanOperate"], "IsAdmin": root["IsAdmin"]}
+		can := root["Can"]
+		if c, ok := v.(interface{ Capabilities() (Can, bool) }); ok {
+			if own, set := c.Capabilities(); set {
+				can = own
+			}
+		}
+		return map[string]any{"V": v, "Page": v.Page(), "Can": can}
 	},
 }
 

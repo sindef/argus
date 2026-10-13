@@ -45,3 +45,36 @@ func Perms(r *http.Request) (auth.Privilege, []auth.Grant, bool) {
 	pm, ok := r.Context().Value(permKey{}).(perms)
 	return pm.priv, pm.grants, ok
 }
+
+type Can struct {
+	Power, Console, Config, Provision, Delete, Snapshot, Backup, Migrate, Images, Networks, Host, Admin bool
+}
+
+func Capabilities(grants []auth.Grant, o *auth.Object) Can {
+	has := func(p auth.Privilege) bool {
+		if o == nil {
+			return auth.AllowsAnywhere(grants, p)
+		}
+		return auth.Allows(grants, p, *o)
+	}
+	return Can{Power: has(auth.VMPower), Console: has(auth.VMConsole), Config: has(auth.VMConfig), Provision: has(auth.VMProvision), Delete: has(auth.VMDelete),
+		Snapshot: has(auth.VMSnapshot), Backup: has(auth.VMBackup), Migrate: has(auth.VMMigrate), Images: has(auth.ImageConfig), Networks: has(auth.NetworkConfig),
+		Host: has(auth.HostConfig), Admin: has(auth.Administer)}
+}
+
+func (s *Core) UserGrants(r *http.Request) []auth.Grant {
+	if _, g, ok := Perms(r); ok {
+		return g
+	}
+	g, _ := s.Mode.Grants(r.Context(), Session(r).Session)
+	return g
+}
+
+func (s *Core) Can(r *http.Request) Can {
+	var o *auth.Object
+	if obj, ok := r.Context().Value(objectKey{}).(auth.Object); ok {
+		obj.VM = r.PathValue("name")
+		o = &obj
+	}
+	return Capabilities(s.UserGrants(r), o)
+}

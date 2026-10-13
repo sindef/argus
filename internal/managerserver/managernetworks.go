@@ -181,7 +181,7 @@ func (s *Server) managerNetworks(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	sort.Strings(all)
-	s.Render(w, r, "networks.html", "layout", map[string]any{"Nav": "networks", "Rows": out, "Reachable": len(onHost), "Switches": switches(s.fleetHostNets(org), out), "Scopes": s.ScopeNames(r), "AllBridges": all, "CanEdit": ui.Session(r).Role.Can(auth.Admin), "Error": errs})
+	s.Render(w, r, "networks.html", "layout", map[string]any{"Nav": "networks", "Rows": out, "Reachable": len(onHost), "Switches": switches(s.fleetHostNets(org), out), "Scopes": s.ScopeNames(r), "AllBridges": all, "Error": errs})
 }
 
 func networksFor(defs []manager.Network, n manager.Node) []manager.Network {
