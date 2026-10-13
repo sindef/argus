@@ -1,7 +1,6 @@
 package hostd
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -217,13 +216,13 @@ func NewServer() *Server {
 		var t Teaming
 		err := decode(r, &t)
 		if err == nil {
-			err = s.setTeaming(r.Context(), r.PathValue("name"), t)
+			err = s.setTeaming(r.Context(), requestIPs(r), r.PathValue("name"), t)
 		}
 		log.Printf("set teaming %s %+v: %v", r.PathValue("name"), t, err)
 		reply(w, nil, err)
 	}))
 	s.mux.HandleFunc("GET /devices", func(w http.ResponseWriter, r *http.Request) {
-		devs, err := ListDevices(r.Context())
+		devs, err := ListDevices(r.Context(), requestIPs(r))
 		reply(w, devs, err)
 	})
 	s.mux.HandleFunc("POST /devices", s.locked(func(w http.ResponseWriter, r *http.Request) {
@@ -233,7 +232,7 @@ func NewServer() *Server {
 		}
 		err := decode(r, &req)
 		if err == nil {
-			err = SetPassthrough(r.Context(), req.Kind, req.ID, req.On)
+			err = SetPassthrough(r.Context(), requestIPs(r), req.Kind, req.ID, req.On)
 		}
 		log.Printf("passthrough %s %s %v: %v", req.Kind, req.ID, req.On, err)
 		reply(w, nil, err)
@@ -257,13 +256,14 @@ const (
 	AccessHeader = "X-Argus-Access-Host"
 )
 
-type nodeIPKey struct{}
+func requestIPs(r *http.Request) []string {
+	return []string{r.Header.Get(NodeIPHeader), r.Header.Get(AccessHeader)}
+}
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.active.Add(1)
 	defer func() { s.active.Add(-1); s.touch() }()
-	ips := []string{r.Header.Get(NodeIPHeader), r.Header.Get(AccessHeader)}
-	s.mux.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), nodeIPKey{}, ips)))
+	s.mux.ServeHTTP(w, r)
 }
 
 func (s *Server) Idle(d time.Duration) bool {
@@ -346,7 +346,7 @@ func (s *Server) release(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) network(w http.ResponseWriter, r *http.Request) {
-	hn, err := hostNet(r.Context())
+	hn, err := hostNet(r.Context(), requestIPs(r))
 	reply(w, hn, err)
 }
 
@@ -354,14 +354,14 @@ func (s *Server) bridge(w http.ResponseWriter, r *http.Request) {
 	var spec BridgeSpec
 	err := decode(r, &spec)
 	if err == nil {
-		err = s.createBridge(r.Context(), spec)
+		err = s.createBridge(r.Context(), requestIPs(r), spec)
 	}
 	log.Printf("create bridge %s: %v", spec.Name, err)
 	reply(w, nil, err)
 }
 
 func (s *Server) unbridge(w http.ResponseWriter, r *http.Request) {
-	err := s.deleteBridge(r.Context(), r.PathValue("name"))
+	err := s.deleteBridge(r.Context(), requestIPs(r), r.PathValue("name"))
 	log.Printf("delete bridge %s: %v", r.PathValue("name"), err)
 	reply(w, nil, err)
 }
@@ -370,7 +370,7 @@ func (s *Server) address(w http.ResponseWriter, r *http.Request) {
 	var a AddressSpec
 	err := decode(r, &a)
 	if err == nil {
-		err = s.setAddress(r.Context(), a)
+		err = s.setAddress(r.Context(), requestIPs(r), a)
 	}
 	log.Printf("set address %s: %v", a.Iface, err)
 	reply(w, nil, err)
@@ -388,7 +388,7 @@ func (s *Server) management(w http.ResponseWriter, r *http.Request) {
 	}
 	err := decode(r, &req)
 	if err == nil {
-		err = s.setManagement(r.Context(), req.Iface, req.On)
+		err = s.setManagement(r.Context(), requestIPs(r), req.Iface, req.On)
 	}
 	log.Printf("management role %s=%v: %v", req.Iface, req.On, err)
 	reply(w, nil, err)

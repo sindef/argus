@@ -162,7 +162,7 @@ func readPending() *Pending {
 	return &p
 }
 
-func hostNet(ctx context.Context) (HostNet, error) {
+func hostNet(ctx context.Context, ips []string) (HostNet, error) {
 	var hn HostNet
 	out, err := run(ctx, "ip", "-j", "-d", "addr")
 	if err != nil {
@@ -184,7 +184,6 @@ func hostNet(ctx context.Context) (HostNet, error) {
 	if len(defs) > 0 {
 		hn.Gateway, mgmt = defs[0].Gateway, defs[0].Dev
 	}
-	ips, _ := ctx.Value(nodeIPKey{}).([]string)
 	protected, access := map[string]bool{}, map[string]bool{}
 	for i, ip := range ips {
 		for _, l := range links {
@@ -342,8 +341,8 @@ func (t Teaming) validate(bonded bool) error {
 	return nil
 }
 
-func (s *Server) createBridge(ctx context.Context, spec BridgeSpec) error {
-	hn, err := hostNet(ctx)
+func (s *Server) createBridge(ctx context.Context, ips []string, spec BridgeSpec) error {
+	hn, err := hostNet(ctx, ips)
 	if err != nil {
 		return err
 	}
@@ -407,8 +406,8 @@ func (s *Server) createBridge(ctx context.Context, spec BridgeSpec) error {
 	return s.apply(ctx, "create bridge "+spec.Name, files, nil, created, slices.Concat(spec.Ports, created))
 }
 
-func (s *Server) setTeaming(ctx context.Context, name string, t Teaming) error {
-	hn, err := hostNet(ctx)
+func (s *Server) setTeaming(ctx context.Context, ips []string, name string, t Teaming) error {
+	hn, err := hostNet(ctx, ips)
 	if err != nil {
 		return err
 	}
@@ -555,8 +554,8 @@ func BridgePorts(ctx context.Context, name string) ([]BridgePort, error) {
 	return ports, nil
 }
 
-func (s *Server) deleteBridge(ctx context.Context, name string) error {
-	hn, err := hostNet(ctx)
+func (s *Server) deleteBridge(ctx context.Context, ips []string, name string) error {
+	hn, err := hostNet(ctx, ips)
 	if err != nil {
 		return err
 	}
@@ -606,8 +605,8 @@ func (s *Server) deleteBridge(ctx context.Context, name string) error {
 	return nil
 }
 
-func (s *Server) setAddress(ctx context.Context, a AddressSpec) error {
-	hn, err := hostNet(ctx)
+func (s *Server) setAddress(ctx context.Context, ips []string, a AddressSpec) error {
+	hn, err := hostNet(ctx, ips)
 	if err != nil {
 		return err
 	}
@@ -721,8 +720,8 @@ func LoadFirewall(ctx context.Context) error {
 	return err
 }
 
-func (s *Server) setManagement(ctx context.Context, iface string, on bool) error {
-	hn, err := hostNet(ctx)
+func (s *Server) setManagement(ctx context.Context, ips []string, iface string, on bool) error {
+	hn, err := hostNet(ctx, ips)
 	if err != nil {
 		return err
 	}

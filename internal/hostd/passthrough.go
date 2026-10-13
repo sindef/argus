@@ -109,9 +109,9 @@ func pciNames() map[string]string {
 	return names
 }
 
-func inUse(ctx context.Context) (map[string]string, error) {
+func inUse(ctx context.Context, ips []string) (map[string]string, error) {
 	busy := map[string]string{}
-	hn, err := hostNet(ctx)
+	hn, err := hostNet(ctx, ips)
 	if err != nil {
 		return nil, err
 	}
@@ -136,11 +136,11 @@ func inUse(ctx context.Context) (map[string]string, error) {
 	return busy, nil
 }
 
-func ListDevices(ctx context.Context) (Devices, error) {
+func ListDevices(ctx context.Context, ips []string) (Devices, error) {
 	var out Devices
 	groups, _ := os.ReadDir("/sys/kernel/iommu_groups")
 	out.IOMMU = len(groups) > 0
-	busy, err := inUse(ctx)
+	busy, err := inUse(ctx, ips)
 	if err != nil {
 		return out, err
 	}
@@ -204,7 +204,7 @@ func bindVFIO(ctx context.Context, addr string, on bool) error {
 	return os.WriteFile("/sys/bus/pci/drivers_probe", []byte(addr), 0o200)
 }
 
-func SetPassthrough(ctx context.Context, kind, id string, on bool) error {
+func SetPassthrough(ctx context.Context, ips []string, kind, id string, on bool) error {
 	p, err := readPassthrough()
 	if err != nil {
 		return err
@@ -215,7 +215,7 @@ func SetPassthrough(ctx context.Context, kind, id string, on bool) error {
 			return errors.New("invalid PCI address")
 		}
 		if on {
-			devs, err := ListDevices(ctx)
+			devs, err := ListDevices(ctx, ips)
 			if err != nil {
 				return err
 			}
