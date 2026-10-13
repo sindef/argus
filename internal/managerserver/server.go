@@ -90,6 +90,9 @@ func (s *Server) onHost(r *http.Request, n manager.Node) *http.Request {
 type hostNodeKey struct{}
 
 func (s *Server) TokenSession(ctx context.Context, t auth.Token) (auth.Session, string, error) {
+	if _, err := s.manager.Org(ctx, t.Org); err != nil {
+		return auth.Session{}, "", err
+	}
 	st := s.Auth.ForOrg(t.Org)
 	us, err := st.Users(ctx)
 	if err != nil {

@@ -195,6 +195,9 @@ func (s *Server) registryAuthorize(r *http.Request, repo string, a registry.Acce
 	if repo != "" && !strings.HasPrefix(repo, org+"/") {
 		return false
 	}
+	if _, err := s.manager.Org(r.Context(), org); err != nil {
+		return false
+	}
 	key := secretKey(org, name, pass)
 	s.regAuth.mu.Lock()
 	g, ok := s.regAuth.users[key]

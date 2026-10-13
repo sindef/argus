@@ -46,6 +46,9 @@ func newHarness(t *testing.T) *harness {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
+	if err := s.manager.EnsureDefaultOrg(ctx); err != nil {
+		t.Fatal(err)
+	}
 	org := store.ForOrg(manager.DefaultOrg)
 	if err := org.SaveRole(ctx, "", auth.CustomRole{Name: "viewer", Privileges: []auth.Privilege{auth.VMView}}); err != nil {
 		t.Fatal(err)
@@ -179,5 +182,47 @@ func TestScopedFleetMutations(t *testing.T) {
 		if got := strings.Contains(post(c.who, c.path, c.form), "not permitted"); got != c.denied {
 			t.Errorf("%s %s %s: denied=%v, want %v", c.who, c.path, c.form, got, c.denied)
 		}
+	}
+}
+
+func TestDeletedOrganizationCredentials(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	if err := h.s.manager.SaveOrg(ctx, manager.Org{ID: "acme", Name: "Acme"}); err != nil {
+		t.Fatal(err)
+	}
+	acme := h.s.Auth.ForOrg("acme")
+	if _, err := acme.Bootstrap(ctx, "acme-admin-pass-1"); err != nil {
+		t.Fatal(err)
+	}
+	h.tokens["acme"], _ = h.s.Auth.AddToken(ctx, auth.Token{Name: "a", Org: "acme", User: "admin"})
+	if got := h.outcome(t, "GET", "/api/v1/vms", "token:acme", ""); got != reached {
+		t.Fatalf("token before deletion: %s", got)
+	}
+	if err := h.s.manager.DeleteOrg(ctx, "acme"); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.outcome(t, "GET", "/api/v1/vms", "token:acme", ""); got != unauth {
+		t.Errorf("token after deletion: %s", got)
+	}
+	r := httptest.NewRequest(http.MethodPost, "https://argus.test/settings/orgs", strings.NewReader("id=acme&name=Acme"))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.Header.Set("Origin", "https://argus.test")
+	r.AddCookie(&http.Cookie{Name: h.s.Cookie, Value: h.cookies["admin"]})
+	w := httptest.NewRecorder()
+	h.s.ServeHTTP(w, r)
+	if !strings.Contains(w.Body.String(), "belonged to a deleted organization") {
+		t.Errorf("recreating a deleted organization ID was not refused")
+	}
+	if _, err := h.s.manager.Org(ctx, "acme"); err == nil {
+		t.Errorf("deleted organization was recreated")
+	}
+	r = httptest.NewRequest(http.MethodPost, "https://argus.test/settings/orgs", strings.NewReader("id=beta&name=Beta"))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.Header.Set("Origin", "https://argus.test")
+	r.AddCookie(&http.Cookie{Name: h.s.Cookie, Value: h.cookies["admin"]})
+	h.s.ServeHTTP(httptest.NewRecorder(), r)
+	if _, err := h.s.manager.Org(ctx, "beta"); err != nil {
+		t.Errorf("new organization not created: %v", err)
 	}
 }

@@ -692,6 +692,10 @@ func (s *Server) managerAddOrg(w http.ResponseWriter, r *http.Request) {
 		s.renderSettings(w, r, "", errors.New("organization already exists"))
 		return
 	}
+	if us, err := s.Auth.ForOrg(id).Users(r.Context()); err != nil || len(us) > 0 {
+		s.renderSettings(w, r, "", fmt.Errorf("organization ID %s belonged to a deleted organization; choose another", id))
+		return
+	}
 	if err := s.manager.SaveOrg(r.Context(), manager.Org{ID: id, Name: name}); err != nil {
 		s.renderSettings(w, r, "", err)
 		return
