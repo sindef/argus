@@ -591,66 +591,11 @@ func (s *Server) vmBackupInfo(ctx context.Context, ns, name string) wire.VMBacku
 }
 
 func (s *Server) backupOp(ctx context.Context, ns, name, op string, f func(string) string) error {
-	num := func(k string) int { n, _ := strconv.Atoi(f(k)); return n }
 	switch op {
 	case "policy":
-		p := wire.BackupPolicy{SnapEvery: num("snap"), SnapKeep: num("snapkeep"), BackupEvery: num("backup"), BackupKeep: num("backupkeep"), Target: f("target")}
-		for _, v := range [][3]int{{p.SnapEvery, 0, 720}, {p.BackupEvery, 0, 720}} {
-			if v[0] < v[1] || v[0] > v[2] {
-				return errors.New("intervals must be 0-720 hours")
-			}
-		}
-		if p.SnapEvery > 0 && (p.SnapKeep < 1 || p.SnapKeep > 365) || p.BackupEvery > 0 && (p.BackupKeep < 1 || p.BackupKeep > 365) {
-			return errors.New("keep must be 1-365")
-		}
-		if p.BackupEvery > 0 {
-			if _, err := s.store(ctx, p.Target); err != nil {
-				return err
-			}
-			if err := s.kube.CheckBackupable(ctx, ns, name); err != nil {
-				return err
-			}
-		}
-		if p.SnapEvery == 0 && p.BackupEvery == 0 {
-			return s.kube.SetBackupPolicy(ctx, ns, name, "")
-		}
-		return s.kube.SetBackupPolicy(ctx, ns, name, p.String())
+		return s.savePolicy(ctx, ns, name, f)
 	case "now":
-		target := f("target")
-		if target == "" {
-			vm, err := s.kube.GetVM(ctx, ns, name)
-			if err != nil {
-				return err
-			}
-			p, _ := parsePolicy(vm.Backup)
-			target = p.Target
-		}
-		if target == "" {
-			targets, err := s.backupTargets(ctx)
-			if err != nil {
-				return err
-			}
-			if len(targets) == 0 {
-				return errors.New("add a backup target in host settings first")
-			}
-			target = targets[0].Name
-		}
-		if _, err := s.store(ctx, target); err != nil {
-			return err
-		}
-		if err := s.kube.CheckBackupable(ctx, ns, name); err != nil {
-			return err
-		}
-		keep := 7
-		if vm, err := s.kube.GetVM(ctx, ns, name); err == nil {
-			if p, _ := parsePolicy(vm.Backup); p.Target == target && p.BackupKeep > 0 {
-				keep = p.BackupKeep
-			}
-		}
-		if !s.startBackup(ctx, ns, name, wire.BackupPolicy{BackupKeep: keep, Target: target}) {
-			return errors.New("a backup of this VM is already running")
-		}
-		return nil
+		return s.backupNow(ctx, ns, name, f("target"))
 	case "restore":
 		return s.restoreBackup(ctx, f("store"), name, f("stamp"), strings.TrimSpace(f("target")))
 	case "delete":
@@ -664,6 +609,68 @@ func (s *Server) backupOp(ctx context.Context, ns, name, op string, f func(strin
 		return st.Delete(ctx, name+"/"+f("stamp"))
 	}
 	return errors.New("unknown backup operation")
+}
+
+func (s *Server) savePolicy(ctx context.Context, ns, name string, f func(string) string) error {
+	num := func(k string) int { n, _ := strconv.Atoi(f(k)); return n }
+	p := wire.BackupPolicy{SnapEvery: num("snap"), SnapKeep: num("snapkeep"), BackupEvery: num("backup"), BackupKeep: num("backupkeep"), Target: f("target")}
+	for _, v := range [][3]int{{p.SnapEvery, 0, 720}, {p.BackupEvery, 0, 720}} {
+		if v[0] < v[1] || v[0] > v[2] {
+			return errors.New("intervals must be 0-720 hours")
+		}
+	}
+	if p.SnapEvery > 0 && (p.SnapKeep < 1 || p.SnapKeep > 365) || p.BackupEvery > 0 && (p.BackupKeep < 1 || p.BackupKeep > 365) {
+		return errors.New("keep must be 1-365")
+	}
+	if p.BackupEvery > 0 {
+		if _, err := s.store(ctx, p.Target); err != nil {
+			return err
+		}
+		if err := s.kube.CheckBackupable(ctx, ns, name); err != nil {
+			return err
+		}
+	}
+	if p.SnapEvery == 0 && p.BackupEvery == 0 {
+		return s.kube.SetBackupPolicy(ctx, ns, name, "")
+	}
+	return s.kube.SetBackupPolicy(ctx, ns, name, p.String())
+}
+
+func (s *Server) backupNow(ctx context.Context, ns, name, target string) error {
+	if target == "" {
+		vm, err := s.kube.GetVM(ctx, ns, name)
+		if err != nil {
+			return err
+		}
+		p, _ := parsePolicy(vm.Backup)
+		target = p.Target
+	}
+	if target == "" {
+		targets, err := s.backupTargets(ctx)
+		if err != nil {
+			return err
+		}
+		if len(targets) == 0 {
+			return errors.New("add a backup target in host settings first")
+		}
+		target = targets[0].Name
+	}
+	if _, err := s.store(ctx, target); err != nil {
+		return err
+	}
+	if err := s.kube.CheckBackupable(ctx, ns, name); err != nil {
+		return err
+	}
+	keep := 7
+	if vm, err := s.kube.GetVM(ctx, ns, name); err == nil {
+		if p, _ := parsePolicy(vm.Backup); p.Target == target && p.BackupKeep > 0 {
+			keep = p.BackupKeep
+		}
+	}
+	if !s.startBackup(ctx, ns, name, wire.BackupPolicy{BackupKeep: keep, Target: target}) {
+		return errors.New("a backup of this VM is already running")
+	}
+	return nil
 }
 
 func (s *Server) apiVMBackups(w http.ResponseWriter, r *http.Request) {
