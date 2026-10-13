@@ -14,8 +14,8 @@ RUN --mount=type=cache,target=/go/pkg/mod sh /third-party-infrastructure.sh
 FROM --platform=$BUILDPLATFORM ubuntu:26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7 AS k3s-root-notices-full
 ARG TARGETARCH
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates make gcc g++ rsync wget patch file perl unzip cpio bc bzip2 xz-utils m4 && rm -rf /var/lib/apt/lists/*
-COPY --from=infrastructure /upstream/k3s-root/ /usr/src/k3s-root/
-COPY --from=infrastructure /upstream/buildroot/ /usr/src/buildroot/
+COPY --from=infrastructure-full /upstream/k3s-root/ /usr/src/k3s-root/
+COPY --from=infrastructure-full /upstream/buildroot/ /usr/src/buildroot/
 WORKDIR /usr/src/k3s-root
 ENV BUILDARCH=${TARGETARCH} FORCE_UNSAFE_CONFIGURE=1
 RUN --mount=type=cache,target=/usr/src/buildroot/dl scripts/patch && cd /usr/src/buildroot && make olddefconfig \
