@@ -2,6 +2,7 @@ package managerserver
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"argus/internal/dbstore"
 	"argus/internal/manager"
 	"argus/internal/tlscert"
+	"argus/web"
 )
 
 const (
@@ -224,5 +226,38 @@ func TestDeletedOrganizationCredentials(t *testing.T) {
 	h.s.ServeHTTP(httptest.NewRecorder(), r)
 	if _, err := h.s.manager.Org(ctx, "beta"); err != nil {
 		t.Errorf("new organization not created: %v", err)
+	}
+}
+
+func TestOpenAPIMatchesRoutes(t *testing.T) {
+	b, err := web.FS.ReadFile("static/openapi.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Paths map[string]map[string]json.RawMessage `json:"paths"`
+	}
+	if err := json.Unmarshal(b, &doc); err != nil {
+		t.Fatal(err)
+	}
+	documented := map[string]bool{}
+	for p, ops := range doc.Paths {
+		for m := range ops {
+			if m != "parameters" {
+				documented[strings.ToUpper(m)+" /api/v1"+strings.ReplaceAll(p, "{host}", "{node}")] = true
+			}
+		}
+	}
+	served := map[string]bool{}
+	for _, rt := range newHarness(t).s.apiV1Routes() {
+		served[rt.Pattern] = true
+		if !documented[rt.Pattern] && rt.Pattern != "GET /api/v1/openapi.json" {
+			t.Errorf("%s is not in openapi.json", rt.Pattern)
+		}
+	}
+	for d := range documented {
+		if !served[d] {
+			t.Errorf("openapi.json documents %s, which is not served", d)
+		}
 	}
 }
