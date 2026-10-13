@@ -263,7 +263,7 @@ func (c *Manager) drsHosts(org, dc, cl string, protected []Protected) ([]drsHost
 				}
 				cpu /= float64(len(recent))
 			}
-			ha := slices.ContainsFunc(protected, func(p Protected) bool { return p.VM == v.Name })
+			ha := slices.ContainsFunc(protected, func(p Protected) bool { return p.VM == v.Name && (p.Owner == n.Name || p.Replica == n.Name) })
 			h.VMs = append(h.VMs, drsVM{Name: v.Name, CPU: cpu, Mem: float64(memBytes(v.Memory)), Movable: !v.Template && !ha && !c.Busy(n.Name, v.Name)})
 		}
 		hosts = append(hosts, h)
