@@ -319,7 +319,7 @@ func (n Node) do(ctx context.Context, method, path string, in, out any) error {
 		if json.NewDecoder(resp.Body).Decode(&e) != nil || e.Error == "" {
 			e.Error = resp.Status
 		}
-		return fmt.Errorf("%s: %s%w", n.Name, e.Error, errRejected)
+		return fmt.Errorf("%s: %w", n.Name, rejected(e.Error))
 	}
 	if out != nil {
 		return json.NewDecoder(resp.Body).Decode(out)
@@ -555,7 +555,7 @@ func (c *Manager) importAndWait(ctx context.Context, j *Job, dst Node, name, poo
 		}
 		return cause
 	}
-	if err := dst.do(ctx, http.MethodPost, "/api/import", wire.ImportRequest{Name: name, Operation: j.ID, Export: ex, Pool: pool, Template: template, Metadata: meta}, nil); errors.Is(err, errRejected) {
+	if err := dst.do(ctx, http.MethodPost, "/api/import", wire.ImportRequest{Name: name, Operation: j.ID, Export: ex, Pool: pool, Template: template, Metadata: meta}, nil); errors.As(err, new(rejected)) {
 		return err
 	} else if err != nil {
 		return rollback(err)
@@ -632,11 +632,9 @@ func (c *Manager) migrate(ctx context.Context, j *Job, src, dst Node, ns, vm str
 	return src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "delete"), nil, nil)
 }
 
-type rejected struct{}
+type rejected string
 
-func (rejected) Error() string { return "" }
-
-var errRejected = rejected{}
+func (r rejected) Error() string { return string(r) }
 
 func (n Node) Call(ctx context.Context, method, path string, in, out any) error {
 	return n.do(ctx, method, path, in, out)
