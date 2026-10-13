@@ -162,6 +162,66 @@ func readPending() *Pending {
 	return &p
 }
 
+func linkIface(l ipLink) *Iface {
+	kind := l.Linkinfo.InfoKind
+	switch {
+	case kind == "bridge" && (l.Ifname == "cni0" || strings.HasPrefix(l.Ifname, "docker")):
+		return nil
+	case kind == "bridge" || kind == "bond" || kind == "vlan":
+	case kind == "" && physical(l.Ifname):
+		kind = "ether"
+	default:
+		return nil
+	}
+	i := &Iface{Name: l.Ifname, Kind: kind, MAC: l.Address, State: strings.ToLower(l.Operstate), Master: l.Master, V4: "off", V6: "off", MTU: l.Mtu}
+	if kind == "bond" {
+		d := l.Linkinfo.InfoData
+		i.BondMode, i.Primary, i.Active = d.Mode, d.Primary, d.ActiveSlave
+		if slices.Contains(hashModes, d.Mode) {
+			i.Hash = d.XmitHashPolicy
+		}
+	}
+	if b, err := os.ReadFile(filepath.Join("/sys/class/net", l.Ifname, "speed")); err == nil {
+		i.Speed, _ = strconv.Atoi(strings.TrimSpace(string(b)))
+	}
+	for _, a := range l.AddrInfo {
+		cidr := fmt.Sprintf("%s/%d", a.Local, a.Prefixlen)
+		switch {
+		case a.Family == "inet" && a.Dynamic:
+			i.V4 = "dhcp"
+		case a.Family == "inet":
+			i.V4, i.Static4 = "static", cidr
+		case strings.HasPrefix(a.Local, "fe80"):
+			continue
+		case a.Dynamic:
+			i.V6 = "auto"
+		default:
+			i.V6, i.Static6 = "static", cidr
+		}
+		i.Addresses = append(i.Addresses, cidr)
+	}
+	return i
+}
+
+func nodeIfaces(links []ipLink, ips []string) (protected, access map[string]bool, mgmt string) {
+	protected, access = map[string]bool{}, map[string]bool{}
+	for i, ip := range ips {
+		for _, l := range links {
+			for _, a := range l.AddrInfo {
+				if ip != "" && a.Local == ip {
+					protected[l.Ifname] = true
+					if i == 0 {
+						mgmt = l.Ifname
+					} else {
+						access[l.Ifname] = true
+					}
+				}
+			}
+		}
+	}
+	return protected, access, mgmt
+}
+
 func hostNet(ctx context.Context, ips []string) (HostNet, error) {
 	var hn HostNet
 	out, err := run(ctx, "ip", "-j", "-d", "addr")
@@ -184,20 +244,9 @@ func hostNet(ctx context.Context, ips []string) (HostNet, error) {
 	if len(defs) > 0 {
 		hn.Gateway, mgmt = defs[0].Gateway, defs[0].Dev
 	}
-	protected, access := map[string]bool{}, map[string]bool{}
-	for i, ip := range ips {
-		for _, l := range links {
-			for _, a := range l.AddrInfo {
-				if ip != "" && a.Local == ip {
-					protected[l.Ifname] = true
-					if i == 0 {
-						mgmt = l.Ifname
-					} else {
-						access[l.Ifname] = true
-					}
-				}
-			}
-		}
+	protected, access, owner := nodeIfaces(links, ips)
+	if owner != "" {
+		mgmt = owner
 	}
 	if len(protected) == 0 && mgmt != "" {
 		protected[mgmt] = true
@@ -215,43 +264,11 @@ func hostNet(ctx context.Context, ips []string) (HostNet, error) {
 	}
 	byName := map[string]*Iface{}
 	for _, l := range links {
-		kind := l.Linkinfo.InfoKind
-		switch {
-		case kind == "bridge" && (l.Ifname == "cni0" || strings.HasPrefix(l.Ifname, "docker")):
-			continue
-		case kind == "bridge" || kind == "bond" || kind == "vlan":
-		case kind == "" && physical(l.Ifname):
-			kind = "ether"
-		default:
+		i := linkIface(l)
+		if i == nil {
 			continue
 		}
-		i := &Iface{Name: l.Ifname, Kind: kind, MAC: l.Address, State: strings.ToLower(l.Operstate), Master: l.Master, Managed: managed[l.Ifname], Mgmt: protected[l.Ifname], Access: access[l.Ifname], V4: "off", V6: "off", MTU: l.Mtu}
-		if kind == "bond" {
-			d := l.Linkinfo.InfoData
-			i.BondMode, i.Primary, i.Active = d.Mode, d.Primary, d.ActiveSlave
-			if slices.Contains(hashModes, d.Mode) {
-				i.Hash = d.XmitHashPolicy
-			}
-		}
-		if b, err := os.ReadFile(filepath.Join("/sys/class/net", l.Ifname, "speed")); err == nil {
-			i.Speed, _ = strconv.Atoi(strings.TrimSpace(string(b)))
-		}
-		for _, a := range l.AddrInfo {
-			cidr := fmt.Sprintf("%s/%d", a.Local, a.Prefixlen)
-			switch {
-			case a.Family == "inet" && a.Dynamic:
-				i.V4 = "dhcp"
-			case a.Family == "inet":
-				i.V4, i.Static4 = "static", cidr
-			case strings.HasPrefix(a.Local, "fe80"):
-				continue
-			case a.Dynamic:
-				i.V6 = "auto"
-			default:
-				i.V6, i.Static6 = "static", cidr
-			}
-			i.Addresses = append(i.Addresses, cidr)
-		}
+		i.Managed, i.Mgmt, i.Access = managed[l.Ifname], protected[l.Ifname], access[l.Ifname]
 		for _, d := range defs {
 			if d.Dev == l.Ifname {
 				i.Gateway4 = d.Gateway
