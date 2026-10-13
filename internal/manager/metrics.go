@@ -166,11 +166,12 @@ func (t *telemetry) record(node string, cores int64, s kube.MetricsSample) {
 	}
 }
 
-func (m *Manager) VMSeries(node, ns, vm string, since time.Time) []Point {
+func (m *Manager) VMSeries(node, ns, vm string, span time.Duration) []Point {
+	since := time.Now().Add(-span)
 	m.tel.mu.Lock()
 	defer m.tel.mu.Unlock()
 	src := m.tel.VMs
-	if time.Since(since) > vmWindow {
+	if span > vmWindow {
 		src = m.tel.VMsHourly
 	}
 	ps := src[node+"/"+ns+"/"+vm]
@@ -178,11 +179,12 @@ func (m *Manager) VMSeries(node, ns, vm string, since time.Time) []Point {
 	return append([]Point(nil), ps[i:]...)
 }
 
-func (m *Manager) HostSeries(nodes []string, since time.Time) []Point {
+func (m *Manager) HostSeries(nodes []string, span time.Duration) []Point {
+	since := time.Now().Add(-span)
 	m.tel.mu.Lock()
 	defer m.tel.mu.Unlock()
 	step, src := int64(hostStep/time.Second), m.tel.Hosts
-	if time.Since(since) > hostWindow {
+	if span > hostWindow {
 		step, src = 3600, m.tel.HostsHourly
 	}
 	buckets := map[int64]*Point{}

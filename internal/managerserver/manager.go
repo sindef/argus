@@ -759,7 +759,7 @@ func (s *Server) managerVMMetrics(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	ps := s.manager.VMSeries(n.Name, ns, name, time.Now().Add(-ui.RangeDuration(r.URL.Query().Get("range"))))
+	ps := s.manager.VMSeries(n.Name, ns, name, ui.RangeDuration(r.URL.Query().Get("range")))
 	cols := map[string][]float32{}
 	t := make([]int64, len(ps))
 	for i, p := range ps {
@@ -775,7 +775,7 @@ func (s *Server) managerVMMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) managerFleetMetrics(w http.ResponseWriter, r *http.Request) {
-	since := time.Now().Add(-ui.RangeDuration(r.URL.Query().Get("range")))
+	span := ui.RangeDuration(r.URL.Query().Get("range"))
 	var nodes []string
 	if n := r.URL.Query().Get("node"); n != "" {
 		if _, err := s.nodeIn(r, n); err != nil {
@@ -791,7 +791,7 @@ func (s *Server) managerFleetMetrics(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	ps := s.manager.HostSeries(nodes, since)
+	ps := s.manager.HostSeries(nodes, span)
 	cols := map[string][]float32{}
 	t := make([]int64, len(ps))
 	for i, p := range ps {
