@@ -32,6 +32,16 @@
     document.documentElement.style.removeProperty("--drawer-w");
     store.set("drawerWidth", "");
   });
+  const place = (menu, x, y, alignRight) => {
+    menu.style.position = "fixed";
+    const w = menu.offsetWidth, h = menu.offsetHeight;
+    let left = alignRight ? x - w : x, top = y;
+    if (top + h > innerHeight - 8) top = Math.max(8, y - h - (alignRight ? 40 : 0));
+    menu.style.left = Math.max(8, Math.min(left, innerWidth - w - 8)) + "px";
+    menu.style.top = top + "px";
+    menu.style.right = "auto";
+    menu.dataset.opened = Date.now();
+  };
   const closeMenus = (except) => {
     document.querySelectorAll(".menu-list:not([hidden])").forEach((m) => { if (m !== except) m.hidden = true; });
   };
@@ -41,7 +51,13 @@
     if (toggle) {
       const list = toggle.parentElement.querySelector(".menu-list");
       closeMenus(list);
+      const inTable = toggle.closest(".table-wrap");
+      if (inTable) list.style.position = "fixed";
       list.hidden = !list.hidden;
+      if (!list.hidden && inTable) {
+        const r = toggle.getBoundingClientRect();
+        place(list, r.right, r.bottom + 4, true);
+      }
       e.preventDefault();
       return;
     }
@@ -128,8 +144,13 @@
     else input.value = sel.value;
   });
 
+  addEventListener("scroll", (e) => {
+    if (e.target.closest?.(".menu-list")) return;
+    document.querySelectorAll(".menu-list:not([hidden])").forEach((m) => { if (m.dataset.opened && Date.now() - m.dataset.opened > 250) m.hidden = true; });
+  }, true);
+
   document.addEventListener("contextmenu", (e) => {
-    const item = e.target.closest("[data-context]");
+    const item = e.target.closest("[data-context]") || e.target.closest("tr:has(> .row-actions .menu-list)");
     if (!item) return;
     let menu = item.querySelector(".menu-list");
     const tpl = item.querySelector("template.ctx");
@@ -141,10 +162,9 @@
     if (!menu) return;
     e.preventDefault();
     closeMenus(menu);
-    menu.hidden = false;
     menu.style.position = "fixed";
-    menu.style.left = Math.min(e.clientX, innerWidth - 220) + "px";
-    menu.style.top = Math.min(e.clientY, innerHeight - menu.offsetHeight - 10) + "px";
+    menu.hidden = false;
+    place(menu, e.clientX, e.clientY, false);
   });
 
   const syncSSO = () => {
