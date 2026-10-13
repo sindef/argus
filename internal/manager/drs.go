@@ -272,10 +272,10 @@ func (c *Manager) drsHosts(org, dc, cl string, protected []Protected) ([]drsHost
 }
 
 func (c *Manager) Recommendations(org, dc, cl string) []Recommendation {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.st.mu.Lock()
+	defer c.st.mu.Unlock()
 	var out []Recommendation
-	for _, r := range c.drs {
+	for _, r := range c.st.drs {
 		if r.Org == org && r.DC == dc && r.Cluster == cl {
 			out = append(out, r)
 		}
@@ -284,24 +284,24 @@ func (c *Manager) Recommendations(org, dc, cl string) []Recommendation {
 }
 
 func (c *Manager) Recommendation(org, id string) (Recommendation, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	i := slices.IndexFunc(c.drs, func(r Recommendation) bool { return r.ID == id && r.Org == org })
+	c.st.mu.Lock()
+	defer c.st.mu.Unlock()
+	i := slices.IndexFunc(c.st.drs, func(r Recommendation) bool { return r.ID == id && r.Org == org })
 	if i < 0 {
 		return Recommendation{}, false
 	}
-	return c.drs[i], true
+	return c.st.drs[i], true
 }
 
 func (c *Manager) ApplyRecommendation(ctx context.Context, org, id string) error {
-	c.mu.Lock()
-	i := slices.IndexFunc(c.drs, func(r Recommendation) bool { return r.ID == id && r.Org == org })
+	c.st.mu.Lock()
+	i := slices.IndexFunc(c.st.drs, func(r Recommendation) bool { return r.ID == id && r.Org == org })
 	var r Recommendation
 	if i >= 0 {
-		r = c.drs[i]
-		c.drs = slices.Delete(c.drs, i, i+1)
+		r = c.st.drs[i]
+		c.st.drs = slices.Delete(c.st.drs, i, i+1)
 	}
-	c.mu.Unlock()
+	c.st.mu.Unlock()
 	if i < 0 {
 		return errors.New("the recommendation is no longer current")
 	}
@@ -328,9 +328,9 @@ func (c *Manager) clusterBusy(org, dc, cl string) bool {
 			hosts[st.Node.Name] = true
 		}
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return slices.ContainsFunc(c.jobs, func(j *Job) bool { return !j.Done && (hosts[j.From] || hosts[j.To]) })
+	c.st.mu.Lock()
+	defer c.st.mu.Unlock()
+	return slices.ContainsFunc(c.st.jobs, func(j *Job) bool { return !j.Done && (hosts[j.From] || hosts[j.To]) })
 }
 
 func (c *Manager) drsTick(ctx context.Context) {
@@ -370,7 +370,7 @@ func (c *Manager) drsTick(ctx context.Context) {
 		}
 		recs = append(recs, r)
 	}
-	c.mu.Lock()
-	c.drs = recs
-	c.mu.Unlock()
+	c.st.mu.Lock()
+	c.st.drs = recs
+	c.st.mu.Unlock()
 }

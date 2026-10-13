@@ -51,8 +51,8 @@ func (c *Manager) loadHA(ctx context.Context) ([]Protected, string, error) {
 }
 
 func (c *Manager) updateHA(ctx context.Context, fn func([]Protected) ([]Protected, error)) error {
-	c.haMu.Lock()
-	defer c.haMu.Unlock()
+	c.storeMu.Lock()
+	defer c.storeMu.Unlock()
 	ps, rv, err := c.loadHA(ctx)
 	if err != nil {
 		return err
@@ -159,9 +159,9 @@ func (c *Manager) Run(ctx context.Context) {
 }
 
 func (c *Manager) LastSeen(node string) time.Time {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.lastSeen[node]
+	c.st.mu.Lock()
+	defer c.st.mu.Unlock()
+	return c.st.lastSeen[node]
 }
 
 func (c *Manager) heartbeat(ctx context.Context) {
@@ -190,9 +190,9 @@ func (c *Manager) heartbeat(ctx context.Context) {
 		go func(n Node) {
 			defer wg.Done()
 			if err := n.do(ctx, http.MethodPost, "/api/heartbeat", wire.Heartbeat{Owned: owned, Replicas: replicas}, nil); err == nil {
-				c.mu.Lock()
-				c.lastSeen[n.Name] = time.Now()
-				c.mu.Unlock()
+				c.st.mu.Lock()
+				c.st.lastSeen[n.Name] = time.Now()
+				c.st.mu.Unlock()
 			}
 		}(n)
 	}
@@ -265,10 +265,10 @@ func (c *Manager) promote(ctx context.Context, p Protected, status string) error
 		return err
 	}
 	log.Printf("ha: %s %s from %s to %s", p.VM, strings.ToLower(status), owner.Name, replica.Name)
-	c.mu.Lock()
-	c.promoted[p.VM] = time.Now()
-	c.jobs = append(c.jobs, &Job{Org: owner.Org, VM: p.VM, From: owner.Name, To: replica.Name, Started: time.Now(), Status: status, Done: true})
-	c.mu.Unlock()
+	c.st.mu.Lock()
+	c.st.promoted[p.VM] = time.Now()
+	c.st.jobs = append(c.st.jobs, &Job{Org: owner.Org, VM: p.VM, From: owner.Name, To: replica.Name, Started: time.Now(), Status: status, Done: true})
+	c.st.mu.Unlock()
 	if err := c.saveJobs(); err != nil {
 		log.Printf("ha: %v", err)
 	}
@@ -312,20 +312,20 @@ func (c *Manager) replicate(ctx context.Context) {
 		if c.down(p.Owner) || c.down(p.Replica) || time.Since(p.LastSync) < time.Duration(p.Interval)*time.Minute {
 			continue
 		}
-		c.mu.Lock()
-		busy := c.syncing[p.VM] || c.busy[busyKey(p.Owner, p.VM)] || c.busy[busyKey(p.Replica, p.VM)]
+		c.st.mu.Lock()
+		busy := c.st.syncing[p.VM] || c.st.busy[busyKey(p.Owner, p.VM)] || c.st.busy[busyKey(p.Replica, p.VM)]
 		if !busy {
-			c.syncing[p.VM] = true
+			c.st.syncing[p.VM] = true
 		}
-		c.mu.Unlock()
+		c.st.mu.Unlock()
 		if busy {
 			continue
 		}
 		go func(p Protected) {
 			defer func() {
-				c.mu.Lock()
-				delete(c.syncing, p.VM)
-				c.mu.Unlock()
+				c.st.mu.Lock()
+				delete(c.st.syncing, p.VM)
+				c.st.mu.Unlock()
 			}()
 			sctx, cancel := context.WithTimeout(ctx, 6*time.Hour)
 			defer cancel()
@@ -461,9 +461,9 @@ func (c *Manager) admit(ps []Protected, owner, vm, replica string) error {
 
 func (c *Manager) waitingOnHigher(ps []Protected, p Protected) bool {
 	for _, q := range ps {
-		c.mu.Lock()
-		at, promoted := c.promoted[q.VM]
-		c.mu.Unlock()
+		c.st.mu.Lock()
+		at, promoted := c.st.promoted[q.VM]
+		c.st.mu.Unlock()
 		if q.Replica != p.Owner || priorityRank[q.Priority] >= priorityRank[p.Priority] || !promoted || time.Since(at) > priorityWait {
 			continue
 		}

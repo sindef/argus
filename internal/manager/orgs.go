@@ -57,8 +57,8 @@ func (c *Manager) loadOrgs(ctx context.Context) ([]Org, string, error) {
 }
 
 func (c *Manager) updateOrgs(ctx context.Context, fn func([]Org) ([]Org, error)) error {
-	c.haMu.Lock()
-	defer c.haMu.Unlock()
+	c.storeMu.Lock()
+	defer c.storeMu.Unlock()
 	os, rv, err := c.loadOrgs(ctx)
 	if err != nil {
 		return err

@@ -37,25 +37,25 @@ func (c *Manager) setNode(ctx context.Context, name string, fn func(*Node)) (Nod
 
 func (c *Manager) startTask(ctx context.Context, j *Job, lock string, timeout time.Duration, run func(context.Context, *Job) error) error {
 	key := "task:" + lock
-	c.mu.Lock()
-	if c.busy[key] {
-		c.mu.Unlock()
+	c.st.mu.Lock()
+	if c.st.busy[key] {
+		c.st.mu.Unlock()
 		return fmt.Errorf("%s already has a task running", lock)
 	}
-	c.busy[key] = true
+	c.st.busy[key] = true
 	id := make([]byte, 8)
 	rand.Read(id)
 	j.ID, j.Started, j.Status, j.User = hex.EncodeToString(id), time.Now(), "Starting", cmp.Or(j.User, auth.Actor(ctx))
-	c.jobs = append(c.jobs, j)
-	if len(c.jobs) > keepJobs {
-		c.jobs = c.jobs[len(c.jobs)-keepJobs:]
+	c.st.jobs = append(c.st.jobs, j)
+	if len(c.st.jobs) > keepJobs {
+		c.st.jobs = c.st.jobs[len(c.st.jobs)-keepJobs:]
 	}
-	c.mu.Unlock()
+	c.st.mu.Unlock()
 	if err := c.saveJobs(); err != nil {
-		c.mu.Lock()
-		c.jobs = slices.DeleteFunc(c.jobs, func(x *Job) bool { return x == j })
-		delete(c.busy, key)
-		c.mu.Unlock()
+		c.st.mu.Lock()
+		c.st.jobs = slices.DeleteFunc(c.st.jobs, func(x *Job) bool { return x == j })
+		delete(c.st.busy, key)
+		c.st.mu.Unlock()
 		return fmt.Errorf("cannot record the task: %w", err)
 	}
 	go func() {
@@ -67,18 +67,18 @@ func (c *Manager) startTask(ctx context.Context, j *Job, lock string, timeout ti
 		} else {
 			c.finish(j, nil)
 		}
-		c.mu.Lock()
-		delete(c.busy, key)
-		c.mu.Unlock()
+		c.st.mu.Lock()
+		delete(c.st.busy, key)
+		c.st.mu.Unlock()
 	}()
 	return nil
 }
 
 func (c *Manager) waitJob(ctx context.Context, j *Job) error {
 	for {
-		c.mu.Lock()
+		c.st.mu.Lock()
 		done, failed, status := j.Done, j.Failed, j.Status
-		c.mu.Unlock()
+		c.st.mu.Unlock()
 		if done {
 			if failed {
 				return errors.New(strings.TrimPrefix(status, "Failed: "))
@@ -259,17 +259,17 @@ func waitFor(ctx context.Context, limit time.Duration, ok func() (bool, error)) 
 }
 
 func (c *Manager) plannedFailover(ctx context.Context, owner Node, p Protected) error {
-	c.mu.Lock()
-	if c.syncing[p.VM] {
-		c.mu.Unlock()
+	c.st.mu.Lock()
+	if c.st.syncing[p.VM] {
+		c.st.mu.Unlock()
 		return errors.New("replication in progress; retry shortly")
 	}
-	c.syncing[p.VM] = true
-	c.mu.Unlock()
+	c.st.syncing[p.VM] = true
+	c.st.mu.Unlock()
 	defer func() {
-		c.mu.Lock()
-		delete(c.syncing, p.VM)
-		c.mu.Unlock()
+		c.st.mu.Lock()
+		delete(c.st.syncing, p.VM)
+		c.st.mu.Unlock()
 	}()
 	if err := owner.Action(ctx, kube.Namespace, p.VM, "stop"); err != nil {
 		return err

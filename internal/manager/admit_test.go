@@ -8,7 +8,7 @@ import (
 )
 
 func TestAdmitAndPriority(t *testing.T) {
-	c := &Manager{promoted: map[string]time.Time{}, inv: inventory{nodes: map[string]NodeState{
+	c := &Manager{st: state{promoted: map[string]time.Time{}}, inv: inventory{nodes: map[string]NodeState{
 		"a": {Node: Node{Name: "a"}, Observed: time.Now(), Info: kube.NodeInfo{MemoryBytes: 16 << 30}, VMs: []kube.VM{{Name: "db", Memory: "8Gi", Running: true}, {Name: "web", Memory: "4Gi", Running: true}}},
 		"b": {Node: Node{Name: "b"}, Observed: time.Now(), Info: kube.NodeInfo{MemoryBytes: 16 << 30}, VMs: []kube.VM{{Name: "cache", Memory: "4Gi", Running: true}}},
 	}}}
@@ -22,7 +22,7 @@ func TestAdmitAndPriority(t *testing.T) {
 
 	high := Protected{VM: "db", Owner: "b", Replica: "a", Priority: "high"}
 	low := Protected{VM: "web", Owner: "a", Replica: "b", Priority: "low"}
-	c.promoted["db"] = time.Now()
+	c.st.promoted["db"] = time.Now()
 	st := c.inv.nodes["b"]
 	st.VMs = append(st.VMs, kube.VM{Name: "db", Memory: "8Gi"})
 	c.inv.nodes["b"] = st

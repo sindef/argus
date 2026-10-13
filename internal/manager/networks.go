@@ -41,8 +41,8 @@ func (c *Manager) loadNetworks(ctx context.Context, org string) ([]Network, stri
 }
 
 func (c *Manager) updateNetworks(ctx context.Context, org string, fn func([]Network) ([]Network, error)) error {
-	c.haMu.Lock()
-	defer c.haMu.Unlock()
+	c.storeMu.Lock()
+	defer c.storeMu.Unlock()
 	ns, rv, err := c.loadNetworks(ctx, org)
 	if err != nil {
 		return err

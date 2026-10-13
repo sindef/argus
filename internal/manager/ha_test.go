@@ -39,11 +39,11 @@ func TestFailoverIsManualByDefault(t *testing.T) {
 	c.updateHA(ctx, func([]Protected) ([]Protected, error) {
 		return []Protected{{VM: "web", Owner: "a1", Replica: "a2", LastSync: time.Now()}}, nil
 	})
-	c.lastSeen["a1"], c.lastSeen["a2"] = time.Now(), time.Now()
+	c.st.lastSeen["a1"], c.st.lastSeen["a2"] = time.Now(), time.Now()
 	if err := c.ManualFailover(ctx, "a1", "web"); err == nil {
 		t.Fatal("failed over while the owner is reachable")
 	}
-	c.lastSeen["a1"] = time.Now().Add(-time.Hour)
+	c.st.lastSeen["a1"] = time.Now().Add(-time.Hour)
 	c.failover(ctx)
 	if ps, _ := c.Protected(ctx); ps[0].Owner != "a1" {
 		t.Fatal("automatic failover ran while disabled")

@@ -47,80 +47,80 @@ type Job struct {
 func busyKey(node, vm string) string { return node + "/" + vm }
 
 func (c *Manager) Busy(node, vm string) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.busy[busyKey(node, vm)]
+	c.st.mu.Lock()
+	defer c.st.mu.Unlock()
+	return c.st.busy[busyKey(node, vm)]
 }
 
 func (c *Manager) startJob(ctx context.Context, j *Job, timeout time.Duration, run func(context.Context, *Job) error) error {
 	keys := []string{busyKey(j.From, j.VM), busyKey(j.To, j.VM)}
-	c.mu.Lock()
-	if c.syncing[j.VM] {
-		c.mu.Unlock()
+	c.st.mu.Lock()
+	if c.st.syncing[j.VM] {
+		c.st.mu.Unlock()
 		return fmt.Errorf("%s is being replicated; retry shortly", j.VM)
 	}
 	for _, k := range keys {
-		if c.busy[k] {
-			c.mu.Unlock()
+		if c.st.busy[k] {
+			c.st.mu.Unlock()
 			return fmt.Errorf("%s already has an operation in progress", j.VM)
 		}
 	}
 	for _, k := range keys {
-		c.busy[k] = true
+		c.st.busy[k] = true
 	}
 	id := make([]byte, 8)
 	rand.Read(id)
 	j.ID, j.Started, j.Status, j.User = hex.EncodeToString(id), time.Now(), "Starting", cmp.Or(j.User, auth.Actor(ctx))
-	c.jobs = append(c.jobs, j)
-	if len(c.jobs) > keepJobs {
-		c.jobs = c.jobs[len(c.jobs)-keepJobs:]
+	c.st.jobs = append(c.st.jobs, j)
+	if len(c.st.jobs) > keepJobs {
+		c.st.jobs = c.st.jobs[len(c.st.jobs)-keepJobs:]
 	}
-	c.mu.Unlock()
+	c.st.mu.Unlock()
 	if err := c.saveJobs(); err != nil {
-		c.mu.Lock()
-		c.jobs = slices.DeleteFunc(c.jobs, func(x *Job) bool { return x == j })
+		c.st.mu.Lock()
+		c.st.jobs = slices.DeleteFunc(c.st.jobs, func(x *Job) bool { return x == j })
 		for _, k := range keys {
-			delete(c.busy, k)
+			delete(c.st.busy, k)
 		}
-		c.mu.Unlock()
+		c.st.mu.Unlock()
 		return fmt.Errorf("cannot record the operation: %w", err)
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		if err := run(ctx, j); err != nil {
-			c.mu.Lock()
+			c.st.mu.Lock()
 			j.Attention = errors.Is(err, errUnknown)
-			c.mu.Unlock()
+			c.st.mu.Unlock()
 			c.finish(j, err)
 		} else {
 			c.finish(j, nil)
 		}
-		c.mu.Lock()
+		c.st.mu.Lock()
 		if !j.Attention {
 			for _, k := range keys {
-				delete(c.busy, k)
+				delete(c.st.busy, k)
 			}
 		}
-		c.mu.Unlock()
+		c.st.mu.Unlock()
 	}()
 	return nil
 }
 
 func (c *Manager) progress(j *Job, status string) {
-	c.mu.Lock()
+	c.st.mu.Lock()
 	j.Status = status
-	c.mu.Unlock()
+	c.st.mu.Unlock()
 	c.persistJobs()
 }
 
 func (c *Manager) finish(j *Job, err error) {
-	c.mu.Lock()
+	c.st.mu.Lock()
 	j.Status, j.Done, j.Failed, j.Ended = "Completed", true, err != nil, time.Now()
 	if err != nil {
 		j.Status = "Failed: " + err.Error()
 	}
-	c.mu.Unlock()
+	c.st.mu.Unlock()
 	c.persistJobs()
 }
 
@@ -131,11 +131,11 @@ func (c *Manager) persistJobs() {
 }
 
 func (c *Manager) saveJobs() error {
-	c.jobsMu.Lock()
-	defer c.jobsMu.Unlock()
-	c.mu.Lock()
-	b, err := json.Marshal(c.jobs)
-	c.mu.Unlock()
+	c.saveMu.Lock()
+	defer c.saveMu.Unlock()
+	c.st.mu.Lock()
+	b, err := json.Marshal(c.st.jobs)
+	c.st.mu.Unlock()
 	if err != nil {
 		return err
 	}
@@ -171,7 +171,7 @@ func (c *Manager) loadJobs(ctx context.Context) {
 			continue
 		}
 		if j.Attention || !j.Done {
-			c.busy[busyKey(j.From, j.VM)], c.busy[busyKey(j.To, j.VM)] = true, true
+			c.st.busy[busyKey(j.From, j.VM)], c.st.busy[busyKey(j.To, j.VM)] = true, true
 		}
 		if !j.Done {
 			j.Done, j.Failed, j.Attention = true, true, true
@@ -179,21 +179,21 @@ func (c *Manager) loadJobs(ctx context.Context) {
 			log.Printf("jobs: %s", j.Status)
 		}
 	}
-	c.mu.Lock()
-	c.jobs = jobs
-	c.mu.Unlock()
+	c.st.mu.Lock()
+	c.st.jobs = jobs
+	c.st.mu.Unlock()
 	if err := c.saveJobs(); err != nil {
 		log.Printf("jobs: %v", err)
 	}
 }
 
 func (c *Manager) Dismiss(org, id string) error {
-	c.mu.Lock()
-	i := slices.IndexFunc(c.jobs, func(j *Job) bool { return j.ID == id && j.Org == org && j.Done && !j.Attention })
+	c.st.mu.Lock()
+	i := slices.IndexFunc(c.st.jobs, func(j *Job) bool { return j.ID == id && j.Org == org && j.Done && !j.Attention })
 	if i >= 0 {
-		c.jobs[i].Dismissed = true
+		c.st.jobs[i].Dismissed = true
 	}
-	c.mu.Unlock()
+	c.st.mu.Unlock()
 	if i < 0 {
 		return errors.New("no finished task with that ID")
 	}
@@ -201,14 +201,14 @@ func (c *Manager) Dismiss(org, id string) error {
 }
 
 func (c *Manager) Resolve(ctx context.Context, org, id string) error {
-	c.mu.Lock()
+	c.st.mu.Lock()
 	var j *Job
-	for _, x := range c.jobs {
+	for _, x := range c.st.jobs {
 		if x.ID == id && x.Org == org && x.Attention {
 			j = x
 		}
 	}
-	c.mu.Unlock()
+	c.st.mu.Unlock()
 	if j == nil {
 		return errors.New("no unresolved job with that ID")
 	}
@@ -220,11 +220,11 @@ func (c *Manager) Resolve(ctx context.Context, org, id string) error {
 	if err != nil {
 		return err
 	}
-	c.mu.Lock()
-	other := slices.ContainsFunc(c.jobs, func(x *Job) bool {
+	c.st.mu.Lock()
+	other := slices.ContainsFunc(c.st.jobs, func(x *Job) bool {
 		return x != j && !x.Done && x.VM == j.VM && (x.From == j.From || x.To == j.To || x.From == j.To || x.To == j.From)
 	})
-	c.mu.Unlock()
+	c.st.mu.Unlock()
 	if other {
 		return fmt.Errorf("%s has an operation in progress", j.VM)
 	}
@@ -252,11 +252,11 @@ func (c *Manager) Resolve(ctx context.Context, org, id string) error {
 		lifecycle.LogCleanup("import of "+j.VM+" on "+dst.Name, dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, j.VM, "imported"), nil, nil))
 		lifecycle.LogCleanup("export of "+j.VM+" on "+src.Name, src.do(ctx, http.MethodPost, vmPathIn(ns, j.VM, "unexport"), nil, nil))
 	}
-	c.mu.Lock()
+	c.st.mu.Lock()
 	j.Attention = false
-	delete(c.busy, busyKey(j.From, j.VM))
-	delete(c.busy, busyKey(j.To, j.VM))
-	c.mu.Unlock()
+	delete(c.st.busy, busyKey(j.From, j.VM))
+	delete(c.st.busy, busyKey(j.To, j.VM))
+	c.st.mu.Unlock()
 	c.finish(j, errors.New("rolled back: "+j.VM+" kept on "+j.From))
 	return nil
 }

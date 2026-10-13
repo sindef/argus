@@ -58,8 +58,8 @@ func (c *Manager) loadGroups(ctx context.Context, org string) ([]Group, string, 
 }
 
 func (c *Manager) updateGroups(ctx context.Context, org string, fn func([]Group, []Node) ([]Group, error)) error {
-	c.haMu.Lock()
-	defer c.haMu.Unlock()
+	c.storeMu.Lock()
+	defer c.storeMu.Unlock()
 	gs, rv, err := c.loadGroups(ctx, org)
 	if err != nil {
 		return err

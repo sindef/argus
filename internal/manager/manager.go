@@ -50,25 +50,28 @@ type NodeInfo = kube.NodeInfo
 
 type Manager struct {
 	store        auth.Secrets
+	storeMu      sync.Mutex
 	replications chan struct{}
+	started      time.Time
+	st           state
+	saveMu       sync.Mutex
+	inv          inventory
+	tel          *telemetry
+}
 
+type state struct {
 	mu       sync.Mutex
-	jobsMu   sync.Mutex
 	jobs     []*Job
 	busy     map[string]bool
 	lastSeen map[string]time.Time
 	syncing  map[string]bool
-	started  time.Time
-	haMu     sync.Mutex
-	inv      inventory
-	tel      *telemetry
 	drs      []Recommendation
 	promoted map[string]time.Time
 	fwPushed map[string]string
 }
 
 func New(store auth.Secrets, metricsPath string, replications int) *Manager {
-	return &Manager{store: store, lastSeen: map[string]time.Time{}, busy: map[string]bool{}, syncing: map[string]bool{}, promoted: map[string]time.Time{}, fwPushed: map[string]string{}, started: time.Now(), inv: inventory{nodes: map[string]NodeState{}}, tel: newTelemetry(metricsPath), replications: make(chan struct{}, max(replications, 1))}
+	return &Manager{store: store, st: state{lastSeen: map[string]time.Time{}, busy: map[string]bool{}, syncing: map[string]bool{}, promoted: map[string]time.Time{}, fwPushed: map[string]string{}}, started: time.Now(), inv: inventory{nodes: map[string]NodeState{}}, tel: newTelemetry(metricsPath), replications: make(chan struct{}, max(replications, 1))}
 }
 
 func (c *Manager) Nodes(ctx context.Context) ([]Node, error) {
@@ -470,12 +473,12 @@ func (c *Manager) preflight(ctx context.Context, src, dst Node, ns, vm string) e
 }
 
 func (c *Manager) Jobs(org string) []Job {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	out := make([]Job, 0, len(c.jobs))
-	for i := len(c.jobs) - 1; i >= 0; i-- {
-		if c.jobs[i].Org == org {
-			out = append(out, *c.jobs[i])
+	c.st.mu.Lock()
+	defer c.st.mu.Unlock()
+	out := make([]Job, 0, len(c.st.jobs))
+	for i := len(c.st.jobs) - 1; i >= 0; i-- {
+		if c.st.jobs[i].Org == org {
+			out = append(out, *c.st.jobs[i])
 		}
 	}
 	return out

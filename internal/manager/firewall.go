@@ -149,15 +149,15 @@ func (c *Manager) alignFirewall(ctx context.Context, n Node) {
 	}
 	sum := sha256.Sum256(b)
 	h := hex.EncodeToString(sum[:])
-	c.mu.Lock()
-	same := c.fwPushed[n.Name] == h || c.fwPushed[n.Name] == "" && len(rules) == 0
-	c.mu.Unlock()
+	c.st.mu.Lock()
+	same := c.st.fwPushed[n.Name] == h || c.st.fwPushed[n.Name] == "" && len(rules) == 0
+	c.st.mu.Unlock()
 	if same {
 		return
 	}
 	if n.Call(ctx, http.MethodPost, "/api/host/firewall", rules, nil) == nil {
-		c.mu.Lock()
-		c.fwPushed[n.Name] = h
-		c.mu.Unlock()
+		c.st.mu.Lock()
+		c.st.fwPushed[n.Name] = h
+		c.st.mu.Unlock()
 	}
 }
