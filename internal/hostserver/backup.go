@@ -405,6 +405,7 @@ func (s *Server) restoreBackup(ctx context.Context, store, vm, stamp, target str
 	if meta.Namespace != kube.Namespace {
 		return fmt.Errorf("backup is for namespace %q, which this host does not use", meta.Namespace)
 	}
+	kube.StripHostDependencies(meta.Spec)
 	if err := kube.ValidateRestoreSpec(meta.Spec); err != nil {
 		return err
 	}

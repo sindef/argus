@@ -326,6 +326,16 @@ func RenameSpec(spec obj, from, to string) map[string]string {
 	return names
 }
 
+func StripHostDependencies(spec obj) {
+	path := []string{"template", "spec", "domain", "devices", "disks"}
+	disks, _, _ := unstructured.NestedSlice(spec, path...)
+	vols, _, _ := unstructured.NestedSlice(spec, "template", "spec", "volumes")
+	vols = without(vols, func(m obj) bool { return m["sysprep"] != nil || m["name"] == "cdrom" && m["persistentVolumeClaim"] != nil })
+	disks = without(disks, func(m obj) bool { return m["name"] == "sysprep" })
+	unstructured.SetNestedSlice(spec, disks, path...)
+	unstructured.SetNestedSlice(spec, vols, "template", "spec", "volumes")
+}
+
 func ValidateRestoreSpec(spec obj) error {
 	owned := map[string]bool{}
 	templates, _, _ := unstructured.NestedSlice(spec, "dataVolumeTemplates")
