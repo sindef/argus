@@ -182,7 +182,7 @@ dl.kv dd { margin: 0; }
 .grow { flex: 1; min-width: 0; }
 .num { width: 90px; }
 .form { display: flex; flex-direction: column; gap: 14px; max-width: 760px; }
-.form .row { display: flex; gap: 12px; flex-wrap: wrap; }
+.form .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
 .form .row > * { flex: 1; min-width: 160px; }
 .form label { display: flex; flex-direction: column; gap: 6px; font-weight: 500; font-size: 13.5px; }
 .form label .help { display: inline-grid; }
