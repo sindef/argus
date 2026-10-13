@@ -81,9 +81,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.Core.ServeHTTP(w, r)
 }
 
-func onHost(r *http.Request, n manager.Node) *http.Request {
+func (s *Server) onHost(r *http.Request, n manager.Node) *http.Request {
 	ctx := ui.WithBase(r.Context(), "/hosts/"+n.Name)
-	ctx = hostui.WithOps(ctx, remoteOps{n})
+	ctx = hostui.WithOps(ctx, remoteOps{n, s})
 	return r.WithContext(context.WithValue(ctx, hostNodeKey{}, n))
 }
 

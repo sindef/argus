@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"argus/internal/auth"
+	"argus/internal/hostui"
 	"argus/internal/kube"
 	"argus/internal/manager"
 	"argus/internal/netguard"
@@ -345,7 +346,7 @@ func (s *Server) libraryAdd(r *http.Request) error {
 	case !ui.ValidObject.MatchString(name) || !tagRE.MatchString(tag):
 		return errors.New("invalid name or tag")
 	}
-	return s.manager.Task(r.Context(), org, "Import "+name+":"+tag+" to library", "library:"+org+"/"+name, func(ctx context.Context, progress func(string)) error {
+	return s.manager.Task(r.Context(), manager.Job{Org: org, Kind: "Import " + name + ":" + tag + " to library"}, "library:"+org+"/"+name, func(ctx context.Context, progress func(string)) error {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, src, nil)
 		if err != nil {
 			return err
@@ -418,6 +419,57 @@ func (s *Server) librarySource(ctx context.Context, n manager.Node, name, tag st
 	src := kube.RegistrySource{Image: addr + "/" + repo + ":" + tag, CA: string(s.caPEM)}
 	src.User, src.Pass = s.newPull(repo)
 	return src, nil
+}
+
+func (s *Server) libraryChoices(org string, f *hostui.VMForm) {
+	for _, img := range s.library(org) {
+		if img.Arch != "" && f.Arch != "" && img.Arch != f.Arch || slices.ContainsFunc(f.Images, func(x kube.Image) bool { return x.Name == img.HostName }) {
+			continue
+		}
+		f.Library = append(f.Library, img.Name+":"+img.Tag)
+	}
+}
+
+func (s *Server) createWithPull(ctx context.Context, n manager.Node, req hostui.CreateVMReq) error {
+	var pulls []libraryImage
+	for _, f := range []*string{&req.Spec.Image, &req.Spec.CDROM} {
+		ref, ok := strings.CutPrefix(*f, "lib:")
+		if !ok {
+			continue
+		}
+		name, tag, _ := strings.Cut(ref, ":")
+		lib := s.library(n.Org)
+		i := slices.IndexFunc(lib, func(x libraryImage) bool { return x.Name == name && x.Tag == tag })
+		if i < 0 {
+			return fmt.Errorf("%s is not in the library", ref)
+		}
+		*f = lib[i].HostName
+		pulls = append(pulls, lib[i])
+	}
+	if len(pulls) == 0 {
+		return n.Call(ctx, http.MethodPost, "/api/vms", req, nil)
+	}
+	vm := req.Spec.Name
+	if n.Call(ctx, http.MethodGet, manager.APIPath("/api/vms/%s/%s", kube.Namespace, vm), nil, nil) == nil {
+		return fmt.Errorf("%s already exists on %s", vm, n.Name)
+	}
+	err := s.manager.Task(ctx, manager.Job{Org: n.Org, Kind: "Create VM", VM: vm, To: n.Name}, "deploy:"+n.Name+"/"+vm, func(ctx context.Context, progress func(string)) error {
+		for _, img := range pulls {
+			src, err := s.librarySource(ctx, n, img.Name, img.Tag)
+			if err != nil {
+				return err
+			}
+			if err := s.manager.Pull(ctx, progress, n, img.HostName, wire.ImageImportRequest{Name: img.HostName, Size: fmt.Sprintf("%dGi", img.SizeGiB), Registry: &src}, true); err != nil {
+				return err
+			}
+		}
+		progress("Creating " + vm)
+		return n.Call(ctx, http.MethodPost, "/api/vms", req, nil)
+	})
+	if err != nil {
+		return err
+	}
+	return hostui.ErrQueued
 }
 
 func (s *Server) importFromSource(r *http.Request) error {

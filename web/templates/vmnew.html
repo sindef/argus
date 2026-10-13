@@ -11,6 +11,7 @@
         <option value="">Empty disk</option>
         {{with .Templates}}<optgroup label="Templates">{{range .}}<option value="tpl:{{.Name}}" data-cores="{{.Cores}}" data-memory="{{.MemoryMiB}}" data-disk="{{.DiskGiB}}">{{.Name}}</option>{{end}}</optgroup>{{end}}
         {{with .Images}}<optgroup label="Images">{{range .}}<option value="{{.Name}}">{{.Name}}</option>{{end}}</optgroup>{{end}}
+        {{with .Library}}<optgroup label="Library">{{range .}}<option value="lib:{{.}}">{{.}}</option>{{end}}</optgroup>{{end}}
       </select>
     </label>
   </div>
@@ -27,7 +28,7 @@
       <select name="network" required>{{range .Networks}}<option value="{{.Name}}">{{.Name}}{{if .VLAN}} (VLAN {{.VLAN}}){{end}}</option>{{end}}</select>
     </label>
     <label>CD-ROM
-      <select name="cdrom"><option value="">None</option>{{range .Images}}<option value="{{.Name}}">{{.Name}}</option>{{end}}</select>
+      <select name="cdrom"><option value="">None</option>{{range .Images}}<option value="{{.Name}}">{{.Name}}</option>{{end}}{{with .Library}}<optgroup label="Library">{{range .}}<option value="lib:{{.}}">{{.}}</option>{{end}}</optgroup>{{end}}</select>
     </label>
   </div>
   <details>

@@ -180,7 +180,7 @@ func (s *UI) NewVM(w http.ResponseWriter, r *http.Request) {
 		tmpl = "modal"
 	}
 	slices.SortStableFunc(f.Pools, func(a, b kube.Pool) int { return cmp.Compare(b.Free, a.Free) })
-	s.Render(w, r, "vmnew.html", tmpl, map[string]any{"Images": f.Images, "Templates": f.Templates, "Networks": f.Networks, "Pools": f.Pools, "Error": ui.ErrText(err)})
+	s.Render(w, r, "vmnew.html", tmpl, map[string]any{"Images": f.Images, "Library": f.Library, "Templates": f.Templates, "Networks": f.Networks, "Pools": f.Pools, "Error": ui.ErrText(err)})
 }
 
 func (s *UI) createVM(w http.ResponseWriter, r *http.Request) {
@@ -227,6 +227,11 @@ func (s *UI) createVM(w http.ResponseWriter, r *http.Request) {
 	}
 	if err == nil {
 		err = s.Ops(r).CreateVM(r.Context(), CreateVMReq{Spec: spec, Pool: r.FormValue("pool")})
+	}
+	if errors.Is(err, ErrQueued) {
+		log.Printf("%s: create vm %s queued", ui.Session(r).User, spec.Name)
+		w.Header().Set("HX-Refresh", "true")
+		return
 	}
 	if err != nil {
 		ui.Flash(w, r, err)

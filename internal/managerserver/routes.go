@@ -101,7 +101,7 @@ func (s *Server) hostPageRoutes() []ui.Route {
 				http.Error(w, err.Error(), http.StatusNotFound)
 				return
 			}
-			h(w, onHost(r, n))
+			h(w, s.onHost(r, n))
 		}}
 	}
 	return rs

@@ -51,7 +51,7 @@ func (s *Server) v1UpdateVM(w http.ResponseWriter, r *http.Request) {
 		ui.APIError(w, r, http.StatusConflict, errors.New("a migration of this VM is in progress"))
 		return
 	}
-	ctx, ns, name, ops := r.Context(), kube.Namespace, r.PathValue("name"), remoteOps{n}
+	ctx, ns, name, ops := r.Context(), kube.Namespace, r.PathValue("name"), remoteOps{n, s}
 	if req.Cores != nil || req.MemoryMiB != nil {
 		hw, err := ops.Hardware(ctx, ns, name)
 		if err == nil {

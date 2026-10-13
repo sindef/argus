@@ -304,7 +304,12 @@ func (s *Server) v1CreateVM(w http.ResponseWriter, r *http.Request) {
 		ui.APIError(w, r, http.StatusBadRequest, err)
 		return
 	}
-	if err := (remoteOps{n}).CreateVM(r.Context(), hostui.CreateVMReq{Spec: spec, Pool: req.Pool}); err != nil {
+	err := (remoteOps{n, s}).CreateVM(r.Context(), hostui.CreateVMReq{Spec: spec, Pool: req.Pool})
+	if errors.Is(err, hostui.ErrQueued) {
+		ui.WriteJSONCode(w, http.StatusAccepted, map[string]string{"host": n.Name, "name": spec.Name})
+		return
+	}
+	if err != nil {
 		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}

@@ -20,7 +20,10 @@ import (
 	"argus/internal/wire"
 )
 
-type remoteOps struct{ n manager.Node }
+type remoteOps struct {
+	n manager.Node
+	s *Server
+}
 
 func (o remoteOps) get(ctx context.Context, path string, out any) error {
 	return o.n.Call(ctx, http.MethodGet, path, nil, out)
@@ -84,11 +87,13 @@ func (o remoteOps) NetworkOp(ctx context.Context, op string, req hostui.NetOpReq
 
 func (o remoteOps) VMForm(ctx context.Context) (hostui.VMForm, error) {
 	var out hostui.VMForm
-	return out, o.get(ctx, "/api/host/vm-form", &out)
+	err := o.get(ctx, "/api/host/vm-form", &out)
+	o.s.libraryChoices(o.n.Org, &out)
+	return out, err
 }
 
 func (o remoteOps) CreateVM(ctx context.Context, req hostui.CreateVMReq) error {
-	return o.post(ctx, "/api/vms", req)
+	return o.s.createWithPull(ctx, o.n, req)
 }
 
 func (o remoteOps) Hardware(ctx context.Context, ns, name string) (kube.Hardware, error) {
@@ -177,7 +182,7 @@ func (s *Server) onNode(h http.HandlerFunc) http.HandlerFunc {
 			ui.Flash(w, r, err)
 			return
 		}
-		ctx := ui.WithObject(hostui.WithOps(r.Context(), remoteOps{n}), objectOf(n, ""))
+		ctx := ui.WithObject(hostui.WithOps(r.Context(), remoteOps{n, s}), objectOf(n, ""))
 		h(w, r.WithContext(ctx))
 		if change {
 			go s.manager.Refresh(n.Name)

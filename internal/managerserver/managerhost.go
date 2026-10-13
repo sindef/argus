@@ -142,8 +142,8 @@ func (s *Server) managerNewVM(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.FormValue("what") == "import" {
-		s.ImportModal(w, onHost(r, n))
+		s.ImportModal(w, s.onHost(r, n))
 		return
 	}
-	s.NewVM(w, onHost(r, n))
+	s.NewVM(w, s.onHost(r, n))
 }

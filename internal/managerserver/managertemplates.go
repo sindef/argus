@@ -79,7 +79,7 @@ func (s *Server) saveToLibrary(ctx context.Context, org string, src manager.Node
 		return fmt.Errorf("template %s already exists", name)
 	}
 	st, _ := s.manager.NodeState(src.Name)
-	return s.manager.Task(ctx, org, "Save template "+name+" to Argus Manager", "library-template:"+org+"/"+name, func(ctx context.Context, progress func(string)) error {
+	return s.manager.Task(ctx, manager.Job{Org: org, Kind: "Save template " + name + " to Argus Manager", VM: vm, From: src.Name}, "library-template:"+org+"/"+name, func(ctx context.Context, progress func(string)) error {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return err
 		}

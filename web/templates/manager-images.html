@@ -15,7 +15,7 @@
     <td class="row-actions"><div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
       <div class="menu-list" hidden hx-target="#flash">
         <button data-dialog="image-details" data-fill='{{$d}}'>{{template "icon" "file-text"}}Details</button>
-        {{if $.CanOperate}}<button data-dialog="send-image" data-fill='{"image":"{{.Name}}:{{.Tag}}","name":"{{.HostName}}","size":"{{.SizeGiB}}","arch":"{{.Arch}}"}'>{{template "icon" "upload"}}Send to hosts…</button>
+        {{if $.CanOperate}}<button data-dialog="send-image" data-fill='{"image":"{{.Name}}:{{.Tag}}","name":"{{.HostName}}","size":"{{.SizeGiB}}","arch":"{{.Arch}}"}'>{{template "icon" "upload"}}Pre-stage on hosts…</button>
         <hr><button class="danger" hx-post="/images/library-delete" hx-vals='{"image":"{{.Name}}:{{.Tag}}"}' hx-confirm="Delete {{.Name}}:{{.Tag}} from the library?">{{template "icon" "trash-2"}}Delete</button>{{end}}
       </div></div></td>
   </tr>{{else}}<tr><td colspan="6" class="muted">No images in the library.</td></tr>{{end}}</tbody>
@@ -116,14 +116,12 @@
 </dialog>
 <dialog id="send-image" class="card">
   <form hx-post="/images/send" hx-target="#send-error" class="form">
-    <h2>Send to hosts</h2>
+    <h2>Pre-stage on hosts <span class="help" title="Optional. VMs created from a library image copy it to their host automatically.">?</span></h2>
     <p id="send-error" class="error form-error"></p>
     <input type="hidden" name="image">
     <input type="hidden" name="arch" data-arch-source>
-    <div class="row">
-      <label>Name on hosts <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
-      <label>Size (GiB) <span class="help" title="Disk size on each host. Must be at least the image's virtual size.">?</span><input name="size" type="number" min="1" max="4096" required></label>
-    </div>
+    <input type="hidden" name="name">
+    <input type="hidden" name="size">
     <div class="field">Hosts</div>
     {{template "host-picks" $}}
     <p class="arch-warn" hidden>Some selected hosts have a different CPU architecture from this image. VMs using it there will only start if the guest supports it.</p>

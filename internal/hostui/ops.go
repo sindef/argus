@@ -53,7 +53,10 @@ type VMForm struct {
 	Networks  []kube.Network  `json:"networks"`
 	Pools     []kube.Pool     `json:"pools"`
 	Arch      string          `json:"arch"`
+	Library   []string        `json:"-"`
 }
+
+var ErrQueued = errors.New("queued as a task")
 
 type CreateVMReq struct {
 	Spec kube.VMSpec `json:"spec"`
