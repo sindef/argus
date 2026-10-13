@@ -64,12 +64,14 @@
     </div>
     {{end}}
   </div>
-  <nav class="seg spaced">{{$r := or $.Range "24h"}}{{range list "24h" "7d" "30d"}}<a href="?range={{.}}"{{if eq . $r}} class="active"{{end}}>{{.}}</a>{{end}}</nav>
+  <div class="vm-charts">
+  <nav class="seg">{{$r := or $.Range "24h"}}{{range list "24h" "7d" "30d"}}<a href="?range={{.}}"{{if eq . $r}} class="active"{{end}}>{{.}}</a>{{end}}</nav>
   <div class="grid charts">
     <div class="card"><div class="card-head">{{template "icon" "cpu"}}<h2>CPU</h2><span class="right big" data-last></span></div><div class="chart" data-src="{{$p}}/metrics?range={{$.Range}}" data-window="{{rangeSeconds $.Range}}" data-cols="cpu" data-unit="%"></div></div>
     <div class="card"><div class="card-head">{{template "icon" "memory-stick"}}<h2>Memory</h2><span class="right big" data-last></span></div><div class="chart" data-src="{{$p}}/metrics?range={{$.Range}}" data-window="{{rangeSeconds $.Range}}" data-cols="mem" data-unit="B"></div></div>
     <div class="card"><div class="card-head">{{template "icon" "hard-drive"}}<h2>Disk I/O</h2></div><div class="chart" data-src="{{$p}}/metrics?range={{$.Range}}" data-window="{{rangeSeconds $.Range}}" data-cols="rd,wr" data-labels="Read,Write" data-unit="B/s"></div></div>
     <div class="card"><div class="card-head">{{template "icon" "network"}}<h2>Network</h2></div><div class="chart" data-src="{{$p}}/metrics?range={{$.Range}}" data-window="{{rangeSeconds $.Range}}" data-cols="rx,tx" data-labels="In,Out" data-unit="B/s"></div></div>
+  </div>
   </div>
   <div class="card">
     <div class="card-head">{{template "icon" "hard-drive"}}<h2>Disks</h2></div>
@@ -145,7 +147,7 @@
 {{define "disks"}}
 <div class="table-wrap"><table>
   <thead><tr><th>Name</th><th>Bus</th><th>Source</th></tr></thead>
-  <tbody>{{range .Disks}}<tr><td>{{template "icon" "hard-drive"}}{{.Name}}</td><td>{{.Bus}}</td><td class="clip">{{.Source}}</td></tr>{{end}}</tbody>
+  <tbody>{{range .Disks}}<tr><td>{{template "icon" "hard-drive"}}{{.Name}}</td><td>{{.Bus}}</td><td class="clip" title="{{.Source}}">{{.Source}}</td></tr>{{end}}</tbody>
 </table></div>
 {{end}}
 
