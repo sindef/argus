@@ -334,7 +334,7 @@ func (c *Client) DeleteOwnedVM(ctx context.Context, ns, name, operation string) 
 	return err
 }
 
-func (c *Client) Receive(ctx context.Context, ns, name, migrationID string, spec obj) (string, error) {
+func (c *Client) Receive(ctx context.Context, ns, name, migrationID string, spec obj, meta map[string]string) (string, error) {
 	if err := c.guard(); err != nil {
 		return "", err
 	}
@@ -360,7 +360,7 @@ func (c *Client) Receive(ctx context.Context, ns, name, migrationID string, spec
 	vm := &unstructured.Unstructured{Object: obj{
 		"apiVersion": "kubevirt.io/v1",
 		"kind":       "VirtualMachine",
-		"metadata":   obj{"name": name, "annotations": obj{"kubevirt.io/restore-run-strategy": "Always", operationAnnotation: migrationID}},
+		"metadata":   obj{"name": name, "annotations": carriedAnnotations(meta, obj{"kubevirt.io/restore-run-strategy": "Always", operationAnnotation: migrationID})},
 		"spec":       spec,
 	}}
 	if _, err := c.dyn.Resource(vmGVR).Namespace(ns).Create(ctx, vm, metav1.CreateOptions{}); err != nil {

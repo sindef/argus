@@ -233,6 +233,10 @@ func (c *Manager) liveMigrate(ctx context.Context, j *Job, src, dst Node, ns, vm
 	if err := c.preflight(ctx, src, dst, ns, vm); err != nil {
 		return err
 	}
+	meta, err := c.carry(ctx, src, dst, ns, vm)
+	if err != nil {
+		return err
+	}
 	c.update(j, "Exchanging certificates", false, false)
 	if err := c.syncCAs(ctx, src, dst); err != nil {
 		return err
@@ -262,7 +266,7 @@ func (c *Manager) liveMigrate(ctx context.Context, j *Job, src, dst Node, ns, vm
 
 	c.update(j, "Preparing target", false, false)
 	var recv wire.ReceiveResponse
-	if err := dst.do(ctx, http.MethodPost, "/api/receive", wire.ReceiveRequest{Name: vm, MigrationID: j.ID, Spec: spec}, &recv); err != nil {
+	if err := dst.do(ctx, http.MethodPost, "/api/receive", wire.ReceiveRequest{Name: vm, MigrationID: j.ID, Spec: spec, Metadata: meta}, &recv); err != nil {
 		return abort(err)
 	}
 	c.update(j, "Migrating", false, false)

@@ -104,7 +104,7 @@ func (s *Server) apiImport(w http.ResponseWriter, r *http.Request) {
 	}
 	class, err := s.poolClass(r.Context(), req.Pool)
 	if err == nil {
-		err = s.kube.ImportVM(r.Context(), kube.Namespace, req.Name, req.Operation, req.Export, kube.ImportOptions{StorageClass: class, Template: req.Template})
+		err = s.kube.ImportVM(r.Context(), kube.Namespace, req.Name, req.Operation, req.Export, kube.ImportOptions{StorageClass: class, Template: req.Template, Metadata: req.Metadata})
 	}
 	if err != nil {
 		ui.APIError(w, r, http.StatusConflict, err)
@@ -215,7 +215,7 @@ func (s *Server) apiReceive(w http.ResponseWriter, r *http.Request) {
 		ui.APIError(w, r, http.StatusBadRequest, errors.New("invalid receive request"))
 		return
 	}
-	addr, err := s.kube.Receive(r.Context(), kube.Namespace, req.Name, req.MigrationID, req.Spec)
+	addr, err := s.kube.Receive(r.Context(), kube.Namespace, req.Name, req.MigrationID, req.Spec, req.Metadata)
 	if err != nil {
 		ui.APIError(w, r, http.StatusConflict, err)
 		return

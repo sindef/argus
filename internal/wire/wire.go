@@ -14,11 +14,12 @@ type ExportRequest struct {
 }
 
 type ImportRequest struct {
-	Name      string      `json:"name"`
-	Operation string      `json:"operation"`
-	Export    kube.Export `json:"export"`
-	Pool      string      `json:"pool,omitempty"`
-	Template  bool        `json:"template,omitempty"`
+	Name      string            `json:"name"`
+	Operation string            `json:"operation"`
+	Export    kube.Export       `json:"export"`
+	Pool      string            `json:"pool,omitempty"`
+	Template  bool              `json:"template,omitempty"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
 type OperationRequest struct {
@@ -49,9 +50,10 @@ type ZFSSnapshot struct {
 }
 
 type ReceiveRequest struct {
-	Name        string         `json:"name"`
-	MigrationID string         `json:"migrationID"`
-	Spec        map[string]any `json:"spec"`
+	Name        string            `json:"name"`
+	MigrationID string            `json:"migrationID"`
+	Spec        map[string]any    `json:"spec"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
 type ReceiveResponse struct {

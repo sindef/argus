@@ -60,13 +60,13 @@ func (c *Manager) CopyVM(ctx context.Context, src, dst Node, ns, vm, name, pool 
 			lifecycle.LogCleanup("export of "+vm, src.do(cctx, http.MethodPost, vmPathIn(ns, vm, "unexport"), nil, nil))
 		}()
 		RenameExport(&ex, vm, name)
-		return c.importAndWait(ctx, j, dst, name, pool, template, ex)
+		return c.importAndWait(ctx, j, dst, name, pool, template, ex, nil)
 	})
 }
 
 func (c *Manager) Deploy(ctx context.Context, org string, dst Node, name, pool, from string, ex kube.Export) error {
 	return c.startTask(ctx, &Job{Org: org, Kind: "Deploy " + name + " from template " + from, To: dst.Name}, "deploy:"+dst.Name+"/"+name, 12*time.Hour, func(ctx context.Context, j *Job) error {
-		return c.importAndWait(ctx, j, dst, name, pool, false, ex)
+		return c.importAndWait(ctx, j, dst, name, pool, false, ex, nil)
 	})
 }
 

@@ -194,6 +194,9 @@ func (c *Manager) evacuate(ctx context.Context, j *Job, n Node, shutdown bool) e
 			if c.preflight(ctx, n, dst, v.Namespace, v.Name) != nil {
 				continue
 			}
+			if _, err := c.carry(ctx, n, dst, v.Namespace, v.Name); err != nil {
+				continue
+			}
 			status := "Migrating " + v.Name + " to " + dst.Name
 			if a, b := c.arch(n.Name), c.arch(dst.Name); a != b {
 				status += " (warning: " + b + " host, VM came from " + a + ")"

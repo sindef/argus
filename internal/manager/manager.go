@@ -512,9 +512,32 @@ func vmPathIn(ns, vm, action string) string {
 	return APIPath("/api/vms/%s/%s/", ns, vm) + action
 }
 
-func (c *Manager) importAndWait(ctx context.Context, j *Job, dst Node, name, pool string, template bool, ex kube.Export) error {
+func (c *Manager) carry(ctx context.Context, src, dst Node, ns, vm string) (map[string]string, error) {
+	v, err := vmState(ctx, src, ns, vm)
+	if err != nil {
+		return nil, err
+	}
+	target := ""
+	for _, f := range strings.Fields(v.Backup) {
+		if t, ok := strings.CutPrefix(f, "target="); ok {
+			target = t
+		}
+	}
+	if target != "" {
+		var ts []wire.BackupTarget
+		if err := dst.do(ctx, http.MethodGet, "/api/host/backup-targets", nil, &ts); err != nil {
+			return nil, err
+		}
+		if !slices.ContainsFunc(ts, func(t wire.BackupTarget) bool { return t.Name == target }) {
+			return nil, fmt.Errorf("%s backs up to %s, which %s does not have; add that target on %s or change the backup policy", vm, target, dst.Name, dst.Name)
+		}
+	}
+	return v.Metadata(), nil
+}
+
+func (c *Manager) importAndWait(ctx context.Context, j *Job, dst Node, name, pool string, template bool, ex kube.Export, meta map[string]string) error {
 	c.update(j, "Importing", false, false)
-	if err := dst.do(ctx, http.MethodPost, "/api/import", wire.ImportRequest{Name: name, Operation: j.ID, Export: ex, Pool: pool, Template: template}, nil); err != nil {
+	if err := dst.do(ctx, http.MethodPost, "/api/import", wire.ImportRequest{Name: name, Operation: j.ID, Export: ex, Pool: pool, Template: template, Metadata: meta}, nil); err != nil {
 		return err
 	}
 	rollback := func(cause error) error {
@@ -572,6 +595,10 @@ func (c *Manager) migrate(ctx context.Context, j *Job, src, dst Node, ns, vm str
 	if err := c.preflight(ctx, src, dst, ns, vm); err != nil {
 		return err
 	}
+	meta, err := c.carry(ctx, src, dst, ns, vm)
+	if err != nil {
+		return err
+	}
 	c.update(j, "Exporting", false, false)
 	var ex kube.Export
 	if err := src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "export"), wire.ExportRequest{BaseURL: src.URL}, &ex); err != nil {
@@ -585,7 +612,7 @@ func (c *Manager) migrate(ctx context.Context, j *Job, src, dst Node, ns, vm str
 		}
 	}
 
-	if err := c.importAndWait(ctx, j, dst, vm, "", false, ex); err != nil {
+	if err := c.importAndWait(ctx, j, dst, vm, "", false, ex, meta); err != nil {
 		unexport()
 		return err
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -196,6 +197,27 @@ func importName(vm string) string { return "argus-import-" + vm }
 type ImportOptions struct {
 	StorageClass string
 	Template     bool
+	Metadata     map[string]string
+}
+
+var carried = []string{displayNameAnnotation, TagsAnnotation, FolderAnnotation, AttributesAnnotation, ScheduleAnnotation, BackupAnnotation}
+
+func (v VM) Metadata() map[string]string {
+	m := map[string]string{displayNameAnnotation: v.DisplayName, TagsAnnotation: strings.Join(v.Tags, ","), FolderAnnotation: v.Folder, ScheduleAnnotation: v.Schedule, BackupAnnotation: v.Backup}
+	if len(v.Attributes) > 0 {
+		b, _ := json.Marshal(v.Attributes)
+		m[AttributesAnnotation] = string(b)
+	}
+	return m
+}
+
+func carriedAnnotations(meta map[string]string, ann obj) obj {
+	for _, k := range carried {
+		if v := meta[k]; v != "" {
+			ann[k] = v
+		}
+	}
+	return ann
 }
 
 func (c *Client) ImportVM(ctx context.Context, ns, name, operation string, ex Export, opts ImportOptions) error {
@@ -260,7 +282,7 @@ func (c *Client) createImportVM(ctx context.Context, ns, name, operation, src st
 	vm := &unstructured.Unstructured{Object: obj{
 		"apiVersion": "kubevirt.io/v1",
 		"kind":       "VirtualMachine",
-		"metadata":   obj{"name": name, "annotations": obj{operationAnnotation: operation}},
+		"metadata":   obj{"name": name, "annotations": carriedAnnotations(opts.Metadata, obj{operationAnnotation: operation})},
 		"spec":       spec,
 	}}
 	if opts.Template {
@@ -331,7 +353,9 @@ func StripHostDependencies(spec obj) {
 	path := []string{"template", "spec", "domain", "devices", "disks"}
 	disks, _, _ := unstructured.NestedSlice(spec, path...)
 	vols, _, _ := unstructured.NestedSlice(spec, "template", "spec", "volumes")
-	vols = without(vols, func(m obj) bool { return m["sysprep"] != nil || m["name"] == "cdrom" && m["persistentVolumeClaim"] != nil })
+	vols = without(vols, func(m obj) bool {
+		return m["sysprep"] != nil || m["name"] == "cdrom" && m["persistentVolumeClaim"] != nil
+	})
 	disks = without(disks, func(m obj) bool { return m["name"] == "sysprep" })
 	unstructured.SetNestedSlice(spec, disks, path...)
 	unstructured.SetNestedSlice(spec, vols, "template", "spec", "volumes")
