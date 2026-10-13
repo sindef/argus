@@ -264,7 +264,23 @@ func (c *Client) deleteReplGenSource(ctx context.Context, ns, src string) {
 }
 
 func (c *Client) AbortReplicaRefresh(ctx context.Context, ns, vm string, mapping map[string]string) {
+	o, err := c.dyn.Resource(vmGVR).Namespace(ns).Get(ctx, vm, metav1.GetOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		log.Printf("abort replica refresh of %s: %v; keeping its disks", vm, err)
+		return
+	}
+	used := map[string]bool{}
+	if err == nil {
+		templates, _, _ := unstructured.NestedSlice(o.Object, "spec", "dataVolumeTemplates")
+		for _, t := range templates {
+			n, _, _ := unstructured.NestedString(asObj(t), "metadata", "name")
+			used[n] = true
+		}
+	}
 	for _, n := range mapping {
+		if used[n] {
+			continue
+		}
 		if err := c.DeleteDataVolume(ctx, ns, n); err != nil {
 			log.Printf("abort replica refresh of %s: %v", vm, err)
 		}
