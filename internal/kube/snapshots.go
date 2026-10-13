@@ -47,7 +47,7 @@ func (c *Client) vmSnapshots(ctx context.Context, ns, vm string) ([]unstructured
 	}
 	return slices.DeleteFunc(list.Items, func(s unstructured.Unstructured) bool {
 		src, _, _ := unstructured.NestedString(s.Object, "spec", "source", "name")
-		return src != vm || strings.HasPrefix(s.GetName(), "argus-")
+		return src != vm || s.GetName() == snapshotName(vm) || s.GetName() == backupName(vm)
 	}), nil
 }
 
