@@ -3,7 +3,6 @@ package hostserver
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 
 	"github.com/gorilla/websocket"
@@ -76,11 +75,7 @@ func (l localOps) DialConsole(ctx context.Context, ns, name, kind string) (*webs
 
 func (s *Server) apiVMOp(w http.ResponseWriter, r *http.Request, in any, fn func(ctx context.Context, l localOps, ns, name string) error) {
 	s.APIOp(w, r, in, func() (any, error) {
-		err := fn(r.Context(), localOps{s}, r.PathValue("ns"), r.PathValue("name"))
-		if err == nil {
-			log.Printf("%s: %s %s", ui.Session(r).User, r.Method, r.URL.Path)
-		}
-		return nil, err
+		return nil, fn(r.Context(), localOps{s}, r.PathValue("ns"), r.PathValue("name"))
 	})
 }
 

@@ -214,7 +214,6 @@ func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) {
 		s.renderHost(w, r, "", err)
 		return
 	}
-	log.Printf("%s: revoked API token %s", ui.Session(r).User, name)
 	http.Redirect(w, r, "/host", http.StatusSeeOther)
 }
 

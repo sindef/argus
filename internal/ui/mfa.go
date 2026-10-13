@@ -191,6 +191,5 @@ func (s *Core) resetMFA(w http.ResponseWriter, r *http.Request) {
 		Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: reset two-factor for %s", Session(r).User, r.PathValue("name"))
 	w.Header().Set("HX-Refresh", "true")
 }

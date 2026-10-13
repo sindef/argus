@@ -149,7 +149,6 @@ func (s *UI) poolAction(w http.ResponseWriter, r *http.Request) {
 		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: pool %s %s", ui.Session(r).User, op, name)
 	w.Header().Set("HX-Refresh", "true")
 }
 
@@ -287,7 +286,6 @@ func (s *UI) mediaMount(w http.ResponseWriter, r *http.Request) {
 		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: mounted local media on %s/%s", ui.Session(r).User, ns, name)
 	w.Write([]byte("Media inserted"))
 }
 
@@ -297,6 +295,5 @@ func (s *UI) mediaEject(w http.ResponseWriter, r *http.Request) {
 		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: ejected media from %s/%s", ui.Session(r).User, ns, name)
 	w.Write([]byte("Media ejected"))
 }

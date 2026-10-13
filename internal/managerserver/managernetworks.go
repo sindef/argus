@@ -272,7 +272,6 @@ func (s *Server) managerNetworkOp(w http.ResponseWriter, r *http.Request) {
 	if err == nil && errs != "" {
 		err = errors.New(errs)
 	}
-	log.Printf("%s: network %s %s", ui.Session(r).User, op, name)
 	if err != nil {
 		ui.Flash(w, r, err)
 		return

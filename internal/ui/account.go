@@ -116,7 +116,6 @@ func (s *Core) changePassword(w http.ResponseWriter, r *http.Request) {
 	default:
 		err := s.Users(r).ChangePassword(r.Context(), Session(r).Token, r.FormValue("current"), pw)
 		if err == nil {
-			log.Printf("%s: changed password", Session(r).User)
 			if Session(r).User == "admin" {
 				s.Banner("")
 			}
@@ -190,7 +189,6 @@ func (s *Core) resetPassword(w http.ResponseWriter, r *http.Request) {
 		s.renderUsers(w, r, "", err)
 		return
 	}
-	log.Printf("%s: reset password for %s", Session(r).User, name)
 	s.renderUsers(w, r, "Temporary password for "+name+": "+pw, nil)
 }
 
@@ -204,7 +202,6 @@ func (s *Core) deleteUser(w http.ResponseWriter, r *http.Request) {
 		s.renderUsers(w, r, "", err)
 		return
 	}
-	log.Printf("%s: deleted user %s", Session(r).User, name)
 	http.Redirect(w, r, "/users", http.StatusSeeOther)
 }
 

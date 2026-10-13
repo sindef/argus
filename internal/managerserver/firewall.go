@@ -3,7 +3,6 @@ package managerserver
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"slices"
 	"strconv"
@@ -93,7 +92,6 @@ func (s *Server) firewallAction(w http.ResponseWriter, r *http.Request) {
 		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: firewall %s", ui.Session(r).User, r.PathValue("op"))
 	go s.manager.PollAll(context.Background())
 	w.Header().Set("HX-Refresh", "true")
 }

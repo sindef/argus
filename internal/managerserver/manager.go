@@ -482,7 +482,6 @@ func (s *Server) managerUnprotect(w http.ResponseWriter, r *http.Request) {
 		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: unprotect %s", ui.Session(r).User, r.PathValue("name"))
 	w.Header().Set("HX-Refresh", "true")
 }
 
@@ -549,7 +548,6 @@ func (s *Server) managerRotateToken(w http.ResponseWriter, r *http.Request) {
 		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: rotated the API token for host %s", ui.Session(r).User, name)
 	w.Header().Set("HX-Refresh", "true")
 }
 
@@ -564,7 +562,6 @@ func (s *Server) managerRemoveNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.manager.PollAll(r.Context())
-	log.Printf("%s: removed host %s", ui.Session(r).User, name)
 	ui.Redirect(w, r, "/hosts")
 }
 
@@ -714,7 +711,6 @@ func (s *Server) managerDeleteOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.Auth.DropOrg(r.PathValue("id"))
-	log.Printf("%s: deleted organization %s", ui.Session(r).User, r.PathValue("id"))
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 

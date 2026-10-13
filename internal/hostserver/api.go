@@ -84,7 +84,6 @@ func (s *Server) apiExport(w http.ResponseWriter, r *http.Request) {
 		ui.APIError(w, r, http.StatusConflict, errors.Join(err, s.kube.DeleteExport(cctx, ns, name)))
 		return
 	}
-	log.Printf("%s: export %s/%s", ui.Session(r).User, ns, name)
 	ui.WriteJSON(w, ex)
 }
 

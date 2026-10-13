@@ -64,7 +64,6 @@ func (s *Server) deleteNetwork(w http.ResponseWriter, r *http.Request) {
 		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: delete network %s", ui.Session(r).User, name)
 	w.Header().Set("HX-Refresh", "true")
 }
 

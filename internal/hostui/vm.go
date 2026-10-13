@@ -64,7 +64,6 @@ func (s *UI) Action(w http.ResponseWriter, r *http.Request) {
 	prompt := strings.TrimSpace(r.Header.Get("HX-Prompt"))
 	err := VMAction(r.Context(), s.Ops(r), ns, name, act, prompt)
 	if err == nil && act == "delete" {
-		log.Printf("%s: delete %s/%s", ui.Session(r).User, ns, name)
 		ui.Redirect(w, r, "/")
 		return
 	}
@@ -153,7 +152,6 @@ func (s *UI) ConsoleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer client.Close()
-	log.Printf("%s: %s %s/%s", ui.Session(r).User, kind, ns, name)
 	done := make(chan struct{}, 2)
 	go pipe(client, backend, done)
 	go pipe(backend, client, done)
@@ -339,7 +337,6 @@ func (s *UI) hardwareAction(w http.ResponseWriter, r *http.Request) {
 		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: hardware %s %s/%s", ui.Session(r).User, r.PathValue("op"), ns, name)
 	w.Header().Set("HX-Refresh", "true")
 }
 

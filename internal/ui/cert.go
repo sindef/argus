@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -54,7 +53,6 @@ func (s *Core) setCertificate(w http.ResponseWriter, r *http.Request) {
 		Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: web certificate updated", Session(r).User)
 	w.Header().Set("HX-Refresh", "true")
 }
 
