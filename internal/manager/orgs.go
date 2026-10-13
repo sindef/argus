@@ -30,13 +30,13 @@ type Org struct {
 
 func (o Org) SSO() bool { return o.OIDC != nil && o.OIDC.Issuer != "" }
 
-func (m *Manager) Orgs(ctx context.Context) ([]Org, error) {
-	os, _, err := m.loadOrgs(ctx)
+func (c *Manager) Orgs(ctx context.Context) ([]Org, error) {
+	os, _, err := c.loadOrgs(ctx)
 	return os, err
 }
 
-func (m *Manager) Org(ctx context.Context, id string) (Org, error) {
-	os, err := m.Orgs(ctx)
+func (c *Manager) Org(ctx context.Context, id string) (Org, error) {
+	os, err := c.Orgs(ctx)
 	if err != nil {
 		return Org{}, err
 	}
@@ -50,16 +50,16 @@ func (m *Manager) Org(ctx context.Context, id string) (Org, error) {
 
 var ErrOrgNotFound = errors.New("organization not found")
 
-func (m *Manager) loadOrgs(ctx context.Context) ([]Org, string, error) {
+func (c *Manager) loadOrgs(ctx context.Context) ([]Org, string, error) {
 	var os []Org
-	rv, err := auth.LoadJSON(ctx, m.store, orgsKey, "orgs", &os)
+	rv, err := auth.LoadJSON(ctx, c.store, orgsKey, "orgs", &os)
 	return os, rv, err
 }
 
-func (m *Manager) updateOrgs(ctx context.Context, fn func([]Org) ([]Org, error)) error {
-	m.haMu.Lock()
-	defer m.haMu.Unlock()
-	os, rv, err := m.loadOrgs(ctx)
+func (c *Manager) updateOrgs(ctx context.Context, fn func([]Org) ([]Org, error)) error {
+	c.haMu.Lock()
+	defer c.haMu.Unlock()
+	os, rv, err := c.loadOrgs(ctx)
 	if err != nil {
 		return err
 	}
@@ -67,11 +67,11 @@ func (m *Manager) updateOrgs(ctx context.Context, fn func([]Org) ([]Org, error))
 		return err
 	}
 	sort.Slice(os, func(i, j int) bool { return os[i].Name < os[j].Name })
-	return auth.SaveJSON(ctx, m.store, orgsKey, "orgs", rv, os)
+	return auth.SaveJSON(ctx, c.store, orgsKey, "orgs", rv, os)
 }
 
-func (m *Manager) EnsureDefaultOrg(ctx context.Context) error {
-	return m.updateOrgs(ctx, func(os []Org) ([]Org, error) {
+func (c *Manager) EnsureDefaultOrg(ctx context.Context) error {
+	return c.updateOrgs(ctx, func(os []Org) ([]Org, error) {
 		for _, o := range os {
 			if o.ID == DefaultOrg {
 				return os, nil
@@ -81,8 +81,8 @@ func (m *Manager) EnsureDefaultOrg(ctx context.Context) error {
 	})
 }
 
-func (m *Manager) SaveOrg(ctx context.Context, org Org) error {
-	return m.updateOrgs(ctx, func(os []Org) ([]Org, error) {
+func (c *Manager) SaveOrg(ctx context.Context, org Org) error {
+	return c.updateOrgs(ctx, func(os []Org) ([]Org, error) {
 		for i := range os {
 			if os[i].ID == org.ID {
 				os[i] = org
@@ -93,18 +93,18 @@ func (m *Manager) SaveOrg(ctx context.Context, org Org) error {
 	})
 }
 
-func (m *Manager) DeleteOrg(ctx context.Context, id string) error {
+func (c *Manager) DeleteOrg(ctx context.Context, id string) error {
 	if id == DefaultOrg {
 		return errors.New("the default organization cannot be deleted")
 	}
-	nodes, err := m.NodesFor(ctx, id)
+	nodes, err := c.NodesFor(ctx, id)
 	if err != nil {
 		return err
 	}
 	if len(nodes) > 0 {
 		return errors.New("remove the organization's nodes first")
 	}
-	return m.updateOrgs(ctx, func(os []Org) ([]Org, error) {
+	return c.updateOrgs(ctx, func(os []Org) ([]Org, error) {
 		out := os[:0]
 		for _, o := range os {
 			if o.ID != id {

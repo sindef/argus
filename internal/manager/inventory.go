@@ -52,11 +52,11 @@ type inventory struct {
 	nodes map[string]NodeState
 }
 
-func (m *Manager) Inventory(org string) []NodeState {
-	m.inv.mu.RLock()
-	defer m.inv.mu.RUnlock()
+func (c *Manager) Inventory(org string) []NodeState {
+	c.inv.mu.RLock()
+	defer c.inv.mu.RUnlock()
 	var out []NodeState
-	for _, s := range m.inv.nodes {
+	for _, s := range c.inv.nodes {
 		if s.Node.Org == org {
 			out = append(out, s)
 		}
@@ -65,28 +65,28 @@ func (m *Manager) Inventory(org string) []NodeState {
 	return out
 }
 
-func (m *Manager) NodeState(name string) (NodeState, bool) {
-	m.inv.mu.RLock()
-	defer m.inv.mu.RUnlock()
-	s, ok := m.inv.nodes[name]
+func (c *Manager) NodeState(name string) (NodeState, bool) {
+	c.inv.mu.RLock()
+	defer c.inv.mu.RUnlock()
+	s, ok := c.inv.nodes[name]
 	return s, ok
 }
 
-func (m *Manager) pollLoop(ctx context.Context) {
+func (c *Manager) pollLoop(ctx context.Context) {
 	for {
-		m.PollAll(ctx)
-		m.tel.save(false)
+		c.PollAll(ctx)
+		c.tel.save(false)
 		select {
 		case <-ctx.Done():
-			m.tel.save(true)
+			c.tel.save(true)
 			return
 		case <-time.After(pollEvery + time.Duration(rand.Intn(5000))*time.Millisecond):
 		}
 	}
 }
 
-func (m *Manager) PollAll(ctx context.Context) {
-	nodes, err := m.Nodes(ctx)
+func (c *Manager) PollAll(ctx context.Context) {
+	nodes, err := c.Nodes(ctx)
 	if err != nil {
 		return
 	}
@@ -99,31 +99,31 @@ func (m *Manager) PollAll(ctx context.Context) {
 		sem <- struct{}{}
 		go func(n Node) {
 			defer func() { <-sem; wg.Done() }()
-			m.poll(ctx, n)
+			c.poll(ctx, n)
 		}(n)
 	}
 	wg.Wait()
-	m.inv.mu.Lock()
-	for name := range m.inv.nodes {
+	c.inv.mu.Lock()
+	for name := range c.inv.nodes {
 		if !known[name] {
-			delete(m.inv.nodes, name)
+			delete(c.inv.nodes, name)
 		}
 	}
-	m.inv.mu.Unlock()
+	c.inv.mu.Unlock()
 }
 
-func (m *Manager) Refresh(name string) {
-	if n, err := m.Node(context.Background(), name); err == nil {
-		m.poll(context.Background(), n)
+func (c *Manager) Refresh(name string) {
+	if n, err := c.Node(context.Background(), name); err == nil {
+		c.poll(context.Background(), n)
 	}
 }
 
-func (m *Manager) poll(ctx context.Context, n Node) {
+func (c *Manager) poll(ctx context.Context, n Node) {
 	ctx, cancel := context.WithTimeout(ctx, pollTimeout)
 	defer cancel()
-	m.inv.mu.RLock()
-	st := m.inv.nodes[n.Name]
-	m.inv.mu.RUnlock()
+	c.inv.mu.RLock()
+	st := c.inv.nodes[n.Name]
+	c.inv.mu.RUnlock()
 	st.Node = n
 	info, err := n.Info(ctx)
 	var vms []kube.VM
@@ -134,11 +134,11 @@ func (m *Manager) poll(ctx context.Context, n Node) {
 		st.Error = err.Error()
 	} else {
 		st.Info, st.VMs, st.Error, st.Observed = info, vms, "", time.Now()
-		m.alignCPU(ctx, n, &st.Info)
-		defer m.alignFirewall(ctx, n)
+		c.alignCPU(ctx, n, &st.Info)
+		defer c.alignFirewall(ctx, n)
 		var sample kube.MetricsSample
 		if n.Call(ctx, "GET", "/api/metrics", nil, &sample) == nil {
-			m.tel.record(n.Name, info.CPUCores, sample)
+			c.tel.record(n.Name, info.CPUCores, sample)
 		}
 		var nets []kube.Network
 		if n.Call(ctx, "GET", "/api/networks", nil, &nets) == nil {
@@ -153,16 +153,16 @@ func (m *Manager) poll(ctx context.Context, n Node) {
 			st.HostNet = hn
 		}
 	}
-	m.inv.mu.Lock()
-	m.inv.nodes[n.Name] = st
-	m.inv.mu.Unlock()
+	c.inv.mu.Lock()
+	c.inv.nodes[n.Name] = st
+	c.inv.mu.Unlock()
 }
 
-func (m *Manager) alignCPU(ctx context.Context, n Node, info *kube.NodeInfo) {
+func (c *Manager) alignCPU(ctx context.Context, n Node, info *kube.NodeInfo) {
 	if n.Datacenter == "" || n.Cluster == "" {
 		return
 	}
-	cs, err := m.ClusterSettings(ctx, n.Org, n.Datacenter, n.Cluster)
+	cs, err := c.ClusterSettings(ctx, n.Org, n.Datacenter, n.Cluster)
 	want := cs.CPUModel
 	if err != nil || info.CPU.Baseline == want || want != "" && !slices.Contains(info.CPU.Models, want) {
 		return

@@ -39,13 +39,13 @@ var AlarmMetrics = []struct{ ID, Label, Unit string }{
 
 func alarmRulesKey(org string) string { return "argus-alarm-rules-" + org }
 
-func (m *Manager) AlarmRules(ctx context.Context, org string) ([]AlarmRule, error) {
+func (c *Manager) AlarmRules(ctx context.Context, org string) ([]AlarmRule, error) {
 	var rs []AlarmRule
-	_, err := auth.LoadJSON(ctx, m.store, alarmRulesKey(org), "rules", &rs)
+	_, err := auth.LoadJSON(ctx, c.store, alarmRulesKey(org), "rules", &rs)
 	return rs, err
 }
 
-func (m *Manager) SaveAlarmRule(ctx context.Context, org, old string, r AlarmRule, remove bool) error {
+func (c *Manager) SaveAlarmRule(ctx context.Context, org, old string, r AlarmRule, remove bool) error {
 	if !remove {
 		switch {
 		case r.Name == "" || len(r.Name) > 64:
@@ -61,7 +61,7 @@ func (m *Manager) SaveAlarmRule(ctx context.Context, org, old string, r AlarmRul
 		}
 	}
 	var rs []AlarmRule
-	rv, err := auth.LoadJSON(ctx, m.store, alarmRulesKey(org), "rules", &rs)
+	rv, err := auth.LoadJSON(ctx, c.store, alarmRulesKey(org), "rules", &rs)
 	if err != nil {
 		return err
 	}
@@ -73,7 +73,7 @@ func (m *Manager) SaveAlarmRule(ctx context.Context, org, old string, r AlarmRul
 		rs = append(rs, r)
 	}
 	sort.Slice(rs, func(i, j int) bool { return rs[i].Name < rs[j].Name })
-	return auth.SaveJSON(ctx, m.store, alarmRulesKey(org), "rules", rv, rs)
+	return auth.SaveJSON(ctx, c.store, alarmRulesKey(org), "rules", rv, rs)
 }
 
 func window(ps []Point, minutes int, now time.Time) []Point {
@@ -107,23 +107,23 @@ func (r AlarmRule) judge(ps []Point, value func(Point) (float64, bool)) (string,
 	return "", 0
 }
 
-func (m *Manager) EvaluateAlarmRules(ctx context.Context) []RuleHit {
-	m.inv.mu.RLock()
-	states := make([]NodeState, 0, len(m.inv.nodes))
-	for _, st := range m.inv.nodes {
+func (c *Manager) EvaluateAlarmRules(ctx context.Context) []RuleHit {
+	c.inv.mu.RLock()
+	states := make([]NodeState, 0, len(c.inv.nodes))
+	for _, st := range c.inv.nodes {
 		states = append(states, st)
 	}
-	m.inv.mu.RUnlock()
+	c.inv.mu.RUnlock()
 	rules := map[string][]AlarmRule{}
 	for _, st := range states {
 		if _, ok := rules[st.Node.Org]; !ok {
-			rules[st.Node.Org], _ = m.AlarmRules(ctx, st.Node.Org)
+			rules[st.Node.Org], _ = c.AlarmRules(ctx, st.Node.Org)
 		}
 	}
 	var out []RuleHit
 	now := time.Now()
-	m.tel.mu.Lock()
-	defer m.tel.mu.Unlock()
+	c.tel.mu.Lock()
+	defer c.tel.mu.Unlock()
 	for _, st := range states {
 		n := st.Node
 		for _, r := range rules[n.Org] {
@@ -138,11 +138,11 @@ func (m *Manager) EvaluateAlarmRules(ctx context.Context) []RuleHit {
 			}
 			switch r.Metric {
 			case "host-cpu":
-				hit(n.Name, "host", m.tel.Hosts[n.Name], func(p Point) (float64, bool) { return float64(p.V[0]), true })
+				hit(n.Name, "host", c.tel.Hosts[n.Name], func(p Point) (float64, bool) { return float64(p.V[0]), true })
 			case "host-memory":
-				hit(n.Name, "host", m.tel.Hosts[n.Name], func(p Point) (float64, bool) { return 100 * float64(p.V[1]) / float64(p.V[2]), p.V[2] > 0 })
+				hit(n.Name, "host", c.tel.Hosts[n.Name], func(p Point) (float64, bool) { return 100 * float64(p.V[1]) / float64(p.V[2]), p.V[2] > 0 })
 			case "host-pool":
-				hit(n.Name, "host", m.tel.Hosts[n.Name], func(p Point) (float64, bool) {
+				hit(n.Name, "host", c.tel.Hosts[n.Name], func(p Point) (float64, bool) {
 					return 100 * float64(p.V[4]) / float64(p.V[4]+p.V[5]), p.V[4]+p.V[5] > 0
 				})
 			default:
@@ -150,7 +150,7 @@ func (m *Manager) EvaluateAlarmRules(ctx context.Context) []RuleHit {
 					if !vm.Running || r.Tag != "" && !slices.Contains(vm.Tags, r.Tag) {
 						continue
 					}
-					ps := m.tel.VMs[n.Name+"/"+vm.Namespace+"/"+vm.Name]
+					ps := c.tel.VMs[n.Name+"/"+vm.Namespace+"/"+vm.Name]
 					mem, _ := resource.ParseQuantity(vm.Memory)
 					key, object := n.Name+"/"+vm.Name, "VM "+vm.Label()
 					switch r.Metric {
