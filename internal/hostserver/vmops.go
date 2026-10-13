@@ -1,6 +1,7 @@
 package hostserver
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"net/http"
@@ -13,26 +14,41 @@ import (
 	"argus/internal/wire"
 )
 
+var actionLabels = map[string]string{"start": "Power on", "stop": "Shut down", "poweroff": "Power off", "restart": "Restart", "pause": "Pause", "unpause": "Resume",
+	"template": "Convert to template", "untemplate": "Convert to VM"}
+
+var actionStates = map[string]string{"start": "Running", "unpause": "Running", "stop": "Stopped", "poweroff": "Stopped", "pause": "Paused"}
+
 func (l localOps) Power(ctx context.Context, ns, name, act string) error {
 	if !kube.ValidAction(act) {
 		return ui.ErrUnknownAction
 	}
-	return l.s.kube.Action(ctx, ns, name, act)
+	t := l.s.tasks.begin(ctx, cmp.Or(actionLabels[act], act), name, "")
+	if err := l.s.kube.Action(ctx, ns, name, act); err != nil {
+		l.s.tasks.end(t, err)
+		return err
+	}
+	if want, ok := actionStates[act]; ok {
+		go l.s.waitState(t, ns, name, want)
+	} else {
+		l.s.tasks.end(t, nil)
+	}
+	return nil
 }
 
 func (l localOps) DeleteVM(ctx context.Context, ns, name string) error {
-	return l.s.kube.DeleteVM(ctx, ns, name)
+	return l.s.record(ctx, "Delete VM", name, l.s.kube.DeleteVM(ctx, ns, name))
 }
 
 func (l localOps) SnapshotOp(ctx context.Context, ns, name, snap, op string) error {
 	switch {
 	case snap == "":
 		_, err := l.s.kube.CreateSnapshot(ctx, ns, name)
-		return err
+		return l.s.record(ctx, "Take snapshot", name, err)
 	case op == "restore":
-		return l.s.kube.RestoreSnapshot(ctx, ns, name, snap)
+		return l.s.record(ctx, "Restore snapshot "+snap, name, l.s.kube.RestoreSnapshot(ctx, ns, name, snap))
 	case op == "delete":
-		return l.s.kube.DeleteSnapshot(ctx, ns, name, snap)
+		return l.s.record(ctx, "Delete snapshot "+snap, name, l.s.kube.DeleteSnapshot(ctx, ns, name, snap))
 	}
 	return errors.New("unknown snapshot operation")
 }
@@ -43,15 +59,15 @@ func (l localOps) Meta(ctx context.Context, ns, name, op string, req wire.MetaRe
 		if !ui.ValidObject.MatchString(req.Value) {
 			return errors.New("invalid clone name")
 		}
-		return l.s.kube.Clone(ctx, ns, name, req.Value, req.Template)
+		return l.s.record(ctx, "Clone as "+req.Value, name, l.s.kube.Clone(ctx, ns, name, req.Value, req.Template))
 	case "rename":
-		return l.s.kube.Rename(ctx, ns, name, req.Value)
+		return l.s.record(ctx, "Rename", name, l.s.kube.Rename(ctx, ns, name, req.Value))
 	}
 	return ui.ErrUnknownAction
 }
 
 func (l localOps) RemoveDisk(ctx context.Context, ns, name, disk string) error {
-	return l.s.kube.RemoveDisk(ctx, ns, name, disk)
+	return l.s.record(ctx, "Remove disk "+disk, name, l.s.kube.RemoveDisk(ctx, ns, name, disk))
 }
 
 func (l localOps) MoveDisk(ctx context.Context, ns, name string, req wire.MoveDiskRequest) error {

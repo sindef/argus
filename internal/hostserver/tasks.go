@@ -155,3 +155,25 @@ func (s *Server) trackCreate(ctx context.Context, name string) {
 		}))
 	}()
 }
+
+func (s *Server) record(ctx context.Context, kind, vm string, err error) error {
+	s.tasks.end(s.tasks.begin(ctx, kind, vm, ""), err)
+	return err
+}
+
+func (s *Server) waitState(t *wire.Task, ns, name, want string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	for {
+		if vm, err := s.kube.GetVM(ctx, ns, name); err == nil && vm.Status == want {
+			s.tasks.end(t, nil)
+			return
+		}
+		select {
+		case <-ctx.Done():
+			s.tasks.end(t, fmt.Errorf("not %s after 5 minutes", strings.ToLower(want)))
+			return
+		case <-time.After(2 * time.Second):
+		}
+	}
+}

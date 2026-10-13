@@ -285,7 +285,14 @@ func (l localOps) DeviceOp(ctx context.Context, req hostui.DeviceReq) error {
 	return l.s.kube.SetPermittedDevices(ctx, pci, usb)
 }
 
+var hardwareLabels = map[string]string{"save": "Reconfigure", "nic-add": "Add network adapter", "nic-remove": "Remove network adapter", "resize": "Resize disk",
+	"provision": "Change disk provisioning", "device-add": "Add device", "device-remove": "Remove device"}
+
 func (l localOps) HardwareOp(ctx context.Context, ns, name, op string, req hostui.HWOpReq) error {
+	return l.s.record(ctx, cmp.Or(hardwareLabels[op], op), name, l.hardwareOp(ctx, ns, name, op, req))
+}
+
+func (l localOps) hardwareOp(ctx context.Context, ns, name, op string, req hostui.HWOpReq) error {
 	k := l.s.kube
 	switch op {
 	case "save":
