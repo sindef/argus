@@ -119,6 +119,15 @@
     }
   });
 
+  document.addEventListener("change", (e) => {
+    const sel = e.target.closest("select[data-interval]");
+    if (!sel) return;
+    const input = sel.nextElementSibling;
+    input.hidden = sel.value !== "custom";
+    if (sel.value === "custom") input.focus();
+    else input.value = sel.value;
+  });
+
   document.addEventListener("contextmenu", (e) => {
     const item = e.target.closest("[data-context]");
     if (!item) return;

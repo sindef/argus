@@ -335,3 +335,14 @@ a.nav-head.active { background: var(--accent-bg); }
 .card.empty .actions { display: flex; gap: 8px; }
 input[readonly] { color: var(--muted); }
 .vm-copy:has(select[name=target] option[value=manager]:checked) .pool-field { display: none; }
+.form.policy { display: grid; grid-template-columns: 120px repeat(3, minmax(140px, 220px)); align-items: end; gap: 14px 16px; max-width: none; }
+.form.policy .kind { font-weight: 600; padding-bottom: 9px; }
+.interval { display: flex; gap: 8px; }
+.interval > * { flex: 1; min-width: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.form label.chip { display: inline-flex; position: relative; }
+.chip input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.chip span { padding: 6px 12px; border: 1px solid var(--line-2); border-radius: 999px; color: var(--muted); cursor: pointer; text-transform: capitalize; font-weight: 400; }
+.chip input:checked + span { background: var(--accent-bg); border-color: var(--accent); color: var(--fg); }
+.chip input:focus-visible + span { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+@media (max-width: 900px) { .form.policy { grid-template-columns: 1fr 1fr; } .form.policy .kind { grid-column: 1 / -1; padding-bottom: 0; } }

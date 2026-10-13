@@ -125,44 +125,49 @@
 {{end}}
 {{end}}
 
+{{define "interval"}}{{$v := printf "%d" .value}}{{$custom := not (has (list "0" "1" "6" "12" "24" "168") $v)}}<label>Every <span class="interval"><select data-interval aria-label="Interval">{{range $o := list "0" "1" "6" "12" "24" "168"}}<option value="{{$o}}"{{if and (not $custom) (eq $o $v)}} selected{{end}}>{{if eq $o "0"}}Off{{else if eq $o "168"}}7d{{else}}{{$o}}h{{end}}</option>{{end}}<option value="custom"{{if $custom}} selected{{end}}>Custom…</option></select><input name="{{.name}}" type="number" min="0" max="720" value="{{$v}}" placeholder="hours"{{if not $custom}} hidden{{end}}></span></label>{{end}}
+
 {{define "vm-backups"}}{{$b := .B}}
 {{with $b.Error}}<p class="error">{{.}}</p>{{end}}
 <div class="card">
-<form hx-post="{{.P}}/backups/policy" hx-target="#flash" class="form">
-  <div class="card-head"><h2>Snapshots</h2><span class="help" title="Crash-consistent snapshots on this host's pool. Fast to take and restore; lost with the host.">?</span></div>
-  <div class="row">
-    <label>Every (hours) <input name="snap" type="number" min="0" max="720" value="{{if $b.Policy.SnapEvery}}{{$b.Policy.SnapEvery}}{{end}}" placeholder="Off"></label>
+  <div class="card-head"><h2>Protection</h2>{{if .CanOperate}}<div class="actions"><button class="btn" type="button" form="backup-policy" hx-post="{{.P}}/backups/now" hx-include="#backup-policy" hx-target="#flash"{{if not $b.Targets}} disabled{{end}}>{{template "icon" "upload"}}Back up now</button><button class="btn primary" type="submit" form="backup-policy">Save</button></div>{{end}}</div>
+  <form id="backup-policy" hx-post="{{.P}}/backups/policy" hx-target="#flash" class="form policy">
+    <span class="kind">Snapshots <span class="help" title="Crash-consistent snapshots on this host's pool. Fast to take and restore; lost with the host.">?</span></span>
+    {{template "interval" (dict "name" "snap" "value" $b.Policy.SnapEvery)}}
     <label>Keep <input name="snapkeep" type="number" min="1" max="365" value="{{$b.Policy.SnapKeep}}"></label>
-  </div>
-  <div class="card-head spaced"><h2>Backups</h2><span class="help" title="Full copies on a backup target, off this host. Restorable on any host that has the same target.">?</span></div>
-  <div class="row">
-    <label>Every (hours) <input name="backup" type="number" min="0" max="720" value="{{if $b.Policy.BackupEvery}}{{$b.Policy.BackupEvery}}{{end}}" placeholder="Off"></label>
-    <label>Target <select name="target">{{range $b.Targets}}<option value="{{.Name}}"{{if eq .Name $b.Policy.Target}} selected{{end}}>{{.Name}} · {{.Endpoint}}</option>{{else}}<option value="">No backup targets</option>{{end}}</select></label>
+    <span></span>
+    <span class="kind">Backups <span class="help" title="Full copies on a backup target, off this host. Restorable on any host that has the same target.">?</span></span>
+    {{template "interval" (dict "name" "backup" "value" $b.Policy.BackupEvery)}}
     <label>Keep <input name="backupkeep" type="number" min="1" max="365" value="{{$b.Policy.BackupKeep}}"></label>
-  </div>
-  {{if .CanOperate}}<div class="actions"><button class="btn" type="button" hx-post="{{.P}}/backups/now" hx-include="closest form" hx-target="#flash"{{if not $b.Targets}} disabled{{end}}>Back up now</button><button class="btn primary" type="submit">Save</button></div>{{end}}
-</form>
+    <label>Target <select name="target">{{range $b.Targets}}<option value="{{.Name}}"{{if eq .Name $b.Policy.Target}} selected{{end}}>{{.Name}}</option>{{else}}<option value="">No backup targets</option>{{end}}</select></label>
+  </form>
 </div>
 <div class="card spaced">
-  <div class="card-head"><h2>Scheduled tasks</h2><span class="help" title="Runs on the host at the given time, in UTC.">?</span></div>
-  <div class="table-wrap"><table><tbody>{{range $i, $t := $b.Schedules}}<tr><td>{{$t.Action}}</td><td>{{if $t.Days}}{{range $j, $d := $t.Days}}{{if $j}}, {{end}}{{$d}}{{end}}{{else}}Every day{{end}} at {{$t.At}} UTC</td>
+  <div class="card-head"><h2>Scheduled tasks</h2>{{if .CanOperate}}<div class="actions"><button class="btn" data-dialog="add-task">{{template "icon" "plus"}}Add task</button></div>{{end}}</div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Action</th><th>When (UTC)</th><th></th></tr></thead>
+    <tbody>{{range $i, $t := $b.Schedules}}<tr><td>{{$t.Action}}</td><td>{{if $t.Days}}{{range $j, $d := $t.Days}}{{if $j}}, {{end}}{{$d}}{{end}}{{else}}Every day{{end}} at {{$t.At}}</td>
     <td class="row-actions">{{if $.CanOperate}}<button class="link danger" hx-post="{{$.P}}/schedule/delete" hx-vals='{"index":"{{$i}}"}' hx-target="#flash">Delete</button>{{end}}</td></tr>
-  {{else}}<tr><td class="muted">No scheduled tasks.</td></tr>{{end}}</tbody></table></div>
-  {{if .CanOperate}}<form hx-post="{{.P}}/schedule/add" hx-target="#flash" class="form spaced">
+  {{else}}<tr><td colspan="3" class="muted">No scheduled tasks.</td></tr>{{end}}</tbody></table></div>
+</div>
+<dialog id="add-task" class="card">
+  <form hx-post="{{.P}}/schedule/add" hx-target="#task-error" class="form">
+    <h2>Add task</h2>
+    <p id="task-error" class="error form-error"></p>
     <div class="row">
       <label>Action <select name="action"><option value="start">Power on</option><option value="shutdown">Shut down</option><option value="poweroff">Power off</option><option value="restart">Restart</option><option value="snapshot">Snapshot</option></select></label>
       <label>Time (UTC) <input name="at" type="time" required></label>
     </div>
-    <div class="row">{{range $d := list "mon" "tue" "wed" "thu" "fri" "sat" "sun"}}<label class="check"><input type="checkbox" name="day_{{$d}}" checked> {{$d}}</label>{{end}}</div>
-    <div class="actions"><button class="btn" type="submit">{{template "icon" "plus"}}Add task</button></div>
-  </form>{{end}}
-</div>
+    <div class="chips" role="group" aria-label="Days">{{range $d := list "mon" "tue" "wed" "thu" "fri" "sat" "sun"}}<label class="chip"><input type="checkbox" name="day_{{$d}}" checked><span>{{$d}}</span></label>{{end}}</div>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Add</button></div>
+  </form>
+</dialog>
 <div class="card spaced">
   <div class="card-head"><h2>Backup copies</h2>{{with $b.Status}}<span class="right muted">Last: {{.}}</span>{{end}}</div>
   <div class="table-wrap"><table>
     <thead><tr><th>Taken</th><th>Target</th><th>Size</th><th></th></tr></thead>
-    <tbody>{{range $b.Backups}}<tr><td title="{{.Stamp}}">{{stamp .Stamp}}{{if not .Complete}} <span class="dot Warning" title="No completion manifest; the copy was interrupted">incomplete</span>{{end}}</td><td>{{.Target}}</td><td>{{bytes .Size}}</td>
-      <td class="row-actions">{{if $.CanOperate}}{{if .Complete}}<button class="link" hx-post="{{$.H}}/files" hx-vals='{"store":"{{.Target}}","stamp":"{{.Stamp}}"}' hx-target="#flash">Browse files</button><button class="link" data-dialog="restore-backup" data-fill='{"stamp":"{{.Stamp}}","store":"{{.Target}}"}'>Restore</button>{{end}}<button class="link danger" hx-post="{{$.P}}/backups/delete" hx-vals='{"stamp":"{{.Stamp}}","store":"{{.Target}}"}' hx-target="#flash" hx-confirm="Delete this backup from {{.Target}}?">Delete</button>{{end}}</td></tr>
+    <tbody>{{range $b.Backups}}<tr><td title="{{.Stamp}}">{{stamp .Stamp}}{{if not .Complete}} <span class="dot Warning">Incomplete</span> <span class="help" title="No completion manifest. The copy is still being written or was interrupted.">?</span>{{end}}</td><td>{{.Target}}</td><td>{{bytes .Size}}</td>
+      <td class="row-actions">{{if $.CanOperate}}{{if .Complete}}<button class="link" hx-post="{{$.H}}/files" hx-vals='{"store":"{{.Target}}","stamp":"{{.Stamp}}"}' hx-target="#flash">Browse files</button><button class="link" data-dialog="restore-backup" data-fill='{"stamp":"{{.Stamp}}","store":"{{.Target}}"}'>Restore</button>{{end}}<button class="link danger" hx-post="{{$.P}}/backups/delete" hx-vals='{"stamp":"{{.Stamp}}","store":"{{.Target}}"}' hx-target="#flash" hx-confirm="Delete this backup from {{.Target}}?"{{if eq $b.Status "Running"}} disabled title="A backup of this VM is running"{{end}}>Delete</button>{{end}}</td></tr>
     {{else}}<tr><td colspan="4" class="muted">{{if $b.Targets}}No backups yet.{{else}}Add a backup target in host settings.{{end}}</td></tr>{{end}}</tbody>
   </table></div>
 </div>
