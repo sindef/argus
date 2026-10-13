@@ -11,12 +11,15 @@ import (
 func TestInterruptedJobKeepsLocks(t *testing.T) {
 	fs, _ := testStore(t)
 	ctx := context.Background()
-	b, _ := json.Marshal([]*Job{{ID: "j1", VM: "web", From: "a1", To: "a2", Status: "Copying", Live: true}})
+	b, _ := json.Marshal([]*Job{{ID: "j1", VM: "web", From: "a1", To: "a2", Status: "Copying", Live: true}, {ID: "j2", Kind: "Clone db as db2", VM: "db", Target: "db2", From: "a1", To: "a2", Status: "Copying"}})
 	fs.Create(ctx, jobsKey, "Opaque", map[string][]byte{"jobs": b})
 	c := New(fs, filepath.Join(t.TempDir(), "m.gob"), 1)
 	c.loadJobs(ctx)
 	if !c.Busy("a1", "web") || !c.Busy("a2", "web") {
 		t.Fatal("interrupted migration released its locks")
+	}
+	if !c.Busy("a1", "db") || !c.Busy("a2", "db") {
+		t.Fatal("interrupted clone released its locks")
 	}
 	err := c.startJob(context.Background(), &Job{VM: "web", From: "a2", To: "a1"}, time.Minute, func(context.Context, *Job) error { return nil })
 	if err == nil {

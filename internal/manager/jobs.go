@@ -34,6 +34,7 @@ type Job struct {
 	Org       string
 	Namespace string
 	VM        string
+	Target    string
 	From, To  string
 	Started   time.Time
 	Ended     time.Time
@@ -166,7 +167,7 @@ func (c *Manager) loadJobs(ctx context.Context) {
 		if !j.Done {
 			j.Ended = time.Now()
 		}
-		if !j.Done && j.Kind != "" {
+		if !j.Done && (j.VM == "" || j.From == "" || j.To == "") {
 			j.Done, j.Failed = true, true
 			j.Status = fmt.Sprintf("Interrupted by Manager restart during %q; check %s", j.Status, cmp.Or(j.From, j.To))
 			continue
@@ -233,6 +234,19 @@ func (c *Manager) Resolve(ctx context.Context, org, id string) error {
 	if ns == "" {
 		ns = kube.Namespace
 	}
+	op := wire.OperationRequest{Operation: j.ID}
+	if j.Kind != "" {
+		name := cmp.Or(j.Target, j.VM)
+		if target, err := vmState(ctx, dst, kube.Namespace, name); err == nil && target.Running {
+			return fmt.Errorf("%s is running on %s; check it manually", name, j.To)
+		}
+		lifecycle.LogCleanup("copy "+name+" on "+dst.Name, dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, name, "abort"), op, nil))
+		lifecycle.LogCleanup("import of "+name+" on "+dst.Name, dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, name, "imported"), nil, nil))
+		lifecycle.LogCleanup("export of "+j.VM+" on "+src.Name, src.do(ctx, http.MethodPost, vmPathIn(ns, j.VM, "unexport"), nil, nil))
+		c.release(j)
+		c.finish(j, errors.New("rolled back: unfinished copy "+name+" removed from "+j.To))
+		return nil
+	}
 	source, err := vmState(ctx, src, ns, j.VM)
 	if err != nil {
 		return fmt.Errorf("cannot confirm the source: %w", err)
@@ -243,7 +257,6 @@ func (c *Manager) Resolve(ctx context.Context, org, id string) error {
 	if target, err := vmState(ctx, dst, kube.Namespace, j.VM); err == nil && target.Running {
 		return fmt.Errorf("%s is running on %s; check both hosts manually", j.VM, j.To)
 	}
-	op := wire.OperationRequest{Operation: j.ID}
 	lifecycle.LogCleanup("migration of "+j.VM+" on "+src.Name, src.do(ctx, http.MethodPost, vmPathIn(ns, j.VM, "migration-cleanup"), op, nil))
 	lifecycle.LogCleanup("migration of "+j.VM+" on "+dst.Name, dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, j.VM, "migration-cleanup"), op, nil))
 	if err := dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, j.VM, "abort"), op, nil); err != nil {
@@ -253,11 +266,15 @@ func (c *Manager) Resolve(ctx context.Context, org, id string) error {
 		lifecycle.LogCleanup("import of "+j.VM+" on "+dst.Name, dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, j.VM, "imported"), nil, nil))
 		lifecycle.LogCleanup("export of "+j.VM+" on "+src.Name, src.do(ctx, http.MethodPost, vmPathIn(ns, j.VM, "unexport"), nil, nil))
 	}
+	c.release(j)
+	c.finish(j, errors.New("rolled back: "+j.VM+" kept on "+j.From))
+	return nil
+}
+
+func (c *Manager) release(j *Job) {
 	c.st.mu.Lock()
 	j.Attention = false
 	delete(c.st.busy, busyKey(j.From, j.VM))
 	delete(c.st.busy, busyKey(j.To, j.VM))
 	c.st.mu.Unlock()
-	c.finish(j, errors.New("rolled back: "+j.VM+" kept on "+j.From))
-	return nil
 }
