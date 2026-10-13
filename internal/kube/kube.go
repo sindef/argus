@@ -1,6 +1,7 @@
 package kube
 
 import (
+	"argus/internal/store"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -138,7 +139,7 @@ func (c *Client) Secrets(ns string) Secrets {
 func (s Secrets) Get(ctx context.Context, name string) (map[string][]byte, string, error) {
 	u, err := s.r.Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		return nil, "", err
+		return nil, "", storeError(err)
 	}
 	raw, _, _ := unstructured.NestedStringMap(u.Object, "data")
 	data := make(map[string][]byte, len(raw))
@@ -152,11 +153,21 @@ func (s Secrets) Get(ctx context.Context, name string) (map[string][]byte, strin
 
 func (s Secrets) Create(ctx context.Context, name, typ string, data map[string][]byte) error {
 	_, err := s.r.Create(ctx, secret(name, typ, "", data), metav1.CreateOptions{})
-	return err
+	return storeError(err)
 }
 
 func (s Secrets) Update(ctx context.Context, name, resourceVersion string, data map[string][]byte) error {
 	_, err := s.r.Update(ctx, secret(name, "Opaque", resourceVersion, data), metav1.UpdateOptions{})
+	return storeError(err)
+}
+
+func storeError(err error) error {
+	switch {
+	case apierrors.IsNotFound(err):
+		return fmt.Errorf("%w: %w", store.ErrNotFound, err)
+	case apierrors.IsConflict(err) || apierrors.IsAlreadyExists(err):
+		return fmt.Errorf("%w: %w", store.ErrConflict, err)
+	}
 	return err
 }
 

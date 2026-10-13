@@ -1,6 +1,7 @@
 package dbstore
 
 import (
+	"argus/internal/store"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -17,12 +18,8 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	_ "modernc.org/sqlite"
 )
-
-var resource = schema.GroupResource{Resource: "secrets"}
 
 type Record struct {
 	Version int               `json:"version"`
@@ -204,7 +201,7 @@ func (s *Store) Get(ctx context.Context, name string) (map[string][]byte, string
 	var blob []byte
 	err := s.db.QueryRowContext(ctx, s.q(`SELECT version, data FROM records WHERE name = ?`), name).Scan(&version, &blob)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, "", apierrors.NewNotFound(resource, name)
+		return nil, "", fmt.Errorf("%w: %s", store.ErrNotFound, name)
 	}
 	if err != nil {
 		return nil, "", err
@@ -223,7 +220,7 @@ func (s *Store) Create(ctx context.Context, name, typ string, data map[string][]
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return apierrors.NewAlreadyExists(resource, name)
+		return fmt.Errorf("%w: %s already exists", store.ErrConflict, name)
 	}
 	return nil
 }
@@ -231,7 +228,7 @@ func (s *Store) Create(ctx context.Context, name, typ string, data map[string][]
 func (s *Store) Update(ctx context.Context, name, resourceVersion string, data map[string][]byte) error {
 	version, err := strconv.Atoi(resourceVersion)
 	if err != nil {
-		return apierrors.NewConflict(resource, name, errors.New("invalid version"))
+		return fmt.Errorf("%w: %s invalid version", store.ErrConflict, name)
 	}
 	blob, err := s.seal(name, data)
 	if err != nil {
@@ -245,7 +242,7 @@ func (s *Store) Update(ctx context.Context, name, resourceVersion string, data m
 		if _, _, err := s.Get(ctx, name); err != nil {
 			return err
 		}
-		return apierrors.NewConflict(resource, name, errors.New("modified"))
+		return fmt.Errorf("%w: %s modified", store.ErrConflict, name)
 	}
 	return nil
 }

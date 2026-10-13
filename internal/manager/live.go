@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"argus/internal/auth"
 	"argus/internal/kube"
 	"argus/internal/lifecycle"
+	"argus/internal/store"
 	"argus/internal/wire"
 )
 
@@ -29,7 +29,7 @@ type MigrationSettings struct {
 
 func (c *Manager) MigrationSettings(ctx context.Context) (MigrationSettings, error) {
 	var m MigrationSettings
-	_, err := auth.LoadJSON(ctx, c.store, settingsKey, "migration", &m)
+	_, err := store.LoadJSON(ctx, c.store, settingsKey, "migration", &m)
 	return m, err
 }
 
@@ -52,7 +52,7 @@ func (c *Manager) SetMigrationSettings(ctx context.Context, m MigrationSettings)
 }
 
 func (c *Manager) saveMigrationSettings(ctx context.Context, m MigrationSettings, push bool) error {
-	err := auth.PutJSON(ctx, c.store, settingsKey, "migration", m)
+	err := store.PutJSON(ctx, c.store, settingsKey, "migration", m)
 	if err != nil || !push {
 		return err
 	}

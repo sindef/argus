@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"argus/internal/auth"
+	"argus/internal/store"
 )
 
 type AlarmRule struct {
@@ -41,7 +42,7 @@ func alarmRulesKey(org string) string { return "argus-alarm-rules-" + org }
 
 func (c *Manager) AlarmRules(ctx context.Context, org string) ([]AlarmRule, error) {
 	var rs []AlarmRule
-	_, err := auth.LoadJSON(ctx, c.store, alarmRulesKey(org), "rules", &rs)
+	_, err := store.LoadJSON(ctx, c.store, alarmRulesKey(org), "rules", &rs)
 	return rs, err
 }
 
@@ -61,7 +62,7 @@ func (c *Manager) SaveAlarmRule(ctx context.Context, org, old string, r AlarmRul
 		}
 	}
 	var rs []AlarmRule
-	rv, err := auth.LoadJSON(ctx, c.store, alarmRulesKey(org), "rules", &rs)
+	rv, err := store.LoadJSON(ctx, c.store, alarmRulesKey(org), "rules", &rs)
 	if err != nil {
 		return err
 	}
@@ -73,7 +74,7 @@ func (c *Manager) SaveAlarmRule(ctx context.Context, org, old string, r AlarmRul
 		rs = append(rs, r)
 	}
 	sort.Slice(rs, func(i, j int) bool { return rs[i].Name < rs[j].Name })
-	return auth.SaveJSON(ctx, c.store, alarmRulesKey(org), "rules", rv, rs)
+	return store.SaveJSON(ctx, c.store, alarmRulesKey(org), "rules", rv, rs)
 }
 
 func window(ps []Point, minutes int, now time.Time) []Point {

@@ -12,8 +12,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"argus/internal/auth"
 	"argus/internal/lifecycle"
+	"argus/internal/store"
 )
 
 const (
@@ -96,9 +96,8 @@ func auditResult(aw *auditWriter, h http.Header) (bool, string) {
 }
 
 func (s *Core) auditLoop(ctx context.Context) {
-	store := s.Auth.Secrets()
 	var es []AuditEntry
-	if _, err := auth.LoadJSON(ctx, store, auditKey, "entries", &es); err == nil {
+	if _, err := store.LoadJSON(ctx, s.Auth.Secrets(), auditKey, "entries", &es); err == nil {
 		s.audit.mu.Lock()
 		s.audit.entries = append(es, s.audit.entries...)
 		s.audit.mu.Unlock()
@@ -121,7 +120,7 @@ func (s *Core) flushAudit(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	if err := auth.PutJSON(ctx, s.Auth.Secrets(), auditKey, "entries", json.RawMessage(b)); err != nil {
+	if err := store.PutJSON(ctx, s.Auth.Secrets(), auditKey, "entries", json.RawMessage(b)); err != nil {
 		log.Printf("audit: save: %v", err)
 		s.audit.mu.Lock()
 		s.audit.dirty = true

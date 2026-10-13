@@ -16,6 +16,7 @@ import (
 	"argus/internal/auth"
 	"argus/internal/kube"
 	"argus/internal/lifecycle"
+	"argus/internal/store"
 	"argus/internal/wire"
 )
 
@@ -141,7 +142,7 @@ func (c *Manager) saveJobs() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	err = auth.PutJSON(ctx, c.store, jobsKey, "jobs", json.RawMessage(b))
+	err = store.PutJSON(ctx, c.store, jobsKey, "jobs", json.RawMessage(b))
 	if err != nil {
 		log.Printf("jobs: save: %v", err)
 	}

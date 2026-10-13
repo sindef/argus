@@ -1,6 +1,7 @@
 package tlscert
 
 import (
+	"argus/internal/store"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -18,8 +19,6 @@ import (
 	"slices"
 	"sync/atomic"
 	"time"
-
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const secretName = "argus-pki"
@@ -37,10 +36,10 @@ type PKI struct {
 
 func Load(ctx context.Context, secrets Secrets, ips []net.IP, names ...string) (PKI, error) {
 	data, rv, err := secrets.Get(ctx, secretName)
-	if err != nil && !apierrors.IsNotFound(err) {
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return PKI{}, err
 	}
-	if apierrors.IsNotFound(err) {
+	if errors.Is(err, store.ErrNotFound) {
 		caCert, caKey, err := newCA()
 		if err != nil {
 			return PKI{}, err
@@ -231,7 +230,7 @@ func (h *Holder) Set(ctx context.Context, secrets Secrets, certPEM, keyPEM []byt
 	data := map[string][]byte{"cert": certPEM, "key": keyPEM}
 	_, rv, err := secrets.Get(ctx, customSecret)
 	switch {
-	case apierrors.IsNotFound(err):
+	case errors.Is(err, store.ErrNotFound):
 		err = secrets.Create(ctx, customSecret, "Opaque", data)
 	case err == nil:
 		err = secrets.Update(ctx, customSecret, rv, data)

@@ -12,8 +12,8 @@ import (
 	"slices"
 	"strings"
 
-	"argus/internal/auth"
 	"argus/internal/hostd"
+	"argus/internal/store"
 )
 
 type FirewallRule struct {
@@ -34,7 +34,7 @@ func firewallKey(org string) string { return "argus-firewall-" + org }
 
 func (c *Manager) Firewall(ctx context.Context, org string) (FirewallPolicy, error) {
 	var p FirewallPolicy
-	_, err := auth.LoadJSON(ctx, c.store, firewallKey(org), "policy", &p)
+	_, err := store.LoadJSON(ctx, c.store, firewallKey(org), "policy", &p)
 	return p, err
 }
 
@@ -73,7 +73,7 @@ func (c *Manager) SetFirewall(ctx context.Context, org string, p FirewallPolicy)
 			}
 		}
 	}
-	return auth.PutJSON(ctx, c.store, firewallKey(org), "policy", p)
+	return store.PutJSON(ctx, c.store, firewallKey(org), "policy", p)
 }
 
 type fwVM struct {

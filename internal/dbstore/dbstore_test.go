@@ -1,13 +1,13 @@
 package dbstore
 
 import (
+	"argus/internal/store"
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
-
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 func TestStore(t *testing.T) {
@@ -21,7 +21,7 @@ func TestStore(t *testing.T) {
 	if err := s.Create(ctx, "a", "Opaque", map[string][]byte{"k": []byte("secret-value")}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Create(ctx, "a", "Opaque", nil); !apierrors.IsAlreadyExists(err) {
+	if err := s.Create(ctx, "a", "Opaque", nil); !errors.Is(err, store.ErrConflict) {
 		t.Fatalf("duplicate create: %v", err)
 	}
 	data, rv, err := s.Get(ctx, "a")
@@ -31,10 +31,10 @@ func TestStore(t *testing.T) {
 	if err := s.Update(ctx, "a", "1", map[string][]byte{"k": []byte("v2")}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Update(ctx, "a", "1", nil); !apierrors.IsConflict(err) {
+	if err := s.Update(ctx, "a", "1", nil); !errors.Is(err, store.ErrConflict) {
 		t.Fatalf("stale update: %v", err)
 	}
-	if _, _, err := s.Get(ctx, "missing"); !apierrors.IsNotFound(err) {
+	if _, _, err := s.Get(ctx, "missing"); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("missing: %v", err)
 	}
 	s.Close()

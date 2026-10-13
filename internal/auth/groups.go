@@ -1,14 +1,13 @@
 package auth
 
 import (
+	"argus/internal/store"
 	"context"
 	"errors"
 	"fmt"
 	"regexp"
 	"slices"
 	"strings"
-
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 type Group struct {
@@ -27,7 +26,7 @@ func (s *Store) groupsKey() string { return s.key + "-groups" }
 
 func (s *Store) loadGroups(ctx context.Context) ([]Group, string, error) {
 	var gs []Group
-	rv, err := LoadJSON(ctx, s.secrets, s.groupsKey(), groupsFile, &gs)
+	rv, err := store.LoadJSON(ctx, s.secrets, s.groupsKey(), groupsFile, &gs)
 	return gs, rv, err
 }
 
@@ -49,8 +48,8 @@ func (s *Store) modifyGroups(ctx context.Context, fn func([]Group) ([]Group, err
 		if gs, err = fn(gs); err != nil {
 			return err
 		}
-		err = SaveJSON(ctx, s.secrets, s.groupsKey(), groupsFile, rv, gs)
-		if (apierrors.IsConflict(err) || apierrors.IsAlreadyExists(err)) && attempt < 3 {
+		err = store.SaveJSON(ctx, s.secrets, s.groupsKey(), groupsFile, rv, gs)
+		if errors.Is(err, store.ErrConflict) && attempt < 3 {
 			continue
 		}
 		if err == nil {

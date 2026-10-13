@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"argus/internal/store"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -29,12 +30,12 @@ const (
 
 func (s *Store) tokens(ctx context.Context) ([]Token, string, error) {
 	var ts []Token
-	rv, err := LoadJSON(ctx, s.secrets, tokenSecret, secretKey, &ts)
+	rv, err := store.LoadJSON(ctx, s.secrets, tokenSecret, secretKey, &ts)
 	return ts, rv, err
 }
 
 func (s *Store) saveTokens(ctx context.Context, ts []Token, rv string) error {
-	return SaveJSON(ctx, s.secrets, tokenSecret, secretKey, rv, ts)
+	return store.SaveJSON(ctx, s.secrets, tokenSecret, secretKey, rv, ts)
 }
 
 func (s *Store) Tokens(ctx context.Context) ([]Token, error) {

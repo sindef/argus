@@ -1,12 +1,10 @@
 package auth
 
 import (
+	"argus/internal/store"
 	"context"
 	"sync"
 	"testing"
-
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type memSecrets struct {
@@ -19,7 +17,7 @@ func (m *memSecrets) Get(_ context.Context, name string) (map[string][]byte, str
 	defer m.mu.Unlock()
 	d, ok := m.m[name]
 	if !ok {
-		return nil, "", apierrors.NewNotFound(schema.GroupResource{Resource: "secrets"}, name)
+		return nil, "", store.ErrNotFound
 	}
 	return d, "1", nil
 }
@@ -35,7 +33,7 @@ func (m *memSecrets) Update(_ context.Context, name, _ string, data map[string][
 	return m.Create(context.Background(), name, "", data)
 }
 
-func restart(sec Secrets) *Store {
+func restart(sec store.Secrets) *Store {
 	s := NewStore(sec)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

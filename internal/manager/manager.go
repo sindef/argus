@@ -23,6 +23,7 @@ import (
 	"argus/internal/auth"
 	"argus/internal/kube"
 	"argus/internal/lifecycle"
+	"argus/internal/store"
 	"argus/internal/tlscert"
 	"argus/internal/wire"
 
@@ -49,7 +50,7 @@ type Node struct {
 type NodeInfo = kube.NodeInfo
 
 type Manager struct {
-	store        auth.Secrets
+	store        store.Secrets
 	storeMu      sync.Mutex
 	replications chan struct{}
 	started      time.Time
@@ -70,7 +71,7 @@ type state struct {
 	fwPushed map[string]string
 }
 
-func New(store auth.Secrets, metricsPath string, replications int) *Manager {
+func New(store store.Secrets, metricsPath string, replications int) *Manager {
 	return &Manager{store: store, st: state{lastSeen: map[string]time.Time{}, busy: map[string]bool{}, syncing: map[string]bool{}, promoted: map[string]time.Time{}, fwPushed: map[string]string{}}, started: time.Now(), inv: inventory{nodes: map[string]NodeState{}}, tel: newTelemetry(metricsPath), replications: make(chan struct{}, max(replications, 1))}
 }
 
@@ -116,13 +117,13 @@ func (c *Manager) Node(ctx context.Context, name string) (Node, error) {
 
 func (c *Manager) load(ctx context.Context) ([]Node, string, error) {
 	var ns []Node
-	rv, err := auth.LoadJSON(ctx, c.store, nodesKey, "nodes", &ns)
+	rv, err := store.LoadJSON(ctx, c.store, nodesKey, "nodes", &ns)
 	return ns, rv, err
 }
 
 func (c *Manager) save(ctx context.Context, ns []Node, rv string) error {
 	sort.Slice(ns, func(i, j int) bool { return ns[i].Name < ns[j].Name })
-	return auth.SaveJSON(ctx, c.store, nodesKey, "nodes", rv, ns)
+	return store.SaveJSON(ctx, c.store, nodesKey, "nodes", rv, ns)
 }
 
 func (c *Manager) AddNode(ctx context.Context, n Node, fingerprint string) error {

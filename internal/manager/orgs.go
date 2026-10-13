@@ -1,12 +1,11 @@
 package manager
 
 import (
+	"argus/internal/store"
 	"context"
 	"errors"
 	"fmt"
 	"sort"
-
-	"argus/internal/auth"
 )
 
 const (
@@ -52,7 +51,7 @@ var ErrOrgNotFound = errors.New("organization not found")
 
 func (c *Manager) loadOrgs(ctx context.Context) ([]Org, string, error) {
 	var os []Org
-	rv, err := auth.LoadJSON(ctx, c.store, orgsKey, "orgs", &os)
+	rv, err := store.LoadJSON(ctx, c.store, orgsKey, "orgs", &os)
 	return os, rv, err
 }
 
@@ -67,7 +66,7 @@ func (c *Manager) updateOrgs(ctx context.Context, fn func([]Org) ([]Org, error))
 		return err
 	}
 	sort.Slice(os, func(i, j int) bool { return os[i].Name < os[j].Name })
-	return auth.SaveJSON(ctx, c.store, orgsKey, "orgs", rv, os)
+	return store.SaveJSON(ctx, c.store, orgsKey, "orgs", rv, os)
 }
 
 func (c *Manager) EnsureDefaultOrg(ctx context.Context) error {

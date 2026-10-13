@@ -1,11 +1,10 @@
 package manager
 
 import (
+	"argus/internal/store"
 	"context"
 	"fmt"
 	"sort"
-
-	"argus/internal/auth"
 )
 
 type Network struct {
@@ -36,7 +35,7 @@ func (c *Manager) Networks(ctx context.Context, org string) ([]Network, error) {
 
 func (c *Manager) loadNetworks(ctx context.Context, org string) ([]Network, string, error) {
 	var ns []Network
-	rv, err := auth.LoadJSON(ctx, c.store, networksKey(org), "networks", &ns)
+	rv, err := store.LoadJSON(ctx, c.store, networksKey(org), "networks", &ns)
 	return ns, rv, err
 }
 
@@ -51,7 +50,7 @@ func (c *Manager) updateNetworks(ctx context.Context, org string, fn func([]Netw
 		return err
 	}
 	sort.Slice(ns, func(i, j int) bool { return ns[i].Name < ns[j].Name })
-	return auth.SaveJSON(ctx, c.store, networksKey(org), "networks", rv, ns)
+	return store.SaveJSON(ctx, c.store, networksKey(org), "networks", rv, ns)
 }
 
 func (c *Manager) SaveNetwork(ctx context.Context, org string, n Network, replace bool) error {

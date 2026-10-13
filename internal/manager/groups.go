@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"argus/internal/store"
 	"context"
 	"errors"
 	"fmt"
@@ -8,8 +9,6 @@ import (
 	"regexp"
 	"slices"
 	"sort"
-
-	"argus/internal/auth"
 )
 
 type Group struct {
@@ -53,7 +52,7 @@ func (c *Manager) Groups(ctx context.Context, org string) ([]Group, error) {
 
 func (c *Manager) loadGroups(ctx context.Context, org string) ([]Group, string, error) {
 	var gs []Group
-	rv, err := auth.LoadJSON(ctx, c.store, groupsKey(org), "groups", &gs)
+	rv, err := store.LoadJSON(ctx, c.store, groupsKey(org), "groups", &gs)
 	return gs, rv, err
 }
 
@@ -86,7 +85,7 @@ func (c *Manager) updateGroups(ctx context.Context, org string, fn func([]Group,
 			return err
 		}
 	}
-	return auth.SaveJSON(ctx, c.store, groupsKey(org), "groups", rv, gs)
+	return store.SaveJSON(ctx, c.store, groupsKey(org), "groups", rv, gs)
 }
 
 func addGroup(gs []Group, dc, cl string) []Group {

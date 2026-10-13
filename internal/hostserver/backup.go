@@ -21,11 +21,11 @@ import (
 	"sync"
 	"time"
 
-	"argus/internal/auth"
 	"argus/internal/hostd"
 	"argus/internal/hostui"
 	"argus/internal/kube"
 	"argus/internal/lifecycle"
+	"argus/internal/store"
 	"argus/internal/ui"
 	"argus/internal/vmdk"
 	"argus/internal/wire"
@@ -434,7 +434,7 @@ func (s *Server) saveRestores() {
 	s.backups.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := auth.PutJSON(ctx, s.Auth.Secrets(), restoresKey, "restores", json.RawMessage(b)); err != nil {
+	if err := store.PutJSON(ctx, s.Auth.Secrets(), restoresKey, "restores", json.RawMessage(b)); err != nil {
 		log.Printf("restores: save: %v", err)
 	}
 }
@@ -458,7 +458,7 @@ func (s *Server) untrackRestore(token string) {
 
 func (s *Server) resumeRestores() {
 	var m map[string]restoreJob
-	if _, err := auth.LoadJSON(context.Background(), s.Auth.Secrets(), restoresKey, "restores", &m); err != nil {
+	if _, err := store.LoadJSON(context.Background(), s.Auth.Secrets(), restoresKey, "restores", &m); err != nil {
 		return
 	}
 	s.backups.mu.Lock()

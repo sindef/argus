@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"argus/internal/auth"
 	"argus/internal/kube"
 	"argus/internal/lifecycle"
+	"argus/internal/store"
 	"argus/internal/wire"
 )
 
@@ -46,7 +46,7 @@ func (c *Manager) Protected(ctx context.Context) ([]Protected, error) {
 
 func (c *Manager) loadHA(ctx context.Context) ([]Protected, string, error) {
 	var ps []Protected
-	rv, err := auth.LoadJSON(ctx, c.store, haKey, "vms", &ps)
+	rv, err := store.LoadJSON(ctx, c.store, haKey, "vms", &ps)
 	return ps, rv, err
 }
 
@@ -60,7 +60,7 @@ func (c *Manager) updateHA(ctx context.Context, fn func([]Protected) ([]Protecte
 	if ps, err = fn(ps); err != nil {
 		return err
 	}
-	return auth.SaveJSON(ctx, c.store, haKey, "vms", rv, ps)
+	return store.SaveJSON(ctx, c.store, haKey, "vms", rv, ps)
 }
 
 func vmPath(vm, suffix string) string {
@@ -215,14 +215,14 @@ type HASettings struct {
 
 func (c *Manager) HASettings(ctx context.Context) HASettings {
 	var h HASettings
-	if _, err := auth.LoadJSON(ctx, c.store, haSettingsKey, "ha", &h); err != nil {
+	if _, err := store.LoadJSON(ctx, c.store, haSettingsKey, "ha", &h); err != nil {
 		log.Printf("ha: settings: %v", err)
 	}
 	return h
 }
 
 func (c *Manager) SetHASettings(ctx context.Context, h HASettings) error {
-	return auth.PutJSON(ctx, c.store, haSettingsKey, "ha", h)
+	return store.PutJSON(ctx, c.store, haSettingsKey, "ha", h)
 }
 
 func (c *Manager) Down(node string) bool { return c.down(node) }

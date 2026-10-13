@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"argus/internal/store"
 	"context"
 	"errors"
 	"fmt"
@@ -68,7 +69,7 @@ func (s *Store) rolesKey() string { return s.key + "-roles" }
 
 func (s *Store) Roles(ctx context.Context) ([]CustomRole, error) {
 	var rs []CustomRole
-	_, err := LoadJSON(ctx, s.secrets, s.rolesKey(), "roles", &rs)
+	_, err := store.LoadJSON(ctx, s.secrets, s.rolesKey(), "roles", &rs)
 	return rs, err
 }
 
@@ -82,7 +83,7 @@ func (s *Store) SaveRole(ctx context.Context, old string, role CustomRole) error
 		}
 	}
 	var rs []CustomRole
-	rv, err := LoadJSON(ctx, s.secrets, s.rolesKey(), "roles", &rs)
+	rv, err := store.LoadJSON(ctx, s.secrets, s.rolesKey(), "roles", &rs)
 	if err != nil {
 		return err
 	}
@@ -92,7 +93,7 @@ func (s *Store) SaveRole(ctx context.Context, old string, role CustomRole) error
 	rs = slices.DeleteFunc(rs, func(r CustomRole) bool { return r.Name == old || r.Name == role.Name })
 	rs = append(rs, role)
 	slices.SortFunc(rs, func(a, b CustomRole) int { return strings.Compare(a.Name, b.Name) })
-	if err := SaveJSON(ctx, s.secrets, s.rolesKey(), "roles", rv, rs); err != nil {
+	if err := store.SaveJSON(ctx, s.secrets, s.rolesKey(), "roles", rv, rs); err != nil {
 		return err
 	}
 	if old != "" && old != role.Name {
@@ -132,11 +133,11 @@ func (s *Store) DeleteRole(ctx context.Context, name string) error {
 		}
 	}
 	var rs []CustomRole
-	rv, err := LoadJSON(ctx, s.secrets, s.rolesKey(), "roles", &rs)
+	rv, err := store.LoadJSON(ctx, s.secrets, s.rolesKey(), "roles", &rs)
 	if err != nil {
 		return err
 	}
-	return SaveJSON(ctx, s.secrets, s.rolesKey(), "roles", rv, slices.DeleteFunc(rs, func(r CustomRole) bool { return r.Name == name }))
+	return store.SaveJSON(ctx, s.secrets, s.rolesKey(), "roles", rv, slices.DeleteFunc(rs, func(r CustomRole) bool { return r.Name == name }))
 }
 
 func (s *Store) renameRole(ctx context.Context, old, to Role) error {

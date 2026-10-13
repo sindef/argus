@@ -1,15 +1,25 @@
-package auth
+package store
 
 import (
 	"context"
 	"encoding/json"
-
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"errors"
 )
+
+var (
+	ErrNotFound = errors.New("not found")
+	ErrConflict = errors.New("changed concurrently")
+)
+
+type Secrets interface {
+	Get(ctx context.Context, name string) (map[string][]byte, string, error)
+	Create(ctx context.Context, name, typ string, data map[string][]byte) error
+	Update(ctx context.Context, name, resourceVersion string, data map[string][]byte) error
+}
 
 func LoadJSON(ctx context.Context, s Secrets, name, key string, v any) (string, error) {
 	data, rv, err := s.Get(ctx, name)
-	if apierrors.IsNotFound(err) {
+	if errors.Is(err, ErrNotFound) {
 		return "", nil
 	}
 	if err != nil {
@@ -32,7 +42,7 @@ func SaveJSON(ctx context.Context, s Secrets, name, key, rv string, v any) error
 
 func PutJSON(ctx context.Context, s Secrets, name, key string, v any) error {
 	_, rv, err := s.Get(ctx, name)
-	if err != nil && !apierrors.IsNotFound(err) {
+	if err != nil && !errors.Is(err, ErrNotFound) {
 		return err
 	}
 	return SaveJSON(ctx, s, name, key, rv, v)

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"argus/internal/store"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -16,7 +17,6 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 type Role string
@@ -65,14 +65,8 @@ var (
 	ErrPassword  = errors.New("current password is incorrect")
 )
 
-type Secrets interface {
-	Get(ctx context.Context, name string) (map[string][]byte, string, error)
-	Create(ctx context.Context, name, typ string, data map[string][]byte) error
-	Update(ctx context.Context, name, resourceVersion string, data map[string][]byte) error
-}
-
 type Store struct {
-	secrets  Secrets
+	secrets  store.Secrets
 	key      string
 	org      string
 	sessions *Sessions
@@ -184,7 +178,7 @@ func (s *Store) flushSessions(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err = PutJSON(ctx, s.secrets, sessionsSecret, "sessions", json.RawMessage(b)); err != nil {
+	if err = store.PutJSON(ctx, s.secrets, sessionsSecret, "sessions", json.RawMessage(b)); err != nil {
 		s.sessions.mu.Lock()
 		s.sessions.dirty = true
 		s.sessions.mu.Unlock()
@@ -212,7 +206,7 @@ func (s *Store) DropOrg(org string) {
 	s.revoked()
 }
 
-func NewStore(secrets Secrets) *Store {
+func NewStore(secrets store.Secrets) *Store {
 	return &Store{secrets: secrets, key: secretName, sessions: &Sessions{m: map[string]Session{}}}
 }
 
@@ -255,7 +249,7 @@ func RandomPassword() string {
 
 func (s *Store) load(ctx context.Context) ([]User, string, error) {
 	var us []User
-	rv, err := LoadJSON(ctx, s.secrets, s.key, secretKey, &us)
+	rv, err := store.LoadJSON(ctx, s.secrets, s.key, secretKey, &us)
 	return us, rv, err
 }
 
@@ -268,8 +262,8 @@ func (s *Store) modify(ctx context.Context, fn func([]User) ([]User, error)) err
 		if us, err = fn(us); err != nil {
 			return err
 		}
-		err = SaveJSON(ctx, s.secrets, s.key, secretKey, rv, us)
-		if (apierrors.IsConflict(err) || apierrors.IsAlreadyExists(err)) && attempt < 3 {
+		err = store.SaveJSON(ctx, s.secrets, s.key, secretKey, rv, us)
+		if errors.Is(err, store.ErrConflict) && attempt < 3 {
 			continue
 		}
 		return err
@@ -594,4 +588,4 @@ func pendingAdmin(users []User) bool {
 	return false
 }
 
-func (s *Store) Secrets() Secrets { return s.secrets }
+func (s *Store) Secrets() store.Secrets { return s.secrets }

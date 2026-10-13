@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"argus/internal/store"
 	"bytes"
 	"cmp"
 	"context"
@@ -17,8 +18,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"argus/internal/auth"
 )
 
 type Alarm struct {
@@ -241,7 +240,7 @@ func (s *Core) loadAcks(ctx context.Context) {
 func (s *Core) saveAcks(acks map[string]alarmAck) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	if err := auth.PutJSON(ctx, s.Auth.Secrets(), acksKey, "config", acks); err != nil {
+	if err := store.PutJSON(ctx, s.Auth.Secrets(), acksKey, "config", acks); err != nil {
 		log.Printf("alarms: save acknowledgements: %v", err)
 	}
 }
