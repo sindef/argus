@@ -23,8 +23,8 @@ import (
 	"argus/internal/dbstore"
 	"argus/internal/lifecycle"
 	"argus/internal/manager"
+	"argus/internal/managerserver"
 	"argus/internal/sealed"
-	"argus/internal/server"
 	"argus/internal/tlscert"
 )
 
@@ -89,7 +89,7 @@ func main() {
 	certs := tlscert.NewHolder(pki.Cert)
 	certs.Load(ctx, fs)
 	cancel()
-	srv, err := server.New(nil, store, server.Options{Banner: func(string) {}, Manager: mgr, Certs: certs, DataDir: data})
+	srv, err := managerserver.New(store, managerserver.Options{Banner: func(string) {}, Manager: mgr, Certs: certs, DataDir: data})
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"argus/internal/auth"
+	"argus/internal/hostserver"
 	"argus/internal/kube"
 	"argus/internal/lifecycle"
-	"argus/internal/server"
 	"argus/internal/tlscert"
 )
 
@@ -49,7 +49,7 @@ func main() {
 
 	certs := tlscert.NewHolder(pki.Cert)
 	certs.Load(context.Background(), kc.Secrets(ns))
-	srv, err := server.New(kc, store, server.Options{
+	srv, err := hostserver.New(kc, store, hostserver.Options{
 		Certs:       certs,
 		Banner:      banner,
 		RunDir:      runDir,

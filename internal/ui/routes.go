@@ -36,6 +36,7 @@ func (c *Core) Routes() []Route {
 	return []Route{
 		{"GET /static/", Public, http.FileServerFS(web.FS).ServeHTTP},
 		{"GET /audit", OrgAdmin, c.auditPage},
+		{"POST /certificate", OrgAdmin, c.setCertificate},
 		{"POST /notify", OrgAdmin, c.notifyForm},
 		{"GET /login", Public, c.loginPage},
 		{"POST /login", Public, c.login},

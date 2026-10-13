@@ -3,6 +3,7 @@ package ui
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -28,3 +29,13 @@ func NewToken() string {
 }
 
 func Fields(v string) []string { return strings.Fields(strings.ReplaceAll(v, ",", " ")) }
+
+func Gibibytes(v string) (string, error) {
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 || n > 4096 {
+		return "", errors.New("size must be 1-4096 GiB")
+	}
+	return fmt.Sprintf("%dGi", n), nil
+}
+
+var ValidImage = regexp.MustCompile(`^[A-Za-z0-9./:@_-]+$`)

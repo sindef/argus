@@ -202,3 +202,8 @@ type PoolRow struct {
 	Provisioned int64
 	Volumes     int
 }
+
+type HostVolume struct {
+	kube.Volume
+	Host string
+}

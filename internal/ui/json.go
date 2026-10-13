@@ -61,3 +61,15 @@ func DecodeJSON(r io.Reader, v any) error {
 }
 
 var ErrUnknownAction = errors.New("unknown action")
+
+func CopyStream(w http.ResponseWriter, resp *http.Response) {
+	for _, k := range []string{"Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"} {
+		if v := resp.Header.Get(k); v != "" {
+			w.Header().Set(k, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		log.Printf("stream %s: %v", resp.Request.URL.Path, err)
+	}
+}

@@ -10,6 +10,7 @@ import (
 
 	"argus/internal/auth"
 	"argus/internal/lifecycle"
+	"argus/internal/tlscert"
 	"argus/web"
 )
 
@@ -32,6 +33,7 @@ type Config struct {
 	Version  string
 	NodeName string
 	MultiOrg bool
+	Certs    *tlscert.Holder
 }
 
 type Core struct {
@@ -83,6 +85,9 @@ func (c *Core) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "same-origin")
 	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
+	if s := c.Certs; s != nil && r.TLS != nil && r.TLS.ServerName != "" && r.TLS.ServerName != tlscert.InternalName && s.Custom() != nil {
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000")
+	}
 	if !sameOrigin(r) {
 		http.Error(w, "cross-origin request refused", http.StatusForbidden)
 		return
