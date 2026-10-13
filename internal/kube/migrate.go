@@ -235,6 +235,7 @@ func (c *Client) createImportVM(ctx context.Context, ns, name, operation, src st
 		urls[d.DataVolume] = d.URL
 	}
 	spec := ex.Spec
+	StripHostDependencies(spec)
 	templates, _, _ := unstructured.NestedSlice(spec, "dataVolumeTemplates")
 	for _, t := range templates {
 		dv, _, _ := unstructured.NestedString(asObj(t), "metadata", "name")
