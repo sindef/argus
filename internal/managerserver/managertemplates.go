@@ -114,7 +114,8 @@ func (s *Server) saveToLibrary(ctx context.Context, org string, src manager.Node
 				resp.Body.Close()
 				return err
 			}
-			pr := &progressReader{r: resp.Body, last: time.Now(), fn: func(n int64) { progress(fmt.Sprintf("Copying %s: %.1f GiB", d.DataVolume, float64(n)/gib)) }}
+			total := resp.ContentLength
+			pr := &progressReader{r: resp.Body, last: time.Now(), fn: func(n int64) { progress("Copying " + d.DataVolume + ": " + transferred(n, total)) }}
 			n, err := io.Copy(f, pr)
 			resp.Body.Close()
 			if err == nil {

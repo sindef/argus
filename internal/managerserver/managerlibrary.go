@@ -347,11 +347,18 @@ type progressReader struct {
 func (p *progressReader) Read(b []byte) (int, error) {
 	n, err := p.r.Read(b)
 	p.n += int64(n)
-	if time.Since(p.last) > 5*time.Second {
+	if time.Since(p.last) > 2*time.Second || err == io.EOF {
 		p.last = time.Now()
 		p.fn(p.n)
 	}
 	return n, err
+}
+
+func transferred(n, total int64) string {
+	if total <= 0 {
+		return ui.HumanBytes(n)
+	}
+	return fmt.Sprintf("%s of %s %d%%", ui.HumanBytes(n), ui.HumanBytes(total), n*100/total)
 }
 
 func (s *Server) libraryAdd(r *http.Request) error {
@@ -406,8 +413,9 @@ func (s *Server) libraryAdd(r *http.Request) error {
 		if err := freeSpace(s.dataDir, resp.ContentLength); err != nil {
 			return err
 		}
-		pr := &progressReader{r: resp.Body, last: time.Now(), fn: func(n int64) { progress(fmt.Sprintf("Downloaded %.1f GiB", float64(n)/gib)) }}
-		progress("Downloading")
+		total := resp.ContentLength
+		pr := &progressReader{r: resp.Body, last: time.Now(), fn: func(n int64) { progress("Downloaded " + transferred(n, total)) }}
+		progress("Downloading " + transferred(0, total))
 		if err := s.storeDisk(org, name, tag, filepath.Base(req.URL.Path), arch, pr); err != nil {
 			return err
 		}
