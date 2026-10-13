@@ -247,14 +247,16 @@ spec:
               value: /host/etc/kairos-release
             - name: ARGUS_ADMIN_PASSWORD_FILE
               value: /host/etc/argus/admin-password
+            - name: GOMEMLIMIT
+              value: 200MiB
           ports:
             - containerPort: 8443
               hostPort: 443
           resources:
             requests:
-              memory: 32Mi
+              memory: 64Mi
             limits:
-              memory: 128Mi
+              memory: 256Mi
           securityContext:
             runAsNonRoot: true
             readOnlyRootFilesystem: true
