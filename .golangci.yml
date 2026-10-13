@@ -26,3 +26,5 @@ linters:
         text: "Error return value of `[^`]*\\.(Close|Remove|RemoveAll|Rollback)` is not checked"
       - path: _test\.go
         linters: [errcheck, bodyclose]
+      - linters: [bodyclose]
+        source: "remoteDownload\\("

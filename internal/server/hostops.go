@@ -91,14 +91,14 @@ type hostOps interface {
 	HardwareOp(ctx context.Context, ns, name, op string, req hwOpReq) error
 	Import(ctx context.Context, source, contentType string, body io.Reader) (string, error)
 	VCenterVMs(ctx context.Context, fields map[string]string) ([]vsphere.VM, error)
-	DownloadDisk(w http.ResponseWriter, r *http.Request, ns, name, disk string)
+	DownloadDisk(ctx context.Context, ns, name, disk, format string) (download, error)
 	OVF(ctx context.Context, ns, name string) (string, error)
 	Devices(ctx context.Context) (hostd.Devices, error)
 	FLRStart(ctx context.Context, ns, name, store, stamp string) (string, error)
 	FLRVolume(ctx context.Context, name string) (string, error)
 	FLR(ctx context.Context, owner, id string) (flrSession, error)
 	FLRList(ctx context.Context, owner, id, part, dir string) ([]hostd.FLREntry, error)
-	FLRFile(w http.ResponseWriter, r *http.Request, owner, id, part, file string)
+	FLRFile(ctx context.Context, owner, id, part, file string) (download, error)
 	FLRClose(ctx context.Context, owner, id string) error
 	MountMedia(ctx context.Context, ns, name, contentType string, size int64, body io.Reader) error
 	EjectMedia(ctx context.Context, ns, name string) error
@@ -453,8 +453,8 @@ func (l localOps) VCenterVMs(ctx context.Context, fields map[string]string) ([]v
 	return l.s.vcenterVMs(ctx, func(k string) string { return fields[k] })
 }
 
-func (l localOps) DownloadDisk(w http.ResponseWriter, r *http.Request, ns, name, disk string) {
-	l.s.streamDisk(w, r, ns, name, disk)
+func (l localOps) DownloadDisk(ctx context.Context, ns, name, disk, format string) (download, error) {
+	return l.s.openDisk(ctx, ns, name, disk, format)
 }
 
 type remoteOps struct{ n manager.Node }
@@ -552,25 +552,68 @@ func (o remoteOps) VCenterVMs(ctx context.Context, fields map[string]string) ([]
 	return out, o.n.Call(ctx, http.MethodPost, "/api/vms/import/vcenter-vms", fields, &out)
 }
 
-func (o remoteOps) DownloadDisk(w http.ResponseWriter, r *http.Request, ns, name, disk string) {
+func (o remoteOps) DownloadDisk(ctx context.Context, ns, name, disk, format string) (download, error) {
 	path := manager.APIPath("/api/vms/%s/%s/disks/%s/download", ns, name, disk)
-	if r.URL.Query().Get("format") == "vmdk" {
+	if format == "vmdk" {
 		path += "?format=vmdk"
 	}
-	resp, err := o.n.Open(r.Context(), http.MethodGet, path, nil, nil)
+	return remoteDownload(o.n.Open(ctx, http.MethodGet, path, nil, nil))
+}
+
+type download struct {
+	io.ReadCloser
+	Type, Length, Name string
+}
+
+type readCloser struct {
+	io.Reader
+	close func() error
+}
+
+func (c readCloser) Close() error { return c.close() }
+
+type statusError struct {
+	code int
+	err  error
+}
+
+func (e statusError) Error() string { return e.err.Error() }
+
+func (e statusError) Unwrap() error { return e.err }
+
+func remoteDownload(resp *http.Response, err error) (download, error) {
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		return download{}, err
+	}
+	_, params, _ := mime.ParseMediaType(resp.Header.Get("Content-Disposition"))
+	return download{resp.Body, resp.Header.Get("Content-Type"), resp.Header.Get("Content-Length"), params["filename"]}, nil
+}
+
+func serveDownload(w http.ResponseWriter, r *http.Request, d download, err error) {
+	if err != nil {
+		code := http.StatusBadGateway
+		var se statusError
+		if errors.As(err, &se) {
+			code = se.code
+		}
+		log.Printf("%s: %s: %v", session(r).User, r.URL.Path, err)
+		http.Error(w, err.Error(), code)
 		return
 	}
-	defer resp.Body.Close()
-	for _, k := range []string{"Content-Type", "Content-Length", "Content-Disposition"} {
-		if v := resp.Header.Get(k); v != "" {
-			w.Header().Set(k, v)
-		}
+	defer d.Close()
+	w.Header().Set("Content-Type", d.Type)
+	if d.Length != "" {
+		w.Header().Set("Content-Length", d.Length)
 	}
-	if _, err := io.Copy(w, resp.Body); err != nil {
-		log.Printf("stream %s: %v", r.URL.Path, err)
+	if d.Name != "" {
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": d.Name}))
 	}
+	n, err := io.Copy(w, d)
+	if err != nil {
+		log.Printf("%s: %s: %v after %d bytes", session(r).User, r.URL.Path, err, n)
+		panic(http.ErrAbortHandler)
+	}
+	log.Printf("%s: %s: %d bytes", session(r).User, r.URL.Path, n)
 }
 
 func (s *Server) apiOp(w http.ResponseWriter, r *http.Request, in any, fn func() (any, error)) {
@@ -696,7 +739,8 @@ func (s *Server) hostAPIRoutes() []route {
 			io.WriteString(w, x)
 		},
 		"GET /api/vms/{ns}/{name}/disks/{disk}/download": func(w http.ResponseWriter, r *http.Request) {
-			s.streamDisk(w, r, r.PathValue("ns"), r.PathValue("name"), r.PathValue("disk"))
+			d, err := l.DownloadDisk(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.PathValue("disk"), r.URL.Query().Get("format"))
+			serveDownload(w, r, d, err)
 		},
 	}
 	var rs []route

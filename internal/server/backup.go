@@ -727,81 +727,76 @@ func (s *Server) downloadDisk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.record(s.auditUser(session(r).Org, session(r).User), "download disk "+disk+" of "+ns+"/"+name, true, "")
-	s.ops(r).DownloadDisk(w, r, ns, name, disk)
+	d, err := s.ops(r).DownloadDisk(r.Context(), ns, name, disk, r.URL.Query().Get("format"))
+	serveDownload(w, r, d, err)
 }
 
-func (s *Server) streamDisk(w http.ResponseWriter, r *http.Request, ns, name, disk string) {
-	hw, err := s.kube.Hardware(r.Context(), ns, name)
+func (s *Server) openDisk(ctx context.Context, ns, name, disk, format string) (download, error) {
+	hw, err := s.kube.Hardware(ctx, ns, name)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
+		return download{}, statusError{http.StatusNotFound, err}
 	}
 	i := slices.IndexFunc(hw.Disks, func(d kube.HardwareDisk) bool { return d.Name == disk })
 	if i < 0 {
-		http.Error(w, "disk not found", http.StatusNotFound)
-		return
+		return download{}, statusError{http.StatusNotFound, errors.New("disk not found")}
 	}
 	key := ns + "/" + name
 	if !s.backups.start(key) {
-		http.Error(w, "a backup or download of this VM is already running", http.StatusConflict)
-		return
+		return download{}, statusError{http.StatusConflict, errors.New("a backup or download of this VM is already running")}
 	}
-	var copied int64
-	defer func() {
-		s.backups.mu.Lock()
-		delete(s.backups.running, key)
-		s.backups.mu.Unlock()
-	}()
-	ex, err := s.kube.BackupExport(r.Context(), ns, name)
-	defer func() {
+	release := func() {
 		cctx, cancel := lifecycle.CleanupContext()
 		defer cancel()
 		lifecycle.LogCleanup("backup export of "+name, s.kube.DeleteBackupExport(cctx, ns, name))
-	}()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusConflict)
-		return
+		s.backups.mu.Lock()
+		delete(s.backups.running, key)
+		s.backups.mu.Unlock()
 	}
-	src, cert, err := s.kube.BackupSource(r.Context(), ns, name, hw.Disks[i].PVC)
+	src, err := s.openDiskExport(ctx, ns, name, hw.Disks[i].PVC)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
+		release()
+		return download{}, err
 	}
-	resp, err := openExport(r.Context(), src, cert, ex.Token)
+	body := readCloser{src, func() error {
+		err := src.Close()
+		release()
+		return err
+	}}
+	if format != "vmdk" {
+		return download{body, "application/gzip", src.Length, fmt.Sprintf("%s-%s.img.gz", name, disk)}, nil
+	}
+	gz, err := gzip.NewReader(src)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
+		body.Close()
+		return download{}, err
 	}
-	defer resp.Body.Close()
+	file := fmt.Sprintf("%s-%s.vmdk", name, disk)
+	pr, pw := io.Pipe()
+	go func() { pw.CloseWithError(vmdk.Write(pw, gz, hw.Disks[i].SizeGiB<<30, file)) }()
+	return download{readCloser{pr, func() error {
+		pr.Close()
+		return body.Close()
+	}}, "application/octet-stream", "", file}, nil
+}
+
+func (s *Server) openDiskExport(ctx context.Context, ns, name, pvc string) (download, error) {
+	ex, err := s.kube.BackupExport(ctx, ns, name)
+	if err != nil {
+		return download{}, statusError{http.StatusConflict, err}
+	}
+	src, cert, err := s.kube.BackupSource(ctx, ns, name, pvc)
+	if err != nil {
+		return download{}, err
+	}
+	resp, err := openExport(ctx, src, cert, ex.Token)
+	if err != nil {
+		return download{}, err
+	}
 	if resp.StatusCode != http.StatusOK {
-		http.Error(w, "export returned "+resp.Status, http.StatusBadGateway)
-		return
+		resp.Body.Close()
+		return download{}, errors.New("export returned " + resp.Status)
 	}
-	if r.URL.Query().Get("format") == "vmdk" {
-		gz, err := gzip.NewReader(resp.Body)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
-			return
-		}
-		file := fmt.Sprintf("%s-%s.vmdk", name, disk)
-		w.Header().Set("Content-Type", "application/octet-stream")
-		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file))
-		cw := &countingWriter{w: w}
-		if err := vmdk.Write(cw, gz, hw.Disks[i].SizeGiB<<30, file); err != nil {
-			log.Printf("%s: vmdk export of %s/%s disk %s: %v", session(r).User, ns, name, disk, err)
-			panic(http.ErrAbortHandler)
-		}
-		copied = cw.n
-		log.Printf("%s: exported %s/%s disk %s as VMDK (%d bytes)", session(r).User, ns, name, disk, copied)
-		return
-	}
-	w.Header().Set("Content-Type", "application/gzip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-%s.img.gz"`, name, disk))
-	if v := resp.Header.Get("Content-Length"); v != "" {
-		w.Header().Set("Content-Length", v)
-	}
-	copied, _ = io.Copy(w, resp.Body)
-	log.Printf("%s: downloaded %s/%s disk %s (%d bytes)", session(r).User, ns, name, disk, copied)
+	return download{ReadCloser: resp.Body, Length: resp.Header.Get("Content-Length")}, nil
 }
 
 func openExport(ctx context.Context, src, ca, token string) (*http.Response, error) {
@@ -814,15 +809,4 @@ func openExport(ctx context.Context, src, ca, token string) (*http.Response, err
 	}
 	req.Header.Set("x-kubevirt-export-token", token)
 	return hc.Do(req)
-}
-
-type countingWriter struct {
-	w io.Writer
-	n int64
-}
-
-func (c *countingWriter) Write(p []byte) (int, error) {
-	n, err := c.w.Write(p)
-	c.n += int64(n)
-	return n, err
 }

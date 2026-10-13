@@ -9,7 +9,6 @@ import (
 	"io"
 	"log"
 	"maps"
-	"mime"
 	"net/http"
 	"net/url"
 	"path"
@@ -205,23 +204,16 @@ func (l localOps) FLRList(ctx context.Context, owner, id, part, dir string) ([]h
 	return l.s.hostd.FLRList(ctx, id, part, dir)
 }
 
-func (l localOps) FLRFile(w http.ResponseWriter, r *http.Request, owner, id, part, file string) {
+func (l localOps) FLRFile(ctx context.Context, owner, id, part, file string) (download, error) {
 	if _, err := l.s.flrSession(owner, id); err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
+		return download{}, statusError{http.StatusNotFound, err}
 	}
-	resp, err := l.s.hostd.FLRFile(r.Context(), id, part, file)
+	d, err := remoteDownload(l.s.hostd.FLRFile(ctx, id, part, file))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
+		return download{}, statusError{http.StatusNotFound, err}
 	}
-	defer resp.Body.Close()
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
-	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": path.Base(file)}))
-	if _, err := io.Copy(w, resp.Body); err != nil {
-		log.Printf("stream %s: %v", r.URL.Path, err)
-	}
+	d.Type, d.Name = "application/octet-stream", path.Base(file)
+	return d, nil
 }
 
 func (l localOps) FLRClose(ctx context.Context, owner, id string) error {
@@ -256,19 +248,8 @@ func (o remoteOps) FLRList(ctx context.Context, owner, id, part, dir string) ([]
 	return out, o.get(ctx, flrAPI(owner)+"/"+url.PathEscape(id)+"/ls?"+url.Values{"part": {part}, "path": {dir}}.Encode(), &out)
 }
 
-func (o remoteOps) FLRFile(w http.ResponseWriter, r *http.Request, owner, id, part, file string) {
-	resp, err := o.n.Open(r.Context(), http.MethodGet, flrAPI(owner)+"/"+url.PathEscape(id)+"/file?"+url.Values{"part": {part}, "path": {file}}.Encode(), nil, nil)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-	for _, k := range []string{"Content-Type", "Content-Length", "Content-Disposition"} {
-		w.Header().Set(k, resp.Header.Get(k))
-	}
-	if _, err := io.Copy(w, resp.Body); err != nil {
-		log.Printf("stream %s: %v", r.URL.Path, err)
-	}
+func (o remoteOps) FLRFile(ctx context.Context, owner, id, part, file string) (download, error) {
+	return remoteDownload(o.n.Open(ctx, http.MethodGet, flrAPI(owner)+"/"+url.PathEscape(id)+"/file?"+url.Values{"part": {part}, "path": {file}}.Encode(), nil, nil))
 }
 
 func (o remoteOps) FLRClose(ctx context.Context, owner, id string) error {
@@ -320,7 +301,8 @@ func (s *Server) filesStart(w http.ResponseWriter, r *http.Request) {
 func (s *Server) filesDownload(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	log.Printf("%s: download %s from %s", session(r).User, q.Get("path"), ownerOf(r))
-	s.ops(r).FLRFile(w, r, ownerOf(r), q.Get("id"), q.Get("part"), q.Get("path"))
+	d, err := s.ops(r).FLRFile(r.Context(), ownerOf(r), q.Get("id"), q.Get("part"), q.Get("path"))
+	serveDownload(w, r, d, err)
 }
 
 func (s *Server) filesClose(w http.ResponseWriter, r *http.Request) {
@@ -370,7 +352,8 @@ func (s *Server) flrAPIRoutes() []route {
 		})
 	}
 	file := func(w http.ResponseWriter, r *http.Request) {
-		l.FLRFile(w, r, ownerOf(r), r.PathValue("id"), r.URL.Query().Get("part"), r.URL.Query().Get("path"))
+		d, err := l.FLRFile(r.Context(), ownerOf(r), r.PathValue("id"), r.URL.Query().Get("part"), r.URL.Query().Get("path"))
+		serveDownload(w, r, d, err)
 	}
 	closeSession := func(w http.ResponseWriter, r *http.Request) {
 		s.apiOp(w, r, nil, func() (any, error) { return nil, l.FLRClose(r.Context(), ownerOf(r), r.PathValue("id")) })
