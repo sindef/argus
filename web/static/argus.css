@@ -349,3 +349,4 @@ input[readonly] { color: var(--muted); }
 .files .table-wrap { max-height: calc(100vh - 260px); overflow: auto; }
 .files thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
 .files.htmx-request table { opacity: .5; transition: opacity .15s; }
+tr.acked td:not(.row-actions) { opacity: .55; }

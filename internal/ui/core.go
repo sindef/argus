@@ -23,6 +23,7 @@ type Mode interface {
 	LoginData(r *http.Request, data map[string]any)
 	ScopeNames(r *http.Request) []string
 	Super(r *http.Request) bool
+	AlarmVisible(r *http.Request, a Alarm) bool
 }
 
 type Config struct {
@@ -74,6 +75,7 @@ func (c *Core) Handle(rs []Route) {
 }
 
 func (c *Core) Run(ctx context.Context) {
+	c.loadAcks(ctx)
 	var g lifecycle.Group
 	g.Go(ctx, c.auditLoop)
 	g.Go(ctx, c.Auth.PersistSessions)

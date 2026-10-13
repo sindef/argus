@@ -8,13 +8,17 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"net"
 	"net/http"
 	"net/smtp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"argus/internal/auth"
 )
 
 type Alarm struct {
@@ -24,11 +28,22 @@ type Alarm struct {
 	Object   string    `json:"object"`
 	Message  string    `json:"message"`
 	Since    time.Time `json:"since"`
+	AckBy    string    `json:"ackBy,omitempty"`
+	AckAt    time.Time `json:"ackAt"`
 }
+
+type alarmAck struct {
+	Message string    `json:"message"`
+	By      string    `json:"by"`
+	At      time.Time `json:"at"`
+}
+
+const acksKey = "argus-alarm-acks"
 
 type alarmState struct {
 	mu       sync.Mutex
 	active   map[string]Alarm
+	acks     map[string]alarmAck
 	notifyMu sync.Mutex
 }
 
@@ -111,6 +126,7 @@ func (s *Core) ApplyAlarms(found []Alarm) {
 	}
 	next := map[string]Alarm{}
 	var raised, cleared []Alarm
+	acked := false
 	for _, a := range found {
 		if old, ok := s.alarms.active[a.Key]; ok {
 			a.Since = old.Since
@@ -118,7 +134,16 @@ func (s *Core) ApplyAlarms(found []Alarm) {
 			a.Since = time.Now()
 			raised = append(raised, a)
 		}
+		if ack, ok := s.alarms.acks[a.Key]; ok && ack.Message == a.Message {
+			a.AckBy, a.AckAt = ack.By, ack.At
+		}
 		next[a.Key] = a
+	}
+	for k := range s.alarms.acks {
+		if a, ok := next[k]; !ok || a.AckBy == "" {
+			delete(s.alarms.acks, k)
+			acked = true
+		}
 	}
 	for k, a := range s.alarms.active {
 		if _, ok := next[k]; !ok {
@@ -126,7 +151,11 @@ func (s *Core) ApplyAlarms(found []Alarm) {
 		}
 	}
 	s.alarms.active = next
+	acks := maps.Clone(s.alarms.acks)
 	s.alarms.mu.Unlock()
+	if acked {
+		go s.saveAcks(acks)
+	}
 	if len(raised)+len(cleared) == 0 {
 		return
 	}
@@ -197,4 +226,49 @@ func (s *Core) notifyForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Refresh", "true")
+}
+
+func (s *Core) loadAcks(ctx context.Context) {
+	acks := map[string]alarmAck{}
+	if _, err := s.LoadJSON(ctx, acksKey, &acks); err != nil {
+		log.Printf("alarms: load acknowledgements: %v", err)
+	}
+	s.alarms.mu.Lock()
+	s.alarms.acks = acks
+	s.alarms.mu.Unlock()
+}
+
+func (s *Core) saveAcks(acks map[string]alarmAck) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := auth.PutJSON(ctx, s.Auth.Secrets(), acksKey, "config", acks); err != nil {
+		log.Printf("alarms: save acknowledgements: %v", err)
+	}
+}
+
+func (s *Core) ackAlarm(w http.ResponseWriter, r *http.Request) {
+	key := r.FormValue("key")
+	s.alarms.mu.Lock()
+	a, ok := s.alarms.active[key]
+	ok = ok && s.Mode.AlarmVisible(r, a)
+	if ok {
+		if s.alarms.acks == nil {
+			s.alarms.acks = map[string]alarmAck{}
+		}
+		a.AckBy, a.AckAt = s.AuditUser(Session(r).Org, Session(r).User), time.Now()
+		s.alarms.acks[key] = alarmAck{Message: a.Message, By: a.AckBy, At: a.AckAt}
+		s.alarms.active[key] = a
+	}
+	acks := maps.Clone(s.alarms.acks)
+	s.alarms.mu.Unlock()
+	if !ok {
+		Flash(w, r, errors.New("alarm is no longer active"))
+		return
+	}
+	s.saveAcks(acks)
+	w.Header().Set("HX-Refresh", "true")
+}
+
+func Unacked(as []Alarm) []Alarm {
+	return slices.DeleteFunc(slices.Clone(as), func(a Alarm) bool { return a.AckBy != "" })
 }

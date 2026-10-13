@@ -29,7 +29,7 @@
     {{template "icon" "search"}}
     <input name="q" placeholder="{{if .Manager}}Search VMs, hosts…{{else}}Search…{{end}}" value="{{.Query}}" aria-label="Search">
   </form>
-  <a class="icon-btn bell" href="/events" title="Events{{with .Alarms}}: {{len .}} active alarms{{end}}">{{template "icon" "bell"}}{{with .Alarms}}<span class="count">{{len .}}</span>{{end}}</a>
+  <a class="icon-btn bell" href="/events" title="Events{{with unacked .Alarms}}: {{len .}} active alarms{{end}}">{{template "icon" "bell"}}{{with unacked .Alarms}}<span class="count">{{len .}}</span>{{end}}</a>
   <span class="icon-btn" title="{{if .Manager}}Argus Manager{{else}}Argus{{end}} {{.Version}}">{{template "icon" "circle-help"}}</span>
   {{end}}
   <div class="menu user-menu">

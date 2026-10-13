@@ -82,10 +82,11 @@ var funcs = template.FuncMap{
 		}
 		return t.Local().Format("2006-01-02 15:04")
 	},
-	"has":   slices.Contains[[]string],
-	"add":   func(a, b int) int { return a + b },
-	"sub":   func(a, b int) int { return a - b },
-	"add64": func(a, b int64) int64 { return a + b },
+	"has":     slices.Contains[[]string],
+	"unacked": Unacked,
+	"add":     func(a, b int) int { return a + b },
+	"sub":     func(a, b int) int { return a - b },
+	"add64":   func(a, b int64) int64 { return a + b },
 	"vmCtx": func(v interface{ Page() string }, root map[string]any) map[string]any {
 		return map[string]any{"V": v, "Page": v.Page(), "CanOperate": root["CanOperate"], "IsAdmin": root["IsAdmin"]}
 	},

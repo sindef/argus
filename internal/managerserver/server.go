@@ -143,3 +143,11 @@ func (s *Server) LoginData(r *http.Request, data map[string]any) {
 func (s *Server) Super(r *http.Request) bool {
 	return superAdmin(r)
 }
+
+func (s *Server) AlarmVisible(r *http.Request, a ui.Alarm) bool {
+	if a.Host == "" {
+		return superAdmin(r)
+	}
+	_, err := s.nodeIn(r, a.Host)
+	return err == nil
+}

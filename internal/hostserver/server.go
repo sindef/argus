@@ -105,3 +105,5 @@ func (s *Server) LoginData(*http.Request, map[string]any) {}
 func (s *Server) ScopeNames(*http.Request) []string { return nil }
 
 func (s *Server) Super(*http.Request) bool { return true }
+
+func (s *Server) AlarmVisible(*http.Request, ui.Alarm) bool { return true }
