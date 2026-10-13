@@ -241,7 +241,6 @@ dialog::backdrop { background: #020814b3; }
 dialog h2 { margin: 0 0 6px; }
 .help { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--line-2); color: var(--muted); font-size: 11px; cursor: help; margin-left: 4px; }
 .overview { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
-.vm-summary { grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); }
 .cluster-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-2); }
 .cluster-row + .cluster-row { margin-top: 8px; }
 .donut-wrap { display: flex; align-items: center; gap: 28px; }
@@ -256,9 +255,15 @@ td.meter .bar { margin-top: 4px; }
 h1.inline { display: flex; align-items: center; gap: 14px; }
 h1 .dot { font-size: 14px; font-weight: 400; }
 .charts { grid-template-columns: 1fr 1fr; grid-column: span 1; }
+.vm-summary { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 16px; align-items: start; }
 .vm-summary > * { min-width: 0; }
-.vm-summary > .vm-charts { grid-row: span 2; display: flex; flex-direction: column; gap: 12px; }
-.vm-charts > .seg { align-self: flex-end; }
+.vm-summary > .wide { grid-column: 1 / -1; }
+.perf { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 20px; }
+.metric { min-width: 0; }
+.metric-head { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+.metric-head b { margin-left: auto; color: var(--fg); font-size: 16px; }
+.metric .chart { overflow: hidden; min-height: 150px; }
+@media (max-width: 1300px) { .vm-summary { grid-template-columns: minmax(0, 1fr); } }
 .card .table-wrap .clip { max-width: 0; width: 100%; white-space: nowrap; }
 .chart { min-height: 170px; }
 .big { font-size: 22px; font-weight: 600; }
