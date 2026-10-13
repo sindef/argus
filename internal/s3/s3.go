@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -25,6 +26,8 @@ const (
 	maxParts = 10000
 )
 
+var spooledPart int64 = 512 << 20
+
 type Client struct {
 	Endpoint  string
 	Region    string
@@ -32,6 +35,7 @@ type Client struct {
 	AccessKey string
 	SecretKey string
 	LockDays  int
+	Scratch   string
 	HTTP      *http.Client
 }
 
@@ -114,29 +118,42 @@ func (c *Client) sign(req *http.Request, payloadHash string) {
 	req.Header.Set("Authorization", fmt.Sprintf("AWS4-HMAC-SHA256 Credential=%s/%s, SignedHeaders=%s, Signature=%s", c.AccessKey, scope, signed, hex.EncodeToString(hmacSHA(key, toSign))))
 }
 
+type payload struct {
+	r      io.Reader
+	size   int64
+	sha256 string
+	md5    string
+}
+
 func (c *Client) do(ctx context.Context, method, key string, q url.Values, body []byte, ctype string) (*http.Response, error) {
+	p := memPayload(body)
+	if body == nil {
+		p.md5 = ""
+	}
+	return c.send(ctx, method, key, q, p, ctype)
+}
+
+func (c *Client) send(ctx context.Context, method, key string, q url.Values, body payload, ctype string) (*http.Response, error) {
 	u, err := c.url(key, q)
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, method, u.String(), bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), body.r)
 	if err != nil {
 		return nil, err
 	}
-	req.ContentLength = int64(len(body))
+	req.ContentLength = body.size
 	if ctype != "" {
 		req.Header.Set("Content-Type", ctype)
 	}
-	if method == http.MethodPut || method == http.MethodPost && body != nil {
-		sum := md5.Sum(body)
-		req.Header.Set("Content-MD5", base64.StdEncoding.EncodeToString(sum[:]))
+	if body.md5 != "" && (method == http.MethodPut || method == http.MethodPost) {
+		req.Header.Set("Content-MD5", body.md5)
 	}
 	if c.LockDays > 0 && (method == http.MethodPut && q.Get("partNumber") == "" || method == http.MethodPost && q.Has("uploads")) {
 		req.Header.Set("x-amz-object-lock-mode", "COMPLIANCE")
 		req.Header.Set("x-amz-object-lock-retain-until-date", time.Now().UTC().AddDate(0, 0, c.LockDays).Format(time.RFC3339))
 	}
-	sum := sha256.Sum256(body)
-	c.sign(req, hex.EncodeToString(sum[:]))
+	c.sign(req, body.sha256)
 	resp, err := c.client().Do(req)
 	if err != nil {
 		return nil, err
@@ -156,17 +173,57 @@ func (c *Client) do(ctx context.Context, method, key string, q url.Values, body 
 	return resp, nil
 }
 
+func memPayload(b []byte) payload {
+	sum, m := sha256.Sum256(b), md5.Sum(b)
+	return payload{bytes.NewReader(b), int64(len(b)), hex.EncodeToString(sum[:]), base64.StdEncoding.EncodeToString(m[:])}
+}
+
+func (c *Client) parts(r io.Reader) (func() (payload, bool, error), func(), int64, error) {
+	if c.Scratch == "" {
+		buf := make([]byte, partSize)
+		return func() (payload, bool, error) {
+			n, err := io.ReadFull(r, buf)
+			if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+				return payload{}, false, err
+			}
+			return memPayload(buf[:n]), n == partSize, nil
+		}, func() {}, partSize, nil
+	}
+	f, err := os.CreateTemp(c.Scratch, "part-")
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	return func() (payload, bool, error) {
+			if err := f.Truncate(0); err != nil {
+				return payload{}, false, err
+			}
+			h, m := sha256.New(), md5.New()
+			n, err := io.CopyN(io.MultiWriter(io.NewOffsetWriter(f, 0), h, m), r, spooledPart)
+			if err != nil && !errors.Is(err, io.EOF) {
+				return payload{}, false, err
+			}
+			return payload{io.NewSectionReader(f, 0, n), n, hex.EncodeToString(h.Sum(nil)), base64.StdEncoding.EncodeToString(m.Sum(nil))}, n == spooledPart, nil
+		}, func() {
+			f.Close()
+			os.Remove(f.Name())
+		}, spooledPart, nil
+}
+
 func (c *Client) Put(ctx context.Context, key string, r io.Reader) error {
-	buf := make([]byte, partSize)
-	n, err := io.ReadFull(r, buf)
-	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-		resp, err := c.do(ctx, http.MethodPut, key, nil, buf[:n], "")
+	next, cleanup, size, err := c.parts(r)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	p, full, err := next()
+	if err != nil {
+		return err
+	}
+	if !full {
+		resp, err := c.send(ctx, http.MethodPut, key, nil, p, "")
 		if err == nil {
 			resp.Body.Close()
 		}
-		return err
-	}
-	if err != nil {
 		return err
 	}
 	resp, err := c.do(ctx, http.MethodPost, key, url.Values{"uploads": {""}}, nil, "")
@@ -192,18 +249,20 @@ func (c *Client) Put(ctx context.Context, key string, r io.Reader) error {
 		ETag       string
 	}
 	var parts []part
-	for num := 1; n > 0; num++ {
+	for num := 1; p.size > 0; num++ {
 		if num > maxParts {
-			return abort(fmt.Errorf("%s is larger than %d GiB", key, partSize*maxParts>>30))
+			return abort(fmt.Errorf("%s is larger than %d GiB", key, size*maxParts>>30))
 		}
-		resp, err := c.do(ctx, http.MethodPut, key, url.Values{"partNumber": {strconv.Itoa(num)}, "uploadId": {init.UploadId}}, buf[:n], "")
+		resp, err := c.send(ctx, http.MethodPut, key, url.Values{"partNumber": {strconv.Itoa(num)}, "uploadId": {init.UploadId}}, p, "")
 		if err != nil {
 			return abort(err)
 		}
 		resp.Body.Close()
 		parts = append(parts, part{num, resp.Header.Get("ETag")})
-		n, err = io.ReadFull(r, buf)
-		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		if !full {
+			break
+		}
+		if p, full, err = next(); err != nil {
 			return abort(err)
 		}
 	}

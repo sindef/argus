@@ -86,17 +86,17 @@ func (s *Server) store(ctx context.Context, name string) (backupStore, error) {
 	if i < 0 {
 		return nil, fmt.Errorf("backup target %q is not configured on this host", name)
 	}
-	return openTarget(targets[i], s.hostd), nil
+	return s.openTarget(targets[i]), nil
 }
 
-func openTarget(t wire.BackupTarget, h *hostd.Client) backupStore {
-	var st backupStore = hostdStore{h}
+func (s *Server) openTarget(t wire.BackupTarget) backupStore {
+	var st backupStore = hostdStore{s.hostd}
 	if t.Kind == "s3" {
 		prefix := strings.Trim(t.Prefix, "/")
 		if prefix != "" {
 			prefix += "/"
 		}
-		st = s3Store{c: &s3.Client{Endpoint: t.Endpoint, Region: t.Region, Bucket: t.Bucket, AccessKey: t.AccessKey, SecretKey: t.SecretKey, LockDays: t.LockDays}, prefix: prefix}
+		st = s3Store{c: &s3.Client{Endpoint: t.Endpoint, Region: t.Region, Bucket: t.Bucket, AccessKey: t.AccessKey, SecretKey: t.SecretKey, LockDays: t.LockDays, Scratch: s.scratch}, prefix: prefix}
 	}
 	if t.Passphrase != "" {
 		st = encryptedStore{st, t.Passphrase}
@@ -173,7 +173,7 @@ func (s *Server) saveTarget(ctx context.Context, t wire.BackupTarget, remove boo
 		probe := ".argus-probe-" + ui.NewToken()[:12]
 		probeTarget := t
 		probeTarget.Passphrase, probeTarget.LockDays = "", 0
-		st := openTarget(probeTarget, nil).(s3Store)
+		st := s.openTarget(probeTarget).(s3Store)
 		if err := st.c.Put(ctx, st.prefix+probe, bytes.NewReader([]byte("ok"))); err != nil {
 			return fmt.Errorf("cannot write to the bucket: %w", err)
 		}

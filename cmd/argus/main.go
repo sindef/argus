@@ -61,6 +61,7 @@ func main() {
 		NodeName:    os.Getenv("NODE_NAME"),
 		HostIP:      os.Getenv("HOST_IP"),
 		Transfers:   envInt("ARGUS_TRANSFERS", 2),
+		Scratch:     os.Getenv("ARGUS_SCRATCH"),
 	})
 	if err != nil {
 		log.Fatal(err)

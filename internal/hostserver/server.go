@@ -31,6 +31,7 @@ type Server struct {
 	esxi        esxiStreams
 	tasks       taskList
 	hostIP      string
+	scratch     string
 	transfers   chan struct{}
 	smart       smartCache
 }
@@ -44,6 +45,7 @@ type Options struct {
 	Certs       *tlscert.Holder
 	HostIP      string
 	Transfers   int
+	Scratch     string
 }
 
 func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
@@ -51,7 +53,7 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{UI: &hostui.UI{Core: core}, kube: k, runDir: o.RunDir, releaseFile: o.ReleaseFile, caPEM: o.CAPEM, hostIP: o.HostIP, transfers: make(chan struct{}, max(o.Transfers, 1))}
+	s := &Server{UI: &hostui.UI{Core: core}, kube: k, runDir: o.RunDir, releaseFile: o.ReleaseFile, caPEM: o.CAPEM, hostIP: o.HostIP, scratch: o.Scratch, transfers: make(chan struct{}, max(o.Transfers, 1))}
 	core.Mode = s
 	s.Local = localOps{s}
 	if k != nil {

@@ -595,7 +595,7 @@ func (s *Server) vmBackupInfo(ctx context.Context, ns, name string) wire.VMBacku
 	var errs []string
 	for _, t := range targets {
 		info.Targets = append(info.Targets, wire.BackupTarget{Name: t.Name, Kind: t.Kind, Endpoint: t.Where()})
-		bs, err := vmBackups(ctx, openTarget(t, s.hostd), name)
+		bs, err := vmBackups(ctx, s.openTarget(t), name)
 		if err != nil {
 			errs = append(errs, t.Name+": "+err.Error())
 		}
@@ -701,7 +701,7 @@ func (s *Server) backupCatalog(ctx context.Context) hostui.BackupCatalog {
 		errs = append(errs, err.Error())
 	}
 	for _, t := range targets {
-		bs, err := openTarget(t, s.hostd).List(ctx)
+		bs, err := s.openTarget(t).List(ctx)
 		if err != nil {
 			errs = append(errs, t.Name+": "+err.Error())
 		}

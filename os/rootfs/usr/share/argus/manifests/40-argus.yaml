@@ -249,6 +249,8 @@ spec:
               value: /host/etc/argus/admin-password
             - name: GOMEMLIMIT
               value: 200MiB
+            - name: ARGUS_SCRATCH
+              value: /scratch
           ports:
             - containerPort: 8443
               hostPort: 443
@@ -274,7 +276,12 @@ spec:
             - name: release
               mountPath: /host/etc/kairos-release
               readOnly: true
+            - name: scratch
+              mountPath: /scratch
       volumes:
+        - name: scratch
+          emptyDir:
+            sizeLimit: 2Gi
         - name: run
           hostPath:
             path: /run/argus
