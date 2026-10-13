@@ -39,7 +39,7 @@
       <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
       <label>VLAN <input name="vlan" type="number" min="1" max="4094" placeholder="untagged"></label>
       {{with .Bridges}}<label>Bridge <select name="bridge">{{range .}}<option>{{.}}</option>{{end}}</select></label>{{end}}
-      <label>Bandwidth <span class="help" title="Limit in Mbit/s per VM network adapter, each direction. Empty for no limit.">?</span><input name="rate" type="number" min="1" max="100000" placeholder="Mbit/s, unlimited" class="num"></label>
+      <label>Bandwidth <span class="help" title="Limit in Mbit/s per VM network adapter, each direction. Empty for no limit.">?</span><span class="unit" data-unit="Mbit/s"><input name="rate" type="number" min="1" max="100000" placeholder="None" class="num"></span></label>
       <label class="check"><input type="checkbox" name="spoofcheck" value="on"> Block MAC spoofing <span class="help" title="Drops frames from a VM that use a MAC address other than its own.">?</span></label>
     </div>
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">{{template "icon" "plus"}}Add network</button></div>
@@ -54,7 +54,7 @@
       <label>Name <input name="name" readonly></label>
       <label>VLAN <input name="vlan" type="number" min="1" max="4094" placeholder="untagged"></label>
       {{with .Bridges}}<label>Bridge <select name="bridge">{{range .}}<option>{{.}}</option>{{end}}</select></label>{{end}}
-      <label>Bandwidth <span class="help" title="Limit in Mbit/s per VM network adapter, each direction. Empty for no limit.">?</span><input name="rate" type="number" min="1" max="100000" placeholder="Mbit/s, unlimited" class="num"></label>
+      <label>Bandwidth <span class="help" title="Limit in Mbit/s per VM network adapter, each direction. Empty for no limit.">?</span><span class="unit" data-unit="Mbit/s"><input name="rate" type="number" min="1" max="100000" placeholder="None" class="num"></span></label>
       <label class="check"><input type="checkbox" name="spoofcheck" value="on"> Block MAC spoofing <span class="help" title="Drops frames from a VM that use a MAC address other than its own.">?</span></label>
     </div>
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Save</button></div>
@@ -141,7 +141,7 @@
       <label>Name <input name="name" pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" required></label>
       <label>VLAN <input name="vlan" type="number" min="1" max="4094" placeholder="untagged"></label>
       <label>Bridge <span class="help" title="Must exist on every host. Create it under Host networks first.">?</span><input name="bridge" placeholder="br0" list="bridge-names"></label>
-      <label>Bandwidth <span class="help" title="Limit in Mbit/s per VM network adapter, each direction. Empty for no limit.">?</span><input name="rate" type="number" min="1" max="100000" placeholder="Mbit/s, unlimited" class="num"></label>
+      <label>Bandwidth <span class="help" title="Limit in Mbit/s per VM network adapter, each direction. Empty for no limit.">?</span><span class="unit" data-unit="Mbit/s"><input name="rate" type="number" min="1" max="100000" placeholder="None" class="num"></span></label>
       <label class="check"><input type="checkbox" name="spoofcheck" value="on"> Block MAC spoofing <span class="help" title="Drops frames from a VM that use a MAC address other than its own.">?</span></label>
     </div>
     <datalist id="bridge-names">{{range $.AllBridges}}<option>{{.}}</option>{{end}}</datalist>

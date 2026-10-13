@@ -187,7 +187,7 @@ dl.kv dd { margin: 0; }
 .form label { display: flex; flex-direction: column; gap: 6px; font-weight: 500; font-size: 13.5px; }
 .form label .help { display: inline-grid; }
 .form label:has(> .help) { display: block; }
-.form label:has(> .help) > input, .form label:has(> .help) > textarea, .form label:has(> .help) > select { display: block; width: 100%; margin-top: 6px; }
+.form label:has(> .help) > input, .form label:has(> .help) > textarea, .form label:has(> .help) > select, .form label:has(> .help) > .unit { display: block; width: 100%; margin-top: 6px; }
 .form label.check, .form label.check:has(> .help) { display: flex; flex-direction: row; align-items: center; gap: 8px; font-weight: 400; }
 .form label.check > input { display: inline-block; width: auto; margin: 0; flex: none; }
 .check { display: inline-flex; align-items: center; gap: 8px; font-weight: 400; }
@@ -351,6 +351,9 @@ input[readonly] { color: var(--muted); }
 .files.htmx-request table { opacity: .5; transition: opacity .15s; }
 tr.acked td:not(.row-actions) { opacity: .55; }
 .card:has([data-show-acked]:not(:checked)) tr.acked, .card:has([data-show-acked]:checked) tr.all-acked { display: none; }
+.unit { position: relative; display: block; }
+.unit > input { width: 100%; padding-right: 64px; }
+.unit::after { content: attr(data-unit); position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
 .content:has(> .taskbar) { padding-bottom: 64px; }
 .taskbar { position: fixed; bottom: 0; left: 260px; right: 0; z-index: 9; background: var(--bg-2); border-top: 1px solid var(--line); }
 .content.with-drawer > .taskbar { right: var(--drawer-w); }
