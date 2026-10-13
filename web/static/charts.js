@@ -7,14 +7,18 @@
     while (Math.abs(v) >= 1000 && i < units.length - 1) { v /= 1000; i++; }
     return (v >= 10 || i === 0 ? Math.round(v) : v.toFixed(1)) + " " + units[i] + unit;
   };
-  const cache = {};
+  let cache = {};
   const load = (src) => (cache[src] ??= fetch(src, { credentials: "same-origin" }).then((r) => r.json()));
+  const drawn = new Map();
 
   async function draw(el) {
     const data = await load(el.dataset.src);
     const cols = el.dataset.cols.split(",");
     const labels = (el.dataset.labels || el.dataset.cols).split(",");
     const unit = el.dataset.unit || "";
+    drawn.get(el)?.plot.destroy();
+    drawn.get(el)?.observer.disconnect();
+    drawn.delete(el);
     if (!data.t.length) {
       el.innerHTML = '<p class="muted">Collecting data…</p>';
       return;
@@ -36,8 +40,18 @@
     };
     el.innerHTML = "";
     const plot = new uPlot(opts, [data.t, ...cols.map((c) => data.cols[c])], el);
-    new ResizeObserver(() => plot.setSize({ width: el.clientWidth, height: opts.height })).observe(el);
+    const observer = new ResizeObserver(() => plot.setSize({ width: el.clientWidth, height: opts.height }));
+    observer.observe(el);
+    drawn.set(el, { plot, observer });
   }
 
-  document.addEventListener("DOMContentLoaded", () => document.querySelectorAll(".chart[data-src]").forEach(draw));
+  const drawAll = () => document.querySelectorAll(".chart[data-src]").forEach(draw);
+  document.addEventListener("DOMContentLoaded", () => {
+    drawAll();
+    setInterval(() => {
+      if (document.hidden) return;
+      cache = {};
+      drawAll();
+    }, 60000);
+  });
 })();
