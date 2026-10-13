@@ -217,8 +217,11 @@ progress { width: 160px; accent-color: var(--accent); }
 .or::before, .or::after { content: ""; flex: 1; border-top: 1px solid var(--line-2); }
 .between { display: flex; justify-content: space-between; align-items: center; }
 
+.nav-toggle { display: none; }
 @media (max-width: 900px) {
-  .sidebar { display: none; }
+  .nav-toggle { display: inline-flex; }
+  .sidebar { display: none; z-index: 15; }
+  body.nav-open .sidebar { display: block; box-shadow: 8px 0 24px rgba(0, 0, 0, .4); }
   .content { margin-left: 0; }
   .content.with-drawer { margin-right: 0; }
   .drawer { width: 100%; }

@@ -318,6 +318,10 @@
     });
     syncSelection();
   };
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-nav-toggle]")) document.body.classList.toggle("nav-open");
+    else if (!e.target.closest(".sidebar") || e.target.closest(".sidebar a")) document.body.classList.remove("nav-open");
+  });
   let tasksAt = Date.now();
   window.tasksDue = () => {
     const bar = document.getElementById("taskbar");

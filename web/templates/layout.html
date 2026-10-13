@@ -23,6 +23,7 @@
 {{define "layout"}}{{template "head" .}}
 <body>
 <header class="topbar">
+  {{if not .Session.MustChange}}<button class="icon-btn nav-toggle" data-nav-toggle aria-label="Menu">{{template "icon" "list"}}</button>{{end}}
   <a class="brand" href="/"><img src="/static/logo.svg" alt="">{{if .Manager}}Argus Manager{{else}}Argus{{end}}</a>
   {{if not .Session.MustChange}}
   <form class="search input-icon" action="{{if .Manager}}/vms{{else}}/{{end}}" method="get">
