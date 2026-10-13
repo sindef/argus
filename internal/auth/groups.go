@@ -70,13 +70,19 @@ func (s *Store) refreshGroupSessions(ctx context.Context, before, after []Group)
 		}
 		changed[g.Name] = true
 	}
-	us, _ := s.Users(ctx)
-	for _, u := range us {
+	s.refreshSessions(ctx, func(u User) bool {
 		hit := slices.ContainsFunc(u.Groups, func(n string) bool { return changed[n] })
 		for _, g := range append(slices.Clone(before), after...) {
 			hit = hit || changed[g.Name] && slices.Contains(g.Members, u.Name)
 		}
-		if !hit {
+		return hit
+	})
+}
+
+func (s *Store) refreshSessions(ctx context.Context, hit func(User) bool) {
+	us, _ := s.Users(ctx)
+	for _, u := range us {
+		if !hit(u) {
 			continue
 		}
 		if u.SSO {

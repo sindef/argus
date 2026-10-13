@@ -91,3 +91,24 @@ func TestSSOIdentityIsBySubject(t *testing.T) {
 		t.Fatalf("rename by subject failed: %+v", us)
 	}
 }
+
+func TestCustomRoleChangeRefreshesSessions(t *testing.T) {
+	ctx := context.Background()
+	s := NewStore(&memSecrets{m: map[string]map[string][]byte{}})
+	if err := s.SaveRole(ctx, "", CustomRole{Name: "boss", Privileges: []Privilege{Administer}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Add(ctx, "ann", "boss", "pw-ann-12345"); err != nil {
+		t.Fatal(err)
+	}
+	tok, _ := s.Login(ctx, "ann", "pw-ann-12345", false)
+	if sess, _ := s.Session(tok); sess.Role != Admin {
+		t.Fatalf("role before downgrade: %s", sess.Role)
+	}
+	if err := s.SaveRole(ctx, "boss", CustomRole{Name: "boss", Privileges: []Privilege{VMView}}); err != nil {
+		t.Fatal(err)
+	}
+	if sess, _ := s.Session(tok); sess.Role != ReadOnly {
+		t.Errorf("role after downgrade: %s", sess.Role)
+	}
+}

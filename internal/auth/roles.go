@@ -96,8 +96,19 @@ func (s *Store) SaveRole(ctx context.Context, old string, role CustomRole) error
 		return err
 	}
 	if old != "" && old != role.Name {
-		return s.renameRole(ctx, Role(old), Role(role.Name))
+		if err := s.renameRole(ctx, Role(old), Role(role.Name)); err != nil {
+			return err
+		}
 	}
+	gs, err := s.Groups(ctx)
+	if err != nil {
+		return err
+	}
+	s.refreshSessions(ctx, func(u User) bool {
+		return u.Role == Role(role.Name) || slices.ContainsFunc(gs, func(g Group) bool {
+			return g.Role == Role(role.Name) && (slices.Contains(g.Members, u.Name) || u.SSO && slices.Contains(u.Groups, g.Name))
+		})
+	})
 	return nil
 }
 
