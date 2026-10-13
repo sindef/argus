@@ -123,7 +123,7 @@ func Unpack(r io.Reader, passphrase, filesRoot string) (map[string]Record, []byt
 	tr := tar.NewReader(gz)
 	for {
 		h, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return recs, manifest, nil
 		}
 		if err != nil {
