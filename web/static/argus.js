@@ -324,12 +324,12 @@
     else if (!e.target.closest(".sidebar") || e.target.closest(".sidebar a")) document.body.classList.remove("nav-open");
   });
   let tasksAt = Date.now();
-  window.tasksDue = () => {
+  setInterval(() => {
     const bar = document.getElementById("taskbar");
-    if (!bar || !bar.open && Date.now() - tasksAt < 30000) return false;
+    if (!bar || document.hidden || !bar.open && Date.now() - tasksAt < 30000) return;
     tasksAt = Date.now();
-    return true;
-  };
+    htmx.trigger(bar, "refresh");
+  }, 5000);
   document.addEventListener("toggle", (e) => {
     if (e.target.id !== "taskbar") return;
     store.set("tasksOpen", e.target.open ? "1" : "");

@@ -45,7 +45,7 @@
 </header>
 <div class="shell">
   {{if not .Session.MustChange}}<aside class="sidebar">{{if .Manager}}{{template "manager-nav" .}}{{else}}{{template "node-nav" .}}{{end}}</aside>{{end}}
-  <main class="content"{{if .Session.MustChange}} style="margin-left:0"{{end}}>{{template "net-banner" .}}{{if .HostShell}}{{template "host-shell" .}}{{else}}{{template "content" .}}{{end}}{{if not .Session.MustChange}}<details id="taskbar" class="taskbar" hx-get="/tasks" hx-trigger="load, refresh, every 5s [tasksDue()]"><summary>{{template "icon" "activity"}}Recent tasks</summary></details>{{end}}</main>
+  <main class="content"{{if .Session.MustChange}} style="margin-left:0"{{end}}>{{template "net-banner" .}}{{if .HostShell}}{{template "host-shell" .}}{{else}}{{template "content" .}}{{end}}{{if not .Session.MustChange}}<details id="taskbar" class="taskbar" hx-get="/tasks" hx-trigger="load, refresh"><summary>{{template "icon" "activity"}}Recent tasks</summary></details>{{end}}</main>
   <p id="flash" class="error toast" role="alert"></p>
   <aside id="drawer" class="drawer"></aside>
   <dialog id="modal" class="card wide"></dialog>
