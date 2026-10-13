@@ -1,17 +1,13 @@
 package hostd
 
 import (
-	"bytes"
-	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 )
 
 type lsblkDev struct {
@@ -28,19 +24,6 @@ type lsblkDev struct {
 	Rota        bool       `json:"rota"`
 	Mountpoints []string   `json:"mountpoints"`
 	Children    []lsblkDev `json:"children"`
-}
-
-func run(ctx context.Context, name string, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
-	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
-		detail := strings.TrimSpace(cmp.Or(stderr.String(), stdout.String()))
-		return stdout.String(), fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, detail)
-	}
-	return stdout.String(), nil
 }
 
 var idPreference = []string{"wwn-", "nvme-eui.", "nvme-", "ata-", "scsi-", "virtio-", "usb-"}
