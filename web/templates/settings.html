@@ -76,6 +76,7 @@
     <header><h2>Configuration backup</h2></header>
     <form method="post" action="/settings/backup" class="form">
       <label>Passphrase <span class="help" title="Encrypts the backup, which holds credentials for every host. To restore: stop Argus Manager and run argus-manager -restore FILE with ARGUS_BACKUP_PASSPHRASE set.">?</span><input name="passphrase" type="password" minlength="12" required autocomplete="new-password"></label>
+      <label class="check"><input type="checkbox" name="include"> Include library images and templates <span class="help" title="Makes the backup as large as the library. Without it, the backup lists library content to add again after a restore.">?</span></label>
       <div class="actions"><button class="btn primary" type="submit">{{template "icon" "download"}}Download</button></div>
     </form>
   </section>

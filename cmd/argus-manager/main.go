@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -10,7 +11,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -130,14 +133,11 @@ func restore(file, data, keyFile, passphrase string, force bool) error {
 	if passphrase == "" {
 		return errors.New("set ARGUS_BACKUP_PASSPHRASE")
 	}
-	enc, err := os.ReadFile(file)
+	f, err := os.Open(file)
 	if err != nil {
 		return err
 	}
-	recs, err := dbstore.Unpack(enc, passphrase)
-	if err != nil {
-		return err
-	}
+	defer f.Close()
 	st, err := openStore(data, keyFile)
 	if err != nil {
 		return err
@@ -148,6 +148,17 @@ func restore(file, data, keyFile, passphrase string, force bool) error {
 		return err
 	} else if !empty && !force {
 		return fmt.Errorf("%s already holds a configuration; stop Argus Manager and pass -force to overwrite it", data)
+	}
+	recs, manifest, err := dbstore.Unpack(f, passphrase, data)
+	if err != nil {
+		return err
+	}
+	var man struct {
+		Included          bool
+		Images, Templates []string
+	}
+	if json.Unmarshal(manifest, &man) == nil && !man.Included && len(man.Images)+len(man.Templates) > 0 {
+		log.Printf("library content is not in this backup; add these again: %s", strings.Join(slices.Concat(man.Images, man.Templates), ", "))
 	}
 	return st.Replace(ctx, recs)
 }

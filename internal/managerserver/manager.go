@@ -987,15 +987,33 @@ func (s *Server) managerBackup(w http.ResponseWriter, r *http.Request) {
 		s.renderSettings(w, r, "", err)
 		return
 	}
-	out, err := dbstore.Pack(recs, pass)
-	if err != nil {
-		s.renderSettings(w, r, "", err)
-		return
+	man := backupManifest{Included: r.FormValue("include") != ""}
+	orgs, _ := s.manager.Orgs(r.Context())
+	for _, o := range orgs {
+		for _, img := range s.library(o.ID) {
+			man.Images = append(man.Images, img.Repo+":"+img.Tag)
+		}
+		for _, t := range s.libraryTemplates(o.ID) {
+			man.Templates = append(man.Templates, o.ID+"/"+t.Name)
+		}
+	}
+	var dirs []string
+	if man.Included {
+		dirs = []string{"registry", "templates"}
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="argus-manager-%s.backup"`, time.Now().Format("20060102-1504")))
-	w.Write(out)
-	s.Record(s.AuditUser(ui.Session(r).Org, ui.Session(r).User), "download configuration backup", true, "")
+	err = dbstore.Pack(w, recs, pass, man, s.dataDir, dirs)
+	if err != nil {
+		log.Printf("configuration backup: %v", err)
+	}
+	s.Record(s.AuditUser(ui.Session(r).Org, ui.Session(r).User), "download configuration backup", err == nil, ui.ErrText(err))
+}
+
+type backupManifest struct {
+	Included  bool     `json:"included"`
+	Images    []string `json:"images"`
+	Templates []string `json:"templates"`
 }
 
 type haRow struct {
