@@ -374,8 +374,13 @@ tr.acked td:not(.row-actions) { opacity: .55; }
 .selector-row { display: flex; gap: 8px; }
 .selector-row > * { flex: 1; min-width: 0; }
 .selector-row > [data-kind] { flex: 0 0 160px; }
-.progress { display: block; height: 4px; margin-top: 6px; border-radius: 2px; background: var(--line-2); overflow: hidden; }
-.progress > span { display: block; height: 100%; background: var(--accent); transition: width .5s; }
-.progress.busy > span { width: 30% !important; animation: busy 1.4s ease-in-out infinite; }
+.task-status { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.task-status > .dot { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.task-status > .dot::before { display: inline-block; margin-right: 8px; vertical-align: 0; }
+.meter { flex: none; display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.meter > b { font-weight: 600; min-width: 3ch; text-align: right; font-variant-numeric: tabular-nums; }
+.meter .bar { width: 96px; height: 6px; border-radius: 3px; background: var(--line-2); overflow: hidden; }
+.meter .bar > i { display: block; height: 100%; background: var(--accent); transition: width .5s; }
+.meter.busy .bar > i { width: 30% !important; animation: busy 1.4s ease-in-out infinite; }
 @keyframes busy { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
 .menu-label { display: block; padding: 6px 10px 2px; color: var(--muted); font-size: 12px; }

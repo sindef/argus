@@ -241,16 +241,22 @@ type Task struct {
 	Done    bool      `json:"done"`
 	Failed  bool      `json:"failed"`
 	Hold    bool      `json:"hold,omitempty"`
-	Percent float64   `json:"percent,omitempty"`
 }
 
 var percentRE = regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
 
-func Percent(status string) float64 {
-	m := percentRE.FindAllStringSubmatch(status, -1)
+type Progress struct {
+	Text    string
+	Percent float64
+	Known   bool
+}
+
+func ParseProgress(status string) Progress {
+	m := percentRE.FindAllStringSubmatchIndex(status, -1)
 	if len(m) == 0 {
-		return 0
+		return Progress{Text: status}
 	}
-	p, _ := strconv.ParseFloat(m[len(m)-1][1], 64)
-	return min(p, 100)
+	last := m[len(m)-1]
+	p, _ := strconv.ParseFloat(status[last[2]:last[3]], 64)
+	return Progress{Text: strings.TrimSpace(status[:last[0]] + status[last[1]:]), Percent: min(p, 100), Known: true}
 }

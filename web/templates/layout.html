@@ -81,11 +81,13 @@
 <div class="table-wrap"><table>
   <thead><tr><th>Task</th><th>Object</th>{{if .Manager}}<th>Host</th>{{end}}<th>Status</th><th>User</th><th>Started</th><th></th></tr></thead>
   <tbody>{{range .Tasks}}<tr><td>{{.Kind}}</td><td>{{or .VM .Object}}</td>{{if $.Manager}}<td>{{.Host}}</td>{{end}}
-    <td class="clip" title="{{.Status}}"><span class="dot {{if .Hold}}Warning{{else if .Failed}}Failed{{else if .Done}}Succeeded{{else}}Migrating{{end}}">{{.Status}}</span>{{if not .Done}}<span class="progress{{if not .Percent}} busy{{end}}"><span style="width:{{.Percent}}%"></span></span>{{end}}</td>
+    <td class="clip" title="{{.Status}}">{{template "task-status" dict "Status" .Status "Done" .Done "State" (or (and .Hold "Warning") (and .Failed "Failed") (and .Done "Succeeded") "Migrating")}}</td>
     <td>{{or .User "System"}}</td><td title="{{.Started.Local.Format "2006-01-02 15:04:05"}}">{{.Started.Local.Format "15:04"}}</td>
     <td class="row-actions">{{if .Hold}}<a class="link" href="/events">Resolve</a>{{else if .Failed}}<button class="link" hx-post="/tasks/dismiss" hx-vals='{"id":"{{.ID}}","host":"{{.Node}}"}' hx-target="#taskbar">Dismiss</button>{{end}}</td></tr>
   {{else}}<tr><td colspan="7" class="muted">No recent tasks</td></tr>{{end}}</tbody>
 </table></div>{{end}}
+
+{{define "task-status"}}{{$p := progress .Status}}<div class="task-status"><span class="dot {{.State}}">{{if .Done}}{{.Status}}{{else}}{{$p.Text}}{{end}}</span>{{if not .Done}}<span class="meter{{if not $p.Known}} busy{{end}}"><span class="bar"><i style="width:{{$p.Percent}}%"></i></span>{{if $p.Known}}<b>{{printf "%.0f" $p.Percent}}%</b>{{end}}</span>{{end}}</div>{{end}}
 
 {{define "net-banner"}}{{with .NetPending}}<div class="net-banner">{{template "icon" "triangle-alert"}}<span>Network change “{{.Description}}” rolls back at {{.Deadline.Local.Format "15:04:05"}} unless confirmed.</span><button class="btn sm primary" hx-post="{{$.Base}}/network/host/confirm" hx-target="#flash">Keep it</button><button class="btn sm" hx-post="{{$.Base}}/network/host/rollback" hx-target="#flash">Roll back now</button></div>{{end}}{{end}}
 

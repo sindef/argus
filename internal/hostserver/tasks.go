@@ -37,7 +37,7 @@ func (l *taskList) begin(ctx context.Context, kind, vm, object string) *wire.Tas
 func (l *taskList) set(t *wire.Task, status string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	t.Status, t.Percent = status, wire.Percent(status)
+	t.Status = status
 }
 
 func (l *taskList) end(t *wire.Task, err error) {

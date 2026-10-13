@@ -83,12 +83,12 @@ var funcs = template.FuncMap{
 		}
 		return t.Local().Format("2006-01-02 15:04")
 	},
-	"has":     slices.Contains[[]string],
-	"unacked": Unacked,
-	"percent": wire.Percent,
-	"add":     func(a, b int) int { return a + b },
-	"sub":     func(a, b int) int { return a - b },
-	"add64":   func(a, b int64) int64 { return a + b },
+	"has":      slices.Contains[[]string],
+	"unacked":  Unacked,
+	"progress": wire.ParseProgress,
+	"add":      func(a, b int) int { return a + b },
+	"sub":      func(a, b int) int { return a - b },
+	"add64":    func(a, b int64) int64 { return a + b },
 	"vmCtx": func(v interface{ Page() string }, root map[string]any) map[string]any {
 		can := root["Can"]
 		if c, ok := v.(interface{ Capabilities() (Can, bool) }); ok {
