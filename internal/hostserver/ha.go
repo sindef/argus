@@ -94,7 +94,7 @@ func (s *Server) apiSnapshotExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.BaseURL == "self" {
-		req.BaseURL = "https://" + os.Getenv("HOST_IP")
+		req.BaseURL = "https://" + s.hostIP
 	}
 	ex, err := s.kube.ExportVMSnapshot(r.Context(), ns, name, req.BaseURL, string(s.caPEM))
 	if err != nil {

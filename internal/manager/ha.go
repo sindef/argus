@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"argus/internal/auth"
-	"argus/internal/config"
 	"argus/internal/kube"
 	"argus/internal/lifecycle"
 	"argus/internal/wire"
@@ -304,8 +303,6 @@ func (c *Manager) failover(ctx context.Context) {
 	}
 }
 
-var replications = make(chan struct{}, config.Int("ARGUS_REPLICATIONS", 2))
-
 func (c *Manager) replicate(ctx context.Context) {
 	ps, err := c.Protected(ctx)
 	if err != nil {
@@ -332,9 +329,9 @@ func (c *Manager) replicate(ctx context.Context) {
 			}()
 			sctx, cancel := context.WithTimeout(ctx, 6*time.Hour)
 			defer cancel()
-			replications <- struct{}{}
+			c.replications <- struct{}{}
 			err := c.sync(sctx, p)
-			<-replications
+			<-c.replications
 			msg := ""
 			if err != nil {
 				msg = err.Error()

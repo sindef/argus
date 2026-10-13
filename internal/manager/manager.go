@@ -49,7 +49,8 @@ type Node struct {
 type NodeInfo = kube.NodeInfo
 
 type Manager struct {
-	store auth.Secrets
+	store        auth.Secrets
+	replications chan struct{}
 
 	mu       sync.Mutex
 	jobsMu   sync.Mutex
@@ -66,8 +67,8 @@ type Manager struct {
 	fwPushed map[string]string
 }
 
-func New(store auth.Secrets, metricsPath string) *Manager {
-	return &Manager{store: store, lastSeen: map[string]time.Time{}, busy: map[string]bool{}, syncing: map[string]bool{}, promoted: map[string]time.Time{}, fwPushed: map[string]string{}, started: time.Now(), inv: inventory{nodes: map[string]NodeState{}}, tel: newTelemetry(metricsPath)}
+func New(store auth.Secrets, metricsPath string, replications int) *Manager {
+	return &Manager{store: store, lastSeen: map[string]time.Time{}, busy: map[string]bool{}, syncing: map[string]bool{}, promoted: map[string]time.Time{}, fwPushed: map[string]string{}, started: time.Now(), inv: inventory{nodes: map[string]NodeState{}}, tel: newTelemetry(metricsPath), replications: make(chan struct{}, max(replications, 1))}
 }
 
 func (c *Manager) Nodes(ctx context.Context) ([]Node, error) {

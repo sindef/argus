@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,9 +17,11 @@ import (
 	"argus/internal/kube"
 	"argus/internal/lifecycle"
 	"argus/internal/tlscert"
+	"argus/internal/ui"
 )
 
 func main() {
+	ui.TrustProxies(os.Getenv("ARGUS_TRUSTED_PROXIES"))
 	addr := env("ARGUS_ADDR", ":8443")
 	ns := env("ARGUS_NAMESPACE", "argus-system")
 
@@ -56,6 +59,8 @@ func main() {
 		ReleaseFile: os.Getenv("ARGUS_RELEASE_FILE"),
 		CAPEM:       pki.CAPEM,
 		NodeName:    os.Getenv("NODE_NAME"),
+		HostIP:      os.Getenv("HOST_IP"),
+		Transfers:   envInt("ARGUS_TRANSFERS", 2),
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -110,6 +115,13 @@ func retry(fn func(context.Context) error) {
 		log.Print(err)
 		time.Sleep(5 * time.Second)
 	}
+}
+
+func envInt(k string, def int) int {
+	if n, err := strconv.Atoi(os.Getenv(k)); err == nil && n > 0 {
+		return n
+	}
+	return def
 }
 
 func env(k, def string) string {

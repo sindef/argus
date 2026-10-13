@@ -15,7 +15,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -23,7 +22,6 @@ import (
 	"time"
 
 	"argus/internal/auth"
-	"argus/internal/config"
 	"argus/internal/hostd"
 	"argus/internal/hostui"
 	"argus/internal/kube"
@@ -240,8 +238,6 @@ func (s *Server) setLastCopy(key string, t time.Time) {
 	s.backups.lastCopy[key] = t
 }
 
-var transfers = make(chan struct{}, config.Int("ARGUS_TRANSFERS", 2))
-
 func (s *Server) startBackup(ctx context.Context, ns, name string, p wire.BackupPolicy) bool {
 	key := ns + "/" + name
 	if !s.backups.start(key) {
@@ -252,8 +248,8 @@ func (s *Server) startBackup(ctx context.Context, ns, name string, p wire.Backup
 		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
 		defer cancel()
 		s.tasks.set(t, "Waiting for a transfer slot")
-		transfers <- struct{}{}
-		defer func() { <-transfers }()
+		s.transfers <- struct{}{}
+		defer func() { <-s.transfers }()
 		s.tasks.set(t, "Running")
 		err := s.backupVM(ctx, ns, name, p)
 		s.tasks.end(t, err)
@@ -419,7 +415,7 @@ func (s *Server) restoreBackup(ctx context.Context, store, vm, stamp, target str
 	token := ui.NewToken()
 	ex := kube.Export{Spec: meta.Spec, Token: token, CA: string(s.caPEM)}
 	for _, d := range meta.Disks {
-		ex.Disks = append(ex.Disks, kube.ExportDisk{DataVolume: names[d], URL: fmt.Sprintf("https://%s/backups/%s/%s.img.gz", os.Getenv("HOST_IP"), rel, d)})
+		ex.Disks = append(ex.Disks, kube.ExportDisk{DataVolume: names[d], URL: fmt.Sprintf("https://%s/backups/%s/%s.img.gz", s.hostIP, rel, d)})
 	}
 	job := restoreJob{Store: store, Rel: rel, Namespace: meta.Namespace, Target: target, Key: meta.Namespace + "/" + vm}
 	s.trackRestore(token, job)

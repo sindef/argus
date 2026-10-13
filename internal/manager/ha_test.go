@@ -14,7 +14,7 @@ func TestUnprotectOnlyMatchesOwnHosts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := New(fs, filepath.Join(t.TempDir(), "m.gob"))
+	c := New(fs, filepath.Join(t.TempDir(), "m.gob"), 1)
 	ctx := context.Background()
 	c.updateHA(ctx, func([]Protected) ([]Protected, error) {
 		return []Protected{{VM: "web", Owner: "a1", Replica: "a2"}, {VM: "web", Owner: "b1", Replica: "b2"}}, nil
@@ -33,7 +33,7 @@ func TestUnprotectOnlyMatchesOwnHosts(t *testing.T) {
 
 func TestFailoverIsManualByDefault(t *testing.T) {
 	fs, _ := testStore(t)
-	c := New(fs, filepath.Join(t.TempDir(), "m.gob"))
+	c := New(fs, filepath.Join(t.TempDir(), "m.gob"), 1)
 	ctx := context.Background()
 	c.save(ctx, []Node{{Name: "a1", Org: "o"}, {Name: "a2", Org: "o"}}, "")
 	c.updateHA(ctx, func([]Protected) ([]Protected, error) {

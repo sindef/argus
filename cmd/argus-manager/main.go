@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -26,9 +27,11 @@ import (
 	"argus/internal/managerserver"
 	"argus/internal/sealed"
 	"argus/internal/tlscert"
+	"argus/internal/ui"
 )
 
 func main() {
+	ui.TrustProxies(os.Getenv("ARGUS_TRUSTED_PROXIES"))
 	syscall.Umask(0o077)
 	addr := env("ARGUS_ADDR", ":8443")
 	data := env("ARGUS_DATA", "/var/lib/argus-manager")
@@ -65,7 +68,7 @@ func main() {
 	} else if n > 0 {
 		log.Printf("moved %d configuration files into the encrypted database", n)
 	}
-	mgr := manager.New(fs, filepath.Join(data, "metrics.gob"))
+	mgr := manager.New(fs, filepath.Join(data, "metrics.gob"), envInt("ARGUS_REPLICATIONS", 2))
 	if err := mgr.EnsureDefaultOrg(ctx); err != nil {
 		log.Fatal(err)
 	}
@@ -104,6 +107,13 @@ func main() {
 	if err := lifecycle.Serve(hs, mgr.Run, srv.Run); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func envInt(k string, def int) int {
+	if n, err := strconv.Atoi(os.Getenv(k)); err == nil && n > 0 {
+		return n
+	}
+	return def
 }
 
 func env(k, def string) string {

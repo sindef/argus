@@ -18,7 +18,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"path"
 	"regexp"
 	"slices"
@@ -378,7 +377,7 @@ func (s *Server) importESXi(ctx context.Context, f func(string) string) (string,
 	token := hex.EncodeToString(b)
 	secret := "argus-esxi-" + v.Name
 	for i := range v.Disks {
-		v.Disks[i].Source = map[string]any{"http": map[string]any{"url": fmt.Sprintf("https://%s/esxi-import/%d", os.Getenv("HOST_IP"), i), "certConfigMap": secret, "secretExtraHeaders": []any{secret}}}
+		v.Disks[i].Source = map[string]any{"http": map[string]any{"url": fmt.Sprintf("https://%s/esxi-import/%d", s.hostIP, i), "certConfigMap": secret, "secretExtraHeaders": []any{secret}}}
 	}
 	if err := s.kube.CreateTokenSource(ctx, secret, string(s.caPEM), token); err != nil {
 		return "", err

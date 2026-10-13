@@ -41,7 +41,7 @@ func newHarness(t *testing.T) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := New(store, Options{Manager: manager.New(db, ""), Certs: tlscert.NewHolder(pki.Cert), DataDir: dir})
+	s, err := New(store, Options{Manager: manager.New(db, "", 1), Certs: tlscert.NewHolder(pki.Cert), DataDir: dir})
 	if err != nil {
 		t.Fatal(err)
 	}

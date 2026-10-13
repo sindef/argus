@@ -4,7 +4,6 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
-	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -18,17 +17,18 @@ const (
 	maxBackoff    = 15 * time.Minute
 )
 
-var trustedProxies = func() []netip.Prefix {
-	var out []netip.Prefix
-	for _, f := range strings.FieldsFunc(os.Getenv("ARGUS_TRUSTED_PROXIES"), func(r rune) bool { return r == ',' || r == ' ' }) {
+var trustedProxies []netip.Prefix
+
+func TrustProxies(list string) {
+	trustedProxies = nil
+	for _, f := range strings.FieldsFunc(list, func(r rune) bool { return r == ',' || r == ' ' }) {
 		if p, err := netip.ParsePrefix(f); err == nil {
-			out = append(out, p)
+			trustedProxies = append(trustedProxies, p)
 		} else if a, err := netip.ParseAddr(f); err == nil {
-			out = append(out, netip.PrefixFrom(a, a.BitLen()))
+			trustedProxies = append(trustedProxies, netip.PrefixFrom(a, a.BitLen()))
 		}
 	}
-	return out
-}()
+}
 
 func trusted(ip string) bool {
 	a, err := netip.ParseAddr(ip)
