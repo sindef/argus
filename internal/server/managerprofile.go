@@ -13,6 +13,7 @@ import (
 
 	"argus/internal/kube"
 	"argus/internal/manager"
+	"argus/internal/ui"
 )
 
 type complianceRow struct {
@@ -64,7 +65,7 @@ func profileDiffs(p manager.Profile, st HostSettings, nets []kube.Network, defs 
 }
 
 func (s *Server) compliance(r *http.Request, p manager.Profile, dc, cl string) []complianceRow {
-	defs, _ := s.manager.Networks(r.Context(), session(r).Org)
+	defs, _ := s.manager.Networks(r.Context(), ui.Session(r).Org)
 	members := s.clusterMembers(r, dc, cl)
 	rows := make([]complianceRow, len(members))
 	var wg sync.WaitGroup
@@ -92,28 +93,28 @@ func (s *Server) compliance(r *http.Request, p manager.Profile, dc, cl string) [
 
 func (s *Server) profilePage(w http.ResponseWriter, r *http.Request) {
 	dc, cl := r.FormValue("dc"), r.FormValue("cluster")
-	p, err := s.manager.Profile(r.Context(), session(r).Org, dc, cl)
-	s.render(w, r, "profile.html", "layout", map[string]any{"Nav": "profile", "DC": dc, "Cluster": cl, "Profile": p, "Rows": s.compliance(r, p, dc, cl), "Error": errText(err)})
+	p, err := s.manager.Profile(r.Context(), ui.Session(r).Org, dc, cl)
+	s.Render(w, r, "profile.html", "layout", map[string]any{"Nav": "profile", "DC": dc, "Cluster": cl, "Profile": p, "Rows": s.compliance(r, p, dc, cl), "Error": ui.ErrText(err)})
 }
 
 func (s *Server) profileSave(w http.ResponseWriter, r *http.Request) {
 	p := manager.Profile{DNS: fields(r.FormValue("dns")), NTP: fields(r.FormValue("ntp")), Syslog: strings.TrimSpace(r.FormValue("syslog")), MigrationBridge: strings.TrimSpace(r.FormValue("migration_bridge")), Backup: strings.TrimSpace(r.FormValue("backup")), Networks: r.FormValue("networks") != ""}
-	if err := s.manager.SetProfile(r.Context(), session(r).Org, r.FormValue("dc"), r.FormValue("cluster"), p); err != nil {
-		flash(w, r, err)
+	if err := s.manager.SetProfile(r.Context(), ui.Session(r).Org, r.FormValue("dc"), r.FormValue("cluster"), p); err != nil {
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: host profile for %s/%s saved", session(r).User, r.FormValue("dc"), r.FormValue("cluster"))
+	log.Printf("%s: host profile for %s/%s saved", ui.Session(r).User, r.FormValue("dc"), r.FormValue("cluster"))
 	w.Header().Set("HX-Refresh", "true")
 }
 
 func (s *Server) profileApply(w http.ResponseWriter, r *http.Request) {
 	dc, cl := r.FormValue("dc"), r.FormValue("cluster")
-	p, err := s.manager.Profile(r.Context(), session(r).Org, dc, cl)
+	p, err := s.manager.Profile(r.Context(), ui.Session(r).Org, dc, cl)
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	defs, _ := s.manager.Networks(r.Context(), session(r).Org)
+	defs, _ := s.manager.Networks(r.Context(), ui.Session(r).Org)
 	u := HostSettingsUpdate{}
 	if len(p.DNS) > 0 {
 		u.DNS = &p.DNS
@@ -132,7 +133,7 @@ func (s *Server) profileApply(w http.ResponseWriter, r *http.Request) {
 	}
 	members := s.clusterMembers(r, dc, cl)
 	if len(members) == 0 {
-		flash(w, r, errors.New("no hosts in this cluster"))
+		ui.Flash(w, r, errors.New("no hosts in this cluster"))
 		return
 	}
 	errs := fanOut(r.Context(), members, func(ctx context.Context, n manager.Node) error {
@@ -149,9 +150,9 @@ func (s *Server) profileApply(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if errs != "" {
-		flash(w, r, errors.New(errs))
+		ui.Flash(w, r, errors.New(errs))
 		return
 	}
-	log.Printf("%s: host profile for %s/%s applied", session(r).User, dc, cl)
+	log.Printf("%s: host profile for %s/%s applied", ui.Session(r).User, dc, cl)
 	w.Header().Set("HX-Refresh", "true")
 }

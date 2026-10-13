@@ -18,6 +18,7 @@ import (
 	"argus/internal/hostd"
 	"argus/internal/s3"
 	"argus/internal/sealed"
+	"argus/internal/ui"
 )
 
 const (
@@ -31,17 +32,17 @@ type nfsSettings struct {
 
 func (s *Server) nfsPassphrase(ctx context.Context) (string, error) {
 	var n nfsSettings
-	_, err := s.loadJSON(ctx, nfsKey, &n)
+	_, err := s.LoadJSON(ctx, nfsKey, &n)
 	return n.Passphrase, err
 }
 
 func (s *Server) setNFSPassphrase(ctx context.Context, pass string) error {
 	var n nfsSettings
-	rv, err := s.loadJSON(ctx, nfsKey, &n)
+	rv, err := s.LoadJSON(ctx, nfsKey, &n)
 	if err != nil {
 		return err
 	}
-	return s.saveJSON(ctx, nfsKey, rv, nfsSettings{pass})
+	return s.SaveJSON(ctx, nfsKey, rv, nfsSettings{pass})
 }
 
 var stampRE = regexp.MustCompile(`^[0-9]{8}-[0-9]{6}$`)
@@ -89,7 +90,7 @@ func (s *Server) backupTargets(ctx context.Context) ([]BackupTarget, error) {
 		}
 	}
 	var extra []BackupTarget
-	if _, err := s.loadJSON(ctx, targetsKey, &extra); err != nil {
+	if _, err := s.LoadJSON(ctx, targetsKey, &extra); err != nil {
 		return nil, err
 	}
 	return append(out, extra...), nil
@@ -156,7 +157,7 @@ func (e encryptedStore) Get(ctx context.Context, rel string) (io.ReadCloser, int
 
 func (s *Server) saveTarget(ctx context.Context, t BackupTarget, remove bool) error {
 	var targets []BackupTarget
-	rv, err := s.loadJSON(ctx, targetsKey, &targets)
+	rv, err := s.LoadJSON(ctx, targetsKey, &targets)
 	if err != nil {
 		return err
 	}
@@ -167,7 +168,7 @@ func (s *Server) saveTarget(ctx context.Context, t BackupTarget, remove bool) er
 	case remove:
 		targets = slices.Delete(targets, i, i+1)
 	default:
-		if !validObject.MatchString(t.Name) || t.Name == "nfs" {
+		if !ui.ValidObject.MatchString(t.Name) || t.Name == "nfs" {
 			return errors.New("name must be lowercase letters, digits and dashes, and not nfs")
 		}
 		if u, err := url.Parse(t.Endpoint); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
@@ -188,7 +189,7 @@ func (s *Server) saveTarget(ctx context.Context, t BackupTarget, remove bool) er
 		if t.SecretKey == "" {
 			return errors.New("secret key is required")
 		}
-		probe := ".argus-probe-" + newToken()[:12]
+		probe := ".argus-probe-" + ui.NewToken()[:12]
 		probeTarget := t
 		probeTarget.Passphrase, probeTarget.LockDays = "", 0
 		st := probeTarget.open(nil).(s3Store)
@@ -204,7 +205,7 @@ func (s *Server) saveTarget(ctx context.Context, t BackupTarget, remove bool) er
 			targets = append(targets, t)
 		}
 	}
-	return s.saveJSON(ctx, targetsKey, rv, targets)
+	return s.SaveJSON(ctx, targetsKey, rv, targets)
 }
 
 type hostdStore struct{ c *hostd.Client }
@@ -249,7 +250,7 @@ func (s s3Store) List(ctx context.Context) ([]hostd.Backup, error) {
 	byRel := map[string]*hostd.Backup{}
 	for _, o := range objs {
 		parts := strings.Split(strings.TrimPrefix(o.Key, s.prefix), "/")
-		if len(parts) != 3 || !validObject.MatchString(parts[0]) || !stampRE.MatchString(parts[1]) {
+		if len(parts) != 3 || !ui.ValidObject.MatchString(parts[0]) || !stampRE.MatchString(parts[1]) {
 			continue
 		}
 		rel := parts[0] + "/" + parts[1]

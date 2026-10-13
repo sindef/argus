@@ -21,6 +21,7 @@ import (
 	"argus/internal/hostd"
 	"argus/internal/kube"
 	"argus/internal/manager"
+	"argus/internal/ui"
 )
 
 const flrMaxAge = 2 * time.Hour
@@ -52,7 +53,7 @@ func ownerOf(r *http.Request) string {
 }
 
 func (s *Server) flrBegin(owner, stamp string, load func(ctx context.Context, id string) error) string {
-	sess := &flrSession{ID: newToken()[:16], Owner: owner, Stamp: stamp, State: "Unpacking", Started: time.Now()}
+	sess := &flrSession{ID: ui.NewToken()[:16], Owner: owner, Stamp: stamp, State: "Unpacking", Started: time.Now()}
 	s.flr.mu.Lock()
 	if s.flr.m == nil {
 		s.flr.m = map[string]*flrSession{}
@@ -257,7 +258,7 @@ func (o remoteOps) FLRClose(ctx context.Context, owner, id string) error {
 }
 
 func filesBase(r *http.Request) string {
-	base, _ := r.Context().Value(baseKey{}).(string)
+	base := ui.Base(r)
 	if vol := r.PathValue("vol"); vol != "" {
 		return base + "/volumes/" + vol + "/files"
 	}
@@ -278,8 +279,8 @@ func (s *Server) filesPage(w http.ResponseWriter, r *http.Request) {
 	if err == nil && sess.State == "Ready" && q.Get("part") != "" {
 		data["Entries"], err = s.ops(r).FLRList(r.Context(), owner, sess.ID, q.Get("part"), q.Get("path"))
 	}
-	data["Error"] = errText(err)
-	s.render(w, r, "files.html", "layout", data)
+	data["Error"] = ui.ErrText(err)
+	s.Render(w, r, "files.html", "layout", data)
 }
 
 func (s *Server) filesStart(w http.ResponseWriter, r *http.Request) {
@@ -291,26 +292,26 @@ func (s *Server) filesStart(w http.ResponseWriter, r *http.Request) {
 		id, err = s.ops(r).FLRStart(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.FormValue("store"), r.FormValue("stamp"))
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: browse files of %s %s", session(r).User, ownerOf(r), r.FormValue("stamp"))
+	log.Printf("%s: browse files of %s %s", ui.Session(r).User, ownerOf(r), r.FormValue("stamp"))
 	w.Header().Set("HX-Redirect", filesBase(r)+"?id="+id)
 }
 
 func (s *Server) filesDownload(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	log.Printf("%s: download %s from %s", session(r).User, q.Get("path"), ownerOf(r))
+	log.Printf("%s: download %s from %s", ui.Session(r).User, q.Get("path"), ownerOf(r))
 	d, err := s.ops(r).FLRFile(r.Context(), ownerOf(r), q.Get("id"), q.Get("part"), q.Get("path"))
 	serveDownload(w, r, d, err)
 }
 
 func (s *Server) filesClose(w http.ResponseWriter, r *http.Request) {
 	if err := s.ops(r).FLRClose(r.Context(), ownerOf(r), r.FormValue("id")); err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	base, _ := r.Context().Value(baseKey{}).(string)
+	base := ui.Base(r)
 	host, onManager := strings.CutPrefix(base, "/hosts/")
 	switch {
 	case r.PathValue("vol") != "" && onManager:
@@ -324,7 +325,7 @@ func (s *Server) filesClose(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) flrAPIRoutes() []route {
+func (s *Server) flrAPIRoutes() []ui.Route {
 	l := localOps{s}
 	start := func(w http.ResponseWriter, r *http.Request) {
 		var req struct{ Store, Stamp string }
@@ -332,7 +333,7 @@ func (s *Server) flrAPIRoutes() []route {
 		if r.PathValue("vol") != "" {
 			in = nil
 		}
-		s.apiOp(w, r, in, func() (any, error) {
+		s.APIOp(w, r, in, func() (any, error) {
 			var id string
 			var err error
 			if vol := r.PathValue("vol"); vol != "" {
@@ -344,10 +345,10 @@ func (s *Server) flrAPIRoutes() []route {
 		})
 	}
 	status := func(w http.ResponseWriter, r *http.Request) {
-		s.apiOp(w, r, nil, func() (any, error) { return l.FLR(r.Context(), ownerOf(r), r.PathValue("id")) })
+		s.APIOp(w, r, nil, func() (any, error) { return l.FLR(r.Context(), ownerOf(r), r.PathValue("id")) })
 	}
 	list := func(w http.ResponseWriter, r *http.Request) {
-		s.apiOp(w, r, nil, func() (any, error) {
+		s.APIOp(w, r, nil, func() (any, error) {
 			return l.FLRList(r.Context(), ownerOf(r), r.PathValue("id"), r.URL.Query().Get("part"), r.URL.Query().Get("path"))
 		})
 	}
@@ -356,16 +357,16 @@ func (s *Server) flrAPIRoutes() []route {
 		serveDownload(w, r, d, err)
 	}
 	closeSession := func(w http.ResponseWriter, r *http.Request) {
-		s.apiOp(w, r, nil, func() (any, error) { return nil, l.FLRClose(r.Context(), ownerOf(r), r.PathValue("id")) })
+		s.APIOp(w, r, nil, func() (any, error) { return nil, l.FLRClose(r.Context(), ownerOf(r), r.PathValue("id")) })
 	}
-	var rs []route
+	var rs []ui.Route
 	for _, prefix := range []string{"/api/vms/{ns}/{name}/flr", "/api/volumes/{vol}/flr"} {
 		rs = append(rs,
-			route{"POST " + prefix, auth.Administer, start},
-			route{"GET " + prefix + "/{id}", auth.Administer, status},
-			route{"GET " + prefix + "/{id}/ls", auth.Administer, list},
-			route{"GET " + prefix + "/{id}/file", auth.Administer, file},
-			route{"POST " + prefix + "/{id}/close", auth.Administer, closeSession},
+			ui.Route{Pattern: "POST " + prefix, Priv: auth.Administer, H: start},
+			ui.Route{Pattern: "GET " + prefix + "/{id}", Priv: auth.Administer, H: status},
+			ui.Route{Pattern: "GET " + prefix + "/{id}/ls", Priv: auth.Administer, H: list},
+			ui.Route{Pattern: "GET " + prefix + "/{id}/file", Priv: auth.Administer, H: file},
+			ui.Route{Pattern: "POST " + prefix + "/{id}/close", Priv: auth.Administer, H: closeSession},
 		)
 	}
 	return rs

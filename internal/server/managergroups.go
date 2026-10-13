@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"argus/internal/manager"
+	"argus/internal/ui"
 )
 
 var groupTitles = map[string]string{
@@ -25,7 +26,7 @@ var groupTitles = map[string]string{
 }
 
 func (s *Server) groupNames(r *http.Request) ([]string, []string) {
-	gs, _ := s.manager.Groups(r.Context(), session(r).Org)
+	gs, _ := s.manager.Groups(r.Context(), ui.Session(r).Org)
 	var dcs, cls []string
 	for _, g := range gs {
 		dcs = append(dcs, g.Datacenter)
@@ -54,18 +55,18 @@ func (s *Server) groupModal(w http.ResponseWriter, r *http.Request) {
 		data["Title"] = title + ": " + r.FormValue("cluster")
 	case "cluster-settings":
 		data["Title"] = title + ": " + r.FormValue("cluster")
-		st, _ := s.manager.ClusterSettings(r.Context(), session(r).Org, r.FormValue("dc"), r.FormValue("cluster"))
+		st, _ := s.manager.ClusterSettings(r.Context(), ui.Session(r).Org, r.FormValue("dc"), r.FormValue("cluster"))
 		if st.Threshold == 0 {
 			st.Threshold = 3
 		}
 		data["Settings"], data["Thresholds"] = st, []int{1, 2, 3, 4, 5}
-		data["CPUModels"] = s.manager.CommonCPUModels(session(r).Org, r.FormValue("dc"), r.FormValue("cluster"))
+		data["CPUModels"] = s.manager.CommonCPUModels(ui.Session(r).Org, r.FormValue("dc"), r.FormValue("cluster"))
 	}
-	s.render(w, r, "manager.html", "group-modal", data)
+	s.Render(w, r, "manager.html", "group-modal", data)
 }
 
 func (s *Server) groupAction(w http.ResponseWriter, r *http.Request) {
-	org, op := session(r).Org, r.PathValue("op")
+	org, op := ui.Session(r).Org, r.PathValue("op")
 	dc, cl, name := r.FormValue("dc"), r.FormValue("cluster"), strings.TrimSpace(r.FormValue("name"))
 	var err error
 	switch op {
@@ -102,10 +103,10 @@ func (s *Server) groupAction(w http.ResponseWriter, r *http.Request) {
 		err = errors.New("unknown operation")
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: %s %s/%s %s", session(r).User, op, dc, cl, name)
+	log.Printf("%s: %s %s/%s %s", ui.Session(r).User, op, dc, cl, name)
 	s.manager.PollAll(r.Context())
 	w.Header().Set("HX-Refresh", "true")
 }
@@ -122,7 +123,7 @@ func inGroup(n manager.Node, dc, cl string) bool {
 }
 
 func (s *Server) applyClusterNetworks(r *http.Request, dc, cl string) error {
-	defs, err := s.manager.Networks(r.Context(), session(r).Org)
+	defs, err := s.manager.Networks(r.Context(), ui.Session(r).Org)
 	if err != nil {
 		return err
 	}
@@ -150,7 +151,7 @@ func (s *Server) applyClusterNetworks(r *http.Request, dc, cl string) error {
 }
 
 func (s *Server) saveClusterSettings(r *http.Request, dc, cl string) error {
-	org := session(r).Org
+	org := ui.Session(r).Org
 	st, err := s.manager.ClusterSettings(r.Context(), org, dc, cl)
 	if err != nil {
 		return err
@@ -169,11 +170,11 @@ func (s *Server) saveClusterSettings(r *http.Request, dc, cl string) error {
 }
 
 func (s *Server) drsApply(w http.ResponseWriter, r *http.Request) {
-	if err := s.manager.ApplyRecommendation(r.Context(), session(r).Org, r.FormValue("id")); err != nil {
-		flash(w, r, err)
+	if err := s.manager.ApplyRecommendation(r.Context(), ui.Session(r).Org, r.FormValue("id")); err != nil {
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: applied DRS recommendation %s", session(r).User, r.FormValue("id"))
+	log.Printf("%s: applied DRS recommendation %s", ui.Session(r).User, r.FormValue("id"))
 	w.Header().Set("HX-Refresh", "true")
 }
 
@@ -183,7 +184,7 @@ func (s *Server) drsRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.ParseForm()
-	org, dc, cl, name := session(r).Org, r.FormValue("dc"), r.FormValue("cluster"), r.FormValue("name")
+	org, dc, cl, name := ui.Session(r).Org, r.FormValue("dc"), r.FormValue("cluster"), r.FormValue("name")
 	st, err := s.manager.ClusterSettings(r.Context(), org, dc, cl)
 	if err == nil {
 		st.Rules = slices.DeleteFunc(st.Rules, func(x manager.Rule) bool { return x.Name == name })
@@ -194,7 +195,7 @@ func (s *Server) drsRule(w http.ResponseWriter, r *http.Request) {
 			}
 			_, kind := manager.RuleKinds[rule.Kind]
 			switch {
-			case !validObject.MatchString(name):
+			case !ui.ValidObject.MatchString(name):
 				err = errors.New("invalid rule name")
 			case !kind:
 				err = errors.New("unknown rule type")
@@ -210,9 +211,9 @@ func (s *Server) drsRule(w http.ResponseWriter, r *http.Request) {
 		err = s.manager.SetClusterSettings(r.Context(), org, dc, cl, st)
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: DRS rule %s %s in %s/%s", session(r).User, r.PathValue("op"), name, dc, cl)
+	log.Printf("%s: DRS rule %s %s in %s/%s", ui.Session(r).User, r.PathValue("op"), name, dc, cl)
 	w.Header().Set("HX-Refresh", "true")
 }

@@ -14,6 +14,7 @@ import (
 
 	"argus/internal/hostd"
 	"argus/internal/manager"
+	"argus/internal/ui"
 )
 
 var hostTabs = []struct{ Path, Label, Icon string }{{"dashboard", "Summary", "gauge"}, {"pools", "Pools", "database"}, {"disks", "Disks", "hard-drive"}, {"network/host", "Network", "cable"}, {"devices", "Devices", "cpu"}}
@@ -54,7 +55,7 @@ func (s *Server) fleetHostNets(org string) []hostNetRow {
 }
 
 func (s *Server) managerHostNets(w http.ResponseWriter, r *http.Request) {
-	rows := s.fleetHostNets(session(r).Org)
+	rows := s.fleetHostNets(ui.Session(r).Org)
 	pre := map[string]bool{}
 	if dc := r.FormValue("dc"); dc != "" {
 		for _, row := range rows {
@@ -72,7 +73,7 @@ func (s *Server) managerHostNets(w http.ResponseWriter, r *http.Request) {
 		ports = append(ports, freePort{p, hs})
 	}
 	sort.Slice(ports, func(i, j int) bool { return ports[i].Name < ports[j].Name })
-	s.render(w, r, "hostnets.html", "layout", map[string]any{"Nav": "hostnets", "Rows": rows, "Pre": pre, "Ports": ports, "HostCount": len(rows)})
+	s.Render(w, r, "hostnets.html", "layout", map[string]any{"Nav": "hostnets", "Rows": rows, "Pre": pre, "Ports": ports, "HostCount": len(rows)})
 }
 
 func (s *Server) managerBridgeRollout(w http.ResponseWriter, r *http.Request) {
@@ -81,7 +82,7 @@ func (s *Server) managerBridgeRollout(w http.ResponseWriter, r *http.Request) {
 	hosts := r.Form["hosts"]
 	sort.Strings(hosts)
 	if len(hosts) == 0 || spec.Name == "" || len(spec.Ports) == 0 {
-		flash(w, r, errors.New("name, ports and at least one host are required"))
+		ui.Flash(w, r, errors.New("name, ports and at least one host are required"))
 		return
 	}
 	var out []string
@@ -98,7 +99,7 @@ func (s *Server) managerBridgeRollout(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		log.Printf("%s: bridge %s rolled out to %s", session(r).User, spec.Name, name)
+		log.Printf("%s: bridge %s rolled out to %s", ui.Session(r).User, spec.Name, name)
 		s.manager.Refresh(name)
 		out = append(out, name+": "+spec.Name+" created and confirmed")
 	}
@@ -123,20 +124,20 @@ func (s *Server) managerNewVM(w http.ResponseWriter, r *http.Request) {
 	if host == "" {
 		data := s.managerData(r)
 		data["What"] = r.FormValue("what")
-		s.render(w, r, "manager-vms.html", "pick-host", data)
+		s.Render(w, r, "manager-vms.html", "pick-host", data)
 		return
 	}
 	if host == "auto" {
-		n, err := s.manager.LeastLoaded(session(r).Org)
+		n, err := s.manager.LeastLoaded(ui.Session(r).Org)
 		if err != nil {
-			flash(w, r, err)
+			ui.Flash(w, r, err)
 			return
 		}
 		host = n.Name
 	}
 	n, err := s.nodeIn(r, host)
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
 	if r.FormValue("what") == "import" {

@@ -15,6 +15,7 @@ import (
 	"argus/internal/hostd"
 	"argus/internal/kube"
 	"argus/internal/manager"
+	"argus/internal/ui"
 )
 
 type switchRow struct {
@@ -97,7 +98,7 @@ type netRow struct {
 }
 
 func (s *Server) managerNetworks(w http.ResponseWriter, r *http.Request) {
-	org := session(r).Org
+	org := ui.Session(r).Org
 	states := s.inventory(r)
 	defs, err := s.manager.Networks(r.Context(), org)
 	onHost := map[string]map[string]kube.Network{}
@@ -178,7 +179,7 @@ func (s *Server) managerNetworks(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	sort.Strings(all)
-	s.render(w, r, "networks.html", "layout", map[string]any{"Nav": "networks", "Rows": out, "Reachable": len(onHost), "Switches": switches(s.fleetHostNets(org), out), "Scopes": s.scopeNames(r), "AllBridges": all, "CanEdit": session(r).Role.Can(auth.Admin), "Error": errs})
+	s.Render(w, r, "networks.html", "layout", map[string]any{"Nav": "networks", "Rows": out, "Reachable": len(onHost), "Switches": switches(s.fleetHostNets(org), out), "Scopes": s.ScopeNames(r), "AllBridges": all, "CanEdit": ui.Session(r).Role.Can(auth.Admin), "Error": errs})
 }
 
 func networksFor(defs []manager.Network, n manager.Node) []manager.Network {
@@ -205,7 +206,7 @@ func (s *Server) managerAddNetwork(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		err = validNetwork(req)
 	}
-	n := manager.Network{Name: req.Name, VLAN: req.VLAN, Bridge: req.Bridge, SpoofCheck: req.SpoofCheck, RateMbps: req.RateMbps, CIDR: strings.TrimSpace(r.FormValue("cidr")), Gateway: strings.TrimSpace(r.FormValue("gateway")), Description: strings.TrimSpace(r.FormValue("description")), Scopes: scopeList(r.FormValue("scopes"))}
+	n := manager.Network{Name: req.Name, VLAN: req.VLAN, Bridge: req.Bridge, SpoofCheck: req.SpoofCheck, RateMbps: req.RateMbps, CIDR: strings.TrimSpace(r.FormValue("cidr")), Gateway: strings.TrimSpace(r.FormValue("gateway")), Description: strings.TrimSpace(r.FormValue("description")), Scopes: ui.ScopeList(r.FormValue("scopes"))}
 	if err == nil {
 		err = checkNetworkDef(n)
 	}
@@ -214,25 +215,25 @@ func (s *Server) managerAddNetwork(w http.ResponseWriter, r *http.Request) {
 		op = "update"
 	}
 	if err == nil {
-		err = s.manager.SaveNetwork(r.Context(), session(r).Org, n, op == "update")
+		err = s.manager.SaveNetwork(r.Context(), ui.Session(r).Org, n, op == "update")
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: define network %s vlan %d", session(r).User, n.Name, n.VLAN)
+	log.Printf("%s: define network %s vlan %d", ui.Session(r).User, n.Name, n.VLAN)
 	if errs := s.pushNetwork(r, op, n); errs != "" {
-		flash(w, r, errors.New(errs))
+		ui.Flash(w, r, errors.New(errs))
 		return
 	}
 	w.Header().Set("HX-Refresh", "true")
 }
 
 func (s *Server) managerNetworkOp(w http.ResponseWriter, r *http.Request) {
-	org, name, op := session(r).Org, r.PathValue("name"), r.PathValue("op")
+	org, name, op := ui.Session(r).Org, r.PathValue("name"), r.PathValue("op")
 	defs, err := s.manager.Networks(r.Context(), org)
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
 	n := manager.Network{Name: name}
@@ -256,9 +257,9 @@ func (s *Server) managerNetworkOp(w http.ResponseWriter, r *http.Request) {
 	if err == nil && errs != "" {
 		err = errors.New(errs)
 	}
-	log.Printf("%s: network %s %s", session(r).User, op, name)
+	log.Printf("%s: network %s %s", ui.Session(r).User, op, name)
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
 	w.Header().Set("HX-Refresh", "true")

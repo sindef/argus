@@ -18,6 +18,7 @@ import (
 	"argus/internal/kube"
 	"argus/internal/lifecycle"
 	"argus/internal/manager"
+	"argus/internal/ui"
 )
 
 type libTemplate struct {
@@ -70,7 +71,7 @@ func (s *Server) libraryTemplate(org, name string) (libTemplate, error) {
 }
 
 func (s *Server) saveToLibrary(org string, src manager.Node, ns, vm, name string) error {
-	if !validObject.MatchString(name) {
+	if !ui.ValidObject.MatchString(name) {
 		return errors.New("invalid template name")
 	}
 	dir := s.templateDir(org, name)
@@ -137,7 +138,7 @@ func (s *Server) saveToLibrary(org string, src manager.Node, ns, vm, name string
 }
 
 func (s *Server) deployFromLibrary(r *http.Request, name string, dst manager.Node, vm, pool string) error {
-	org := session(r).Org
+	org := ui.Session(r).Org
 	t, err := s.libraryTemplate(org, name)
 	if err != nil {
 		return err
@@ -162,7 +163,7 @@ func (s *Server) deployFromLibrary(r *http.Request, name string, dst manager.Nod
 
 func (s *Server) serveTemplateData(w http.ResponseWriter, r *http.Request) {
 	org, name, file := r.PathValue("org"), r.PathValue("name"), r.PathValue("file")
-	if !validSegments(r) {
+	if !ui.ValidSegments(r) {
 		http.Error(w, "invalid path", http.StatusBadRequest)
 		return
 	}
@@ -209,15 +210,15 @@ func (s *Server) hostTemplates(r *http.Request) []hostTemplate {
 }
 
 func (s *Server) vmCopyModal(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, "manager-images.html", "vm-copy", map[string]any{"Mode": r.FormValue("mode"), "Host": r.FormValue("host"), "NS": r.FormValue("ns"), "VM": r.FormValue("vm"),
+	s.Render(w, r, "manager-images.html", "vm-copy", map[string]any{"Mode": r.FormValue("mode"), "Host": r.FormValue("host"), "NS": r.FormValue("ns"), "VM": r.FormValue("vm"),
 		"Source": r.FormValue("source"), "Hosts": s.managerData(r)["Hosts"]})
 }
 
 func (s *Server) vmCopy(w http.ResponseWriter, r *http.Request) {
-	org := session(r).Org
+	org := ui.Session(r).Org
 	mode, name, target, pool := r.FormValue("mode"), strings.TrimSpace(r.FormValue("name")), r.FormValue("target"), strings.TrimSpace(r.FormValue("pool"))
 	err := error(nil)
-	if !validObject.MatchString(name) {
+	if !ui.ValidObject.MatchString(name) {
 		err = errors.New("name must be lowercase letters, digits and dashes")
 	}
 	var dst manager.Node
@@ -241,23 +242,23 @@ func (s *Server) vmCopy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: %s %s/%s to %s as %s", session(r).User, mode, r.FormValue("host"), r.FormValue("vm"), target, name)
+	log.Printf("%s: %s %s/%s to %s as %s", ui.Session(r).User, mode, r.FormValue("host"), r.FormValue("vm"), target, name)
 	w.Header().Set("HX-Refresh", "true")
 }
 
 func (s *Server) deleteLibraryTemplate(w http.ResponseWriter, r *http.Request) {
 	name := r.FormValue("name")
-	if _, err := s.libraryTemplate(session(r).Org, name); err != nil {
-		flash(w, r, err)
+	if _, err := s.libraryTemplate(ui.Session(r).Org, name); err != nil {
+		ui.Flash(w, r, err)
 		return
 	}
-	if err := os.RemoveAll(s.templateDir(session(r).Org, name)); err != nil {
-		flash(w, r, err)
+	if err := os.RemoveAll(s.templateDir(ui.Session(r).Org, name)); err != nil {
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: deleted template %s", session(r).User, name)
+	log.Printf("%s: deleted template %s", ui.Session(r).User, name)
 	w.Header().Set("HX-Refresh", "true")
 }

@@ -18,6 +18,7 @@ import (
 	"argus/internal/kube"
 	"argus/internal/lifecycle"
 	"argus/internal/netguard"
+	"argus/internal/ui"
 	"argus/internal/vsphere"
 )
 
@@ -102,7 +103,7 @@ func (s *Server) importVCenter(ctx context.Context, f func(string) string) (stri
 		v.Disks = append(v.Disks, kube.ImportedDisk{SizeBytes: d.Capacity, Source: map[string]any{"upload": map[string]any{}}})
 		total += d.Capacity
 	}
-	if !validObject.MatchString(v.Name) || v.Network == "" {
+	if !ui.ValidObject.MatchString(v.Name) || v.Network == "" {
 		c.Logout()
 		return "", errors.New("valid VM name and network required")
 	}
@@ -187,8 +188,8 @@ func (s *Server) vcenterVMsOptions(w http.ResponseWriter, r *http.Request) {
 	vms, err := s.ops(r).VCenterVMs(r.Context(), fields)
 	if err != nil {
 		w.Header().Set("HX-Retarget", "#import-vm-error")
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	s.render(w, r, "vmnew.html", "vcenter-vms", map[string]any{"VMs": vms})
+	s.Render(w, r, "vmnew.html", "vcenter-vms", map[string]any{"VMs": vms})
 }

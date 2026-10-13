@@ -1,4 +1,4 @@
-package server
+package ui
 
 import (
 	"encoding/json"
@@ -15,13 +15,13 @@ import (
 )
 
 var funcs = template.FuncMap{
-	"bytes": humanBytes,
+	"bytes": HumanBytes,
 	"size": func(q string) string {
 		v, err := resource.ParseQuantity(q)
 		if err != nil {
 			return q
 		}
-		return humanBytes(v.Value())
+		return HumanBytes(v.Value())
 	},
 	"since": func(t time.Time) string {
 		d := time.Since(t)
@@ -66,7 +66,7 @@ var funcs = template.FuncMap{
 		sort.Strings(lines)
 		return strings.Join(lines, "\n")
 	},
-	"rangeSeconds": func(r string) int64 { return int64(rangeDuration(r).Seconds()) },
+	"rangeSeconds": func(r string) int64 { return int64(RangeDuration(r).Seconds()) },
 	"join":         strings.Join,
 	"dict": func(kv ...any) map[string]any {
 		m := map[string]any{}
@@ -86,8 +86,8 @@ var funcs = template.FuncMap{
 	"add":   func(a, b int) int { return a + b },
 	"sub":   func(a, b int) int { return a - b },
 	"add64": func(a, b int64) int64 { return a + b },
-	"vmCtx": func(v vmRow, root map[string]any) map[string]any {
-		return map[string]any{"V": v, "Page": fmt.Sprintf("/nodes/%s/vms/%s/%s", v.Host, v.Namespace, v.Name), "CanOperate": root["CanOperate"], "IsAdmin": root["IsAdmin"]}
+	"vmCtx": func(v interface{ Page() string }, root map[string]any) map[string]any {
+		return map[string]any{"V": v, "Page": v.Page(), "CanOperate": root["CanOperate"], "IsAdmin": root["IsAdmin"]}
 	},
 }
 
@@ -105,7 +105,7 @@ func num(v any) float64 {
 	return 0
 }
 
-func humanBytes(n int64) string {
+func HumanBytes(n int64) string {
 	units := []string{"B", "KiB", "MiB", "GiB", "TiB"}
 	v := float64(n)
 	i := 0
@@ -119,10 +119,22 @@ func humanBytes(n int64) string {
 	return fmt.Sprintf("%.1f %s", v, units[i])
 }
 
-func quantityBytes(q string) int64 {
+func QuantityBytes(q string) int64 {
 	v, err := resource.ParseQuantity(q)
 	if err != nil {
 		return 0
 	}
 	return v.Value()
+}
+
+func RangeDuration(r string) time.Duration {
+	switch r {
+	case "7d":
+		return 7 * 24 * time.Hour
+	case "30d":
+		return 30 * 24 * time.Hour
+	case "1y":
+		return 365 * 24 * time.Hour
+	}
+	return 24 * time.Hour
 }

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"argus/internal/auth"
+	"argus/internal/ui"
 )
 
 var validCBT = regexp.MustCompile(`^argus-cbt-[0-9]+$`)
@@ -28,13 +29,13 @@ func cbtCreated(id string) time.Time {
 	return time.Unix(n, 0).UTC()
 }
 
-func (s *Server) cbtRoutes() []route {
-	return []route{
-		{"POST /api/vms/{ns}/{name}/cbt", auth.Administer, s.cbtCreate},
-		{"GET /api/vms/{ns}/{name}/cbt", auth.Administer, s.cbtList},
-		{"DELETE /api/vms/{ns}/{name}/cbt/{id}", auth.Administer, s.cbtDelete},
-		{"GET /api/vms/{ns}/{name}/cbt/{id}/disks/{disk}/changes", auth.Administer, s.cbtChanges},
-		{"GET /api/vms/{ns}/{name}/cbt/{id}/disks/{disk}/data", auth.Administer, s.cbtData},
+func (s *Server) cbtRoutes() []ui.Route {
+	return []ui.Route{
+		{Pattern: "POST /api/vms/{ns}/{name}/cbt", Priv: auth.Administer, H: s.cbtCreate},
+		{Pattern: "GET /api/vms/{ns}/{name}/cbt", Priv: auth.Administer, H: s.cbtList},
+		{Pattern: "DELETE /api/vms/{ns}/{name}/cbt/{id}", Priv: auth.Administer, H: s.cbtDelete},
+		{Pattern: "GET /api/vms/{ns}/{name}/cbt/{id}/disks/{disk}/changes", Priv: auth.Administer, H: s.cbtChanges},
+		{Pattern: "GET /api/vms/{ns}/{name}/cbt/{id}/disks/{disk}/data", Priv: auth.Administer, H: s.cbtData},
 	}
 }
 
@@ -42,12 +43,12 @@ func (s *Server) cbtCreate(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
 	spec, err := s.kube.VMSpec(r.Context(), ns, name)
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
 	disks, ds, err := s.vmDatasets(r)
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
 	id := "argus-cbt-" + strconv.FormatInt(time.Now().Unix(), 10)
@@ -59,7 +60,7 @@ func (s *Server) cbtCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
 	sess := cbtSession{ID: id, Created: cbtCreated(id), Spec: spec}
@@ -67,7 +68,7 @@ func (s *Server) cbtCreate(w http.ResponseWriter, r *http.Request) {
 		sess.Disks = append(sess.Disks, v)
 	}
 	slices.Sort(sess.Disks)
-	writeJSONCode(w, http.StatusCreated, sess)
+	ui.WriteJSONCode(w, http.StatusCreated, sess)
 }
 
 func (s *Server) cbtList(w http.ResponseWriter, r *http.Request) {
@@ -77,7 +78,7 @@ func (s *Server) cbtList(w http.ResponseWriter, r *http.Request) {
 		snaps, err = s.hostd.ZFSSnapshots(r.Context(), ds, "cbt")
 	}
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
 	out := []cbtSession{}
@@ -88,7 +89,7 @@ func (s *Server) cbtList(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	writeJSON(w, out)
+	ui.WriteJSON(w, out)
 }
 
 func (s *Server) cbtDelete(w http.ResponseWriter, r *http.Request) {
@@ -100,10 +101,10 @@ func (s *Server) cbtDelete(w http.ResponseWriter, r *http.Request) {
 		err = s.hostd.ZFSDestroy(r.Context(), ds, r.PathValue("id"))
 	}
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	writeJSON(w, map[string]string{})
+	ui.WriteJSON(w, map[string]string{})
 }
 
 func (s *Server) cbtDisk(r *http.Request) (string, error) {
@@ -124,26 +125,26 @@ func (s *Server) cbtDisk(r *http.Request) (string, error) {
 func (s *Server) cbtChanges(w http.ResponseWriter, r *http.Request) {
 	ds, err := s.cbtDisk(r)
 	if err != nil {
-		apiError(w, r, http.StatusNotFound, err)
+		ui.APIError(w, r, http.StatusNotFound, err)
 		return
 	}
 	ch, err := s.hostd.ZFSChanges(r.Context(), ds, r.PathValue("id"), r.URL.Query().Get("base"))
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	writeJSON(w, ch)
+	ui.WriteJSON(w, ch)
 }
 
 func (s *Server) cbtData(w http.ResponseWriter, r *http.Request) {
 	ds, err := s.cbtDisk(r)
 	if err != nil {
-		apiError(w, r, http.StatusNotFound, err)
+		ui.APIError(w, r, http.StatusNotFound, err)
 		return
 	}
 	resp, err := s.hostd.ZFSRead(r.Context(), ds, r.PathValue("id"), r.Header)
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
 	defer resp.Body.Close()

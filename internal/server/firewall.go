@@ -10,10 +10,11 @@ import (
 	"strings"
 
 	"argus/internal/manager"
+	"argus/internal/ui"
 )
 
 func (s *Server) firewallPage(w http.ResponseWriter, r *http.Request) {
-	p, err := s.manager.Firewall(r.Context(), session(r).Org)
+	p, err := s.manager.Firewall(r.Context(), ui.Session(r).Org)
 	type row struct {
 		manager.FirewallRule
 		Fill string
@@ -24,11 +25,11 @@ func (s *Server) firewallPage(w http.ResponseWriter, r *http.Request) {
 		for j, n := range rule.Ports {
 			ports[j] = strconv.Itoa(n)
 		}
-		rows = append(rows, row{rule, fill(map[string]any{"i": strconv.Itoa(i), "name": rule.Name, "source": rule.Source, "dest": rule.Dest, "proto": rule.Proto,
+		rows = append(rows, row{rule, ui.Fill(map[string]any{"i": strconv.Itoa(i), "name": rule.Name, "source": rule.Source, "dest": rule.Dest, "proto": rule.Proto,
 			"ports": strings.Join(ports, ", "), "action": map[bool]string{true: "allow", false: "deny"}[rule.Allow]})})
 	}
 	var tags []string
-	for _, st := range s.manager.Inventory(session(r).Org) {
+	for _, st := range s.manager.Inventory(ui.Session(r).Org) {
 		for _, v := range st.VMs {
 			for _, t := range v.Tags {
 				if !slices.Contains(tags, t) {
@@ -38,11 +39,11 @@ func (s *Server) firewallPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	slices.Sort(tags)
-	s.render(w, r, "firewall.html", "layout", map[string]any{"Nav": "firewall", "Policy": p, "Rows": rows, "Tags": tags, "Error": errText(err)})
+	s.Render(w, r, "firewall.html", "layout", map[string]any{"Nav": "firewall", "Policy": p, "Rows": rows, "Tags": tags, "Error": ui.ErrText(err)})
 }
 
 func (s *Server) firewallAction(w http.ResponseWriter, r *http.Request) {
-	org := session(r).Org
+	org := ui.Session(r).Org
 	p, err := s.manager.Firewall(r.Context(), org)
 	i, ierr := strconv.Atoi(r.FormValue("i"))
 	if err == nil && r.PathValue("op") != "default" && r.PathValue("op") != "save" && (ierr != nil || i < 0 || i >= len(p.Rules)) {
@@ -85,10 +86,10 @@ func (s *Server) firewallAction(w http.ResponseWriter, r *http.Request) {
 		err = s.manager.SetFirewall(r.Context(), org, p)
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: firewall %s", session(r).User, r.PathValue("op"))
+	log.Printf("%s: firewall %s", ui.Session(r).User, r.PathValue("op"))
 	go s.manager.PollAll(context.Background())
 	w.Header().Set("HX-Refresh", "true")
 }

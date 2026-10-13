@@ -9,6 +9,7 @@ import (
 
 	"argus/internal/kube"
 	"argus/internal/manager"
+	"argus/internal/ui"
 )
 
 type hostPool struct {
@@ -71,7 +72,7 @@ func (s *Server) managerStorage(w http.ResponseWriter, r *http.Request) {
 	}
 	data["Nav"], data["Pools"], data["Total"], data["Used"], data["Status"], data["Error"] = "storage", pools, total, used, status, errs
 	data["Volumes"], data["Attachable"], data["PoolNames"], data["PoolFilter"] = vols, attachable, volumePools(vols), r.FormValue("pool")
-	s.render(w, r, "storage.html", "layout", data)
+	s.Render(w, r, "storage.html", "layout", data)
 }
 
 func (s *Server) managerVolumes(w http.ResponseWriter, r *http.Request) {
@@ -88,10 +89,10 @@ func (s *Server) managerVolumeOp(w http.ResponseWriter, r *http.Request) {
 		err = n.Call(r.Context(), http.MethodPost, "/api/volumes/"+op, formVolume(r), nil)
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: volume %s %s on %s", session(r).User, op, r.FormValue("name"), n.Name)
+	log.Printf("%s: volume %s %s on %s", ui.Session(r).User, op, r.FormValue("name"), n.Name)
 	go s.manager.Refresh(n.Name)
 	w.Header().Set("HX-Refresh", "true")
 }

@@ -9,7 +9,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -18,10 +17,9 @@ import (
 	"argus/internal/lifecycle"
 	"argus/internal/netguard"
 	"argus/internal/registry"
+	"argus/internal/ui"
 	"argus/internal/wire"
 )
-
-var validObject = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
 
 func gibibytes(v string) (string, error) {
 	n, err := strconv.Atoi(v)
@@ -37,13 +35,13 @@ func (s *Server) images(w http.ResponseWriter, r *http.Request) {
 		tmpl = "table"
 	}
 	imgs, err := s.kube.ListImages(r.Context())
-	s.render(w, r, "images.html", tmpl, map[string]any{"Nav": "images", "Images": imgs, "CanOperate": session(r).Role.Can(auth.Operator), "Error": errText(err)})
+	s.Render(w, r, "images.html", tmpl, map[string]any{"Nav": "images", "Images": imgs, "CanOperate": ui.Session(r).Role.Can(auth.Operator), "Error": ui.ErrText(err)})
 }
 
 func (s *Server) importImage(w http.ResponseWriter, r *http.Request) {
 	name, src := r.FormValue("name"), r.FormValue("url")
 	size, err := gibibytes(r.FormValue("size"))
-	if err == nil && !validObject.MatchString(name) {
+	if err == nil && !ui.ValidObject.MatchString(name) {
 		err = errors.New("invalid name")
 	}
 	if err == nil {
@@ -53,17 +51,17 @@ func (s *Server) importImage(w http.ResponseWriter, r *http.Request) {
 		err = s.kube.CreateImage(r.Context(), name, size, src)
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: import image %s from %s", session(r).User, name, src)
+	log.Printf("%s: import image %s from %s", ui.Session(r).User, name, src)
 	w.Header().Set("HX-Refresh", "true")
 }
 
 func (s *Server) uploadImage(w http.ResponseWriter, r *http.Request) {
 	err := s.streamUpload(r)
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
 	w.Header().Set("HX-Refresh", "true")
@@ -93,7 +91,7 @@ func (s *Server) streamUpload(r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		if !validObject.MatchString(name) {
+		if !ui.ValidObject.MatchString(name) {
 			return errors.New("invalid name")
 		}
 		body := bufio.NewReaderSize(part, 64<<10)
@@ -104,7 +102,7 @@ func (s *Server) streamUpload(r *http.Request) error {
 		if err := s.kube.CreateImage(r.Context(), name, size, ""); err != nil {
 			return err
 		}
-		log.Printf("%s: upload image %s", session(r).User, name)
+		log.Printf("%s: upload image %s", ui.Session(r).User, name)
 		if err := s.kube.Upload(r.Context(), name, body); err != nil {
 			cctx, cancel := lifecycle.CleanupContext()
 			defer cancel()
@@ -117,10 +115,10 @@ func (s *Server) streamUpload(r *http.Request) error {
 func (s *Server) deleteImage(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := s.kube.DeleteImage(r.Context(), name); err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: delete image %s", session(r).User, name)
+	log.Printf("%s: delete image %s", ui.Session(r).User, name)
 	w.Header().Set("HX-Refresh", "true")
 }
 
@@ -131,10 +129,10 @@ func diskImage(b []byte) bool {
 func (s *Server) apiImages(w http.ResponseWriter, r *http.Request) {
 	imgs, err := s.kube.ListImages(r.Context())
 	if err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, imgs)
+	ui.WriteJSON(w, imgs)
 }
 
 type imageImportReq struct {
@@ -149,7 +147,7 @@ func (s *Server) apiImportImage(w http.ResponseWriter, r *http.Request) {
 	var req imageImportReq
 	err := json.NewDecoder(r.Body).Decode(&req)
 	switch {
-	case err != nil || !validObject.MatchString(req.Name) || req.Size == "":
+	case err != nil || !ui.ValidObject.MatchString(req.Name) || req.Size == "":
 		err = errors.New("name and size required")
 	case req.Export != nil:
 		err = s.kube.ImportImage(r.Context(), req.Name, req.Size, *req.Export)
@@ -166,11 +164,11 @@ func (s *Server) apiImportImage(w http.ResponseWriter, r *http.Request) {
 		err = errors.New("url, export or registry required")
 	}
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	log.Printf("%s: import image %s", session(r).User, req.Name)
-	writeJSON(w, map[string]string{})
+	log.Printf("%s: import image %s", ui.Session(r).User, req.Name)
+	ui.WriteJSON(w, map[string]string{})
 }
 
 func (s *Server) apiImageOp(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +178,7 @@ func (s *Server) apiImageOp(w http.ResponseWriter, r *http.Request) {
 	switch r.PathValue("op") {
 	case "export":
 		var req wire.ExportRequest
-		if err = decodeJSON(r.Body, &req); err == nil {
+		if err = ui.DecodeJSON(r.Body, &req); err == nil {
 			out, err = s.kube.ExportImage(r.Context(), name, req.BaseURL, string(s.caPEM))
 		}
 	case "unexport":
@@ -193,8 +191,8 @@ func (s *Server) apiImageOp(w http.ResponseWriter, r *http.Request) {
 		err = errors.New("unknown operation")
 	}
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	writeJSON(w, out)
+	ui.WriteJSON(w, out)
 }

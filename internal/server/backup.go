@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -28,6 +27,7 @@ import (
 	"argus/internal/hostd"
 	"argus/internal/kube"
 	"argus/internal/lifecycle"
+	"argus/internal/ui"
 	"argus/internal/vmdk"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -64,12 +64,6 @@ func parsePolicy(s string) (BackupPolicy, bool) {
 
 func (p BackupPolicy) String() string {
 	return fmt.Sprintf("snap=%d snapkeep=%d backup=%d backupkeep=%d target=%s", p.SnapEvery, p.SnapKeep, p.BackupEvery, p.BackupKeep, p.Target)
-}
-
-func newToken() string {
-	b := make([]byte, 24)
-	rand.Read(b)
-	return hex.EncodeToString(b)
 }
 
 type backupMeta struct {
@@ -416,7 +410,7 @@ func (s *Server) restoreBackup(ctx context.Context, store, vm, stamp, target str
 	if target == "" {
 		target = vm
 	}
-	if !validObject.MatchString(target) {
+	if !ui.ValidObject.MatchString(target) {
 		return errors.New("invalid VM name")
 	}
 	if meta.Namespace != kube.Namespace {
@@ -432,7 +426,7 @@ func (s *Server) restoreBackup(ctx context.Context, store, vm, stamp, target str
 	if target != vm {
 		names = kube.RenameSpec(meta.Spec, vm, target)
 	}
-	token := newToken()
+	token := ui.NewToken()
 	ex := kube.Export{Spec: meta.Spec, Token: token, CA: string(s.caPEM)}
 	for _, d := range meta.Disks {
 		ex.Disks = append(ex.Disks, kube.ExportDisk{DataVolume: names[d], URL: fmt.Sprintf("https://%s/backups/%s/%s.img.gz", os.Getenv("HOST_IP"), rel, d)})
@@ -454,7 +448,7 @@ func (s *Server) saveRestores() {
 	s.backups.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := auth.PutJSON(ctx, s.auth.Secrets(), restoresKey, "restores", json.RawMessage(b)); err != nil {
+	if err := auth.PutJSON(ctx, s.Auth.Secrets(), restoresKey, "restores", json.RawMessage(b)); err != nil {
 		log.Printf("restores: save: %v", err)
 	}
 }
@@ -478,7 +472,7 @@ func (s *Server) untrackRestore(token string) {
 
 func (s *Server) resumeRestores() {
 	var m map[string]restoreJob
-	if _, err := auth.LoadJSON(context.Background(), s.auth.Secrets(), restoresKey, "restores", &m); err != nil {
+	if _, err := auth.LoadJSON(context.Background(), s.Auth.Secrets(), restoresKey, "restores", &m); err != nil {
 		return
 	}
 	s.backups.mu.Lock()
@@ -695,11 +689,11 @@ func (s *Server) backupOp(ctx context.Context, ns, name, op string, f func(strin
 }
 
 func (s *Server) apiVMBackups(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, s.vmBackupInfo(r.Context(), r.PathValue("ns"), r.PathValue("name")))
+	ui.WriteJSON(w, s.vmBackupInfo(r.Context(), r.PathValue("ns"), r.PathValue("name")))
 }
 
 func (s *Server) downloadLink(w http.ResponseWriter, r *http.Request) {
-	tok := newToken()
+	tok := ui.NewToken()
 	path := strings.TrimSuffix(r.URL.Path, "/download")
 	s.backups.mu.Lock()
 	if s.backups.links == nil {
@@ -712,7 +706,7 @@ func (s *Server) downloadLink(w http.ResponseWriter, r *http.Request) {
 	}
 	s.backups.links[tok] = downloadGrant{path: path, expires: time.Now().Add(5 * time.Minute)}
 	s.backups.mu.Unlock()
-	base, _ := r.Context().Value(baseKey{}).(string)
+	base := ui.Base(r)
 	w.Header().Set("HX-Redirect", base+"/vms/"+r.PathValue("ns")+"/"+r.PathValue("name")+"/disks/"+r.PathValue("disk")+"/download?t="+tok+map[bool]string{true: "&format=vmdk"}[r.FormValue("format") == "vmdk"])
 }
 
@@ -726,7 +720,7 @@ func (s *Server) downloadDisk(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "this download link has expired; start the download again", http.StatusForbidden)
 		return
 	}
-	s.record(s.auditUser(session(r).Org, session(r).User), "download disk "+disk+" of "+ns+"/"+name, true, "")
+	s.Record(s.AuditUser(ui.Session(r).Org, ui.Session(r).User), "download disk "+disk+" of "+ns+"/"+name, true, "")
 	d, err := s.ops(r).DownloadDisk(r.Context(), ns, name, disk, r.URL.Query().Get("format"))
 	serveDownload(w, r, d, err)
 }

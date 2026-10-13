@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"argus/internal/kube"
+	"argus/internal/ui"
 )
 
 type ScheduledTask struct {
@@ -119,7 +120,7 @@ func (s *Server) runSchedules(ctx context.Context, vms []kube.VM, from, to time.
 				err = s.kube.Action(ctx, vm.Namespace, vm.Name, t.Action)
 			}
 			log.Printf("scheduled %s of %s/%s: %v", t.Action, vm.Namespace, vm.Name, err)
-			s.record("scheduler", "scheduled "+t.Action+" of "+vm.Name, err == nil, errText(err))
+			s.Record("scheduler", "scheduled "+t.Action+" of "+vm.Name, err == nil, ui.ErrText(err))
 		}
 	}
 }

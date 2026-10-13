@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"argus/internal/kube"
+	"argus/internal/ui"
 	"argus/internal/wire"
 )
 
@@ -32,21 +33,21 @@ func (s *Server) apiZFSDisks(w http.ResponseWriter, r *http.Request) {
 		snaps, err = s.hostd.ZFSSnapshots(r.Context(), ds, "zrepl")
 	}
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
 	for v, d := range disks {
 		d.Snapshots = snaps[d.Dataset]
 		disks[v] = d
 	}
-	writeJSON(w, disks)
+	ui.WriteJSON(w, disks)
 }
 
 func (s *Server) apiZFSSnapshot(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
 	var req wire.ZFSSnapshotRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
+		ui.APIError(w, r, http.StatusBadRequest, err)
 		return
 	}
 	spec, err := s.kube.VMSpec(r.Context(), ns, name)
@@ -68,10 +69,10 @@ func (s *Server) apiZFSSnapshot(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	writeJSON(w, wire.ZFSSnapshot{Snap: snap, Spec: spec})
+	ui.WriteJSON(w, wire.ZFSSnapshot{Snap: snap, Spec: spec})
 }
 
 func (s *Server) apiZFSPrune(w http.ResponseWriter, r *http.Request) {
@@ -85,10 +86,10 @@ func (s *Server) apiZFSPrune(w http.ResponseWriter, r *http.Request) {
 		err = s.hostd.ZFSPrune(r.Context(), ds, req.Keep, "zrepl")
 	}
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	writeJSON(w, map[string]string{})
+	ui.WriteJSON(w, map[string]string{})
 }
 
 func (s *Server) zfsDataset(r *http.Request) (string, error) {
@@ -110,7 +111,7 @@ func (s *Server) apiZFSSend(w http.ResponseWriter, r *http.Request) {
 		resp, err = s.hostd.ZFSSend(r.Context(), ds, r.URL.Query().Get("snap"), r.URL.Query().Get("from"))
 	}
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
 	defer resp.Body.Close()
@@ -130,8 +131,8 @@ func (s *Server) apiZFSRecv(w http.ResponseWriter, r *http.Request) {
 		err = s.hostd.ZFSRecv(r.Context(), ds, r.URL.Query().Get("full") == "1", r.Body)
 	}
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	writeJSON(w, map[string]string{})
+	ui.WriteJSON(w, map[string]string{})
 }

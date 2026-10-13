@@ -1,4 +1,4 @@
-package server
+package ui
 
 import (
 	"net"
@@ -35,17 +35,17 @@ func trusted(ip string) bool {
 	return err == nil && slices.ContainsFunc(trustedProxies, func(p netip.Prefix) bool { return p.Contains(a.Unmap()) })
 }
 
-type loginLimiter struct {
+type LoginLimiter struct {
 	mu       sync.Mutex
 	failures map[string][]time.Time
 	slots    chan struct{}
 }
 
-func newLoginLimiter() *loginLimiter {
-	return &loginLimiter{failures: map[string][]time.Time{}, slots: make(chan struct{}, 4)}
+func newLoginLimiter() *LoginLimiter {
+	return &LoginLimiter{failures: map[string][]time.Time{}, slots: make(chan struct{}, 4)}
 }
 
-func clientIP(r *http.Request) string {
+func ClientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr
@@ -68,7 +68,7 @@ func clientIP(r *http.Request) string {
 
 func accountKey(org, user string) string { return "account:" + org + "/" + strings.ToLower(user) }
 
-func (l *loginLimiter) backoff(key string) time.Duration {
+func (l *LoginLimiter) backoff(key string) time.Duration {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	ts := l.recent(key)
@@ -79,7 +79,7 @@ func (l *loginLimiter) backoff(key string) time.Duration {
 	return time.Until(ts[len(ts)-1].Add(d))
 }
 
-func (l *loginLimiter) recent(ip string) []time.Time {
+func (l *LoginLimiter) recent(ip string) []time.Time {
 	cut := time.Now().Add(-failureWindow)
 	ts := l.failures[ip]
 	for len(ts) > 0 && ts[0].Before(cut) {
@@ -93,13 +93,13 @@ func (l *loginLimiter) recent(ip string) []time.Time {
 	return ts
 }
 
-func (l *loginLimiter) blocked(ip string) bool {
+func (l *LoginLimiter) Blocked(ip string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return len(l.recent(ip)) >= maxFailures
 }
 
-func (l *loginLimiter) fail(ip string) {
+func (l *LoginLimiter) Fail(ip string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if len(l.failures) > 4096 {
@@ -110,7 +110,7 @@ func (l *loginLimiter) fail(ip string) {
 	l.failures[ip] = append(l.recent(ip), time.Now())
 }
 
-func (l *loginLimiter) succeed(ip string) {
+func (l *LoginLimiter) Succeed(ip string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	delete(l.failures, ip)

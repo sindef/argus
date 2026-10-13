@@ -12,6 +12,7 @@ import (
 	"argus/internal/auth"
 	"argus/internal/kube"
 	"argus/internal/netguard"
+	"argus/internal/ui"
 )
 
 type volumeReq struct {
@@ -53,7 +54,7 @@ func (s *Server) storage(ctx context.Context) (storageInfo, error) {
 func (s *Server) volumeOp(ctx context.Context, op string, q volumeReq) error {
 	switch op {
 	case "create":
-		if !validObject.MatchString(q.Name) {
+		if !ui.ValidObject.MatchString(q.Name) {
 			return errors.New("invalid name")
 		}
 		if q.Size < 1 || q.Size > 4096 {
@@ -85,7 +86,7 @@ func (s *Server) volumeOp(ctx context.Context, op string, q volumeReq) error {
 
 func formVolume(r *http.Request) volumeReq {
 	var size int
-	_ = intField(r, "size", 1, 4096, &size)
+	_ = ui.IntField(r, "size", 1, 4096, &size)
 	return volumeReq{Name: r.FormValue("name"), Size: size, URL: r.FormValue("url"), VM: r.FormValue("vm"), Pool: r.FormValue("pool")}
 }
 
@@ -125,70 +126,70 @@ func (s *Server) volumesPage(w http.ResponseWriter, r *http.Request) {
 	for i, v := range st.Volumes {
 		rows[i] = hostVolume{Volume: v}
 	}
-	s.render(w, r, "volumes.html", "layout", map[string]any{"Nav": "volumes", "Pools": st.Pools, "Volumes": rows, "Attachable": map[string][]string{"": stoppedVMs(vms)}, "PoolChoices": s.poolChoices(r.Context()), "CanOperate": session(r).Role.Can(auth.Operator), "Error": errText(err),
+	s.Render(w, r, "volumes.html", "layout", map[string]any{"Nav": "volumes", "Pools": st.Pools, "Volumes": rows, "Attachable": map[string][]string{"": stoppedVMs(vms)}, "PoolChoices": s.poolChoices(r.Context()), "CanOperate": ui.Session(r).Role.Can(auth.Operator), "Error": ui.ErrText(err),
 		"PoolNames": volumePools(rows), "PoolFilter": r.FormValue("pool")})
 }
 
 func (s *Server) volumeAction(w http.ResponseWriter, r *http.Request) {
 	q := formVolume(r)
 	if err := s.volumeOp(r.Context(), r.PathValue("op"), q); err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: volume %s %s", session(r).User, r.PathValue("op"), q.Name)
+	log.Printf("%s: volume %s %s", ui.Session(r).User, r.PathValue("op"), q.Name)
 	w.Header().Set("HX-Refresh", "true")
 }
 
 func (s *Server) apiStorage(w http.ResponseWriter, r *http.Request) {
 	st, err := s.storage(r.Context())
 	if err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, st)
+	ui.WriteJSON(w, st)
 }
 
 func (s *Server) apiVolumeOp(w http.ResponseWriter, r *http.Request) {
 	var q volumeReq
 	if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
+		ui.APIError(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if err := s.volumeOp(r.Context(), r.PathValue("op"), q); err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	log.Printf("%s: volume %s %s", session(r).User, r.PathValue("op"), q.Name)
-	writeJSON(w, map[string]string{})
+	log.Printf("%s: volume %s %s", ui.Session(r).User, r.PathValue("op"), q.Name)
+	ui.WriteJSON(w, map[string]string{})
 }
 
 func (s *Server) disksPage(w http.ResponseWriter, r *http.Request) {
 	ds, err := s.ops(r).Disks(r.Context())
-	s.render(w, r, "disks.html", "layout", map[string]any{"Nav": "disks", "Disks": ds, "Error": errText(err)})
+	s.Render(w, r, "disks.html", "layout", map[string]any{"Nav": "disks", "Disks": ds, "Error": ui.ErrText(err)})
 }
 
 func (s *Server) devicesPage(w http.ResponseWriter, r *http.Request) {
 	devs, err := s.ops(r).Devices(r.Context())
-	s.render(w, r, "devices.html", "layout", map[string]any{"Nav": "devices", "D": devs, "Error": errText(err)})
+	s.Render(w, r, "devices.html", "layout", map[string]any{"Nav": "devices", "D": devs, "Error": ui.ErrText(err)})
 }
 
 func (s *Server) deviceAction(w http.ResponseWriter, r *http.Request) {
 	req := deviceReq{Kind: r.FormValue("kind"), ID: r.FormValue("id"), On: r.FormValue("on") == "true"}
 	if err := s.ops(r).DeviceOp(r.Context(), req); err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: passthrough %s %s %v", session(r).User, req.Kind, req.ID, req.On)
+	log.Printf("%s: passthrough %s %s %v", ui.Session(r).User, req.Kind, req.ID, req.On)
 	w.Header().Set("HX-Refresh", "true")
 }
 
 func (s *Server) diskModal(w http.ResponseWriter, r *http.Request) {
 	dd, err := s.ops(r).Disk(r.Context(), r.PathValue("name"))
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	s.render(w, r, "disks.html", "disk-modal", map[string]any{"D": dd})
+	s.Render(w, r, "disks.html", "disk-modal", map[string]any{"D": dd})
 }
 
 func (s *Server) diskAction(w http.ResponseWriter, r *http.Request) {
@@ -198,15 +199,15 @@ func (s *Server) diskAction(w http.ResponseWriter, r *http.Request) {
 		confirm = r.Header.Get("HX-Prompt")
 	}
 	if err := s.ops(r).DiskAction(r.Context(), name, action, confirm, r.FormValue("test")); err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: disk %s %s %s", session(r).User, name, action, r.FormValue("test"))
+	log.Printf("%s: disk %s %s %s", ui.Session(r).User, name, action, r.FormValue("test"))
 	w.Header().Set("HX-Refresh", "true")
 }
 
 func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, "dashboard.html", "layout", map[string]any{"Nav": "dashboard"})
+	s.Render(w, r, "dashboard.html", "layout", map[string]any{"Nav": "dashboard"})
 }
 
 func (s *Server) dashboardStats(w http.ResponseWriter, r *http.Request) {
@@ -215,7 +216,7 @@ func (s *Server) dashboardStats(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	writeJSON(w, st)
+	ui.WriteJSON(w, st)
 }
 
 func (s *Server) moveDisk(ctx context.Context, ns, name, disk, pool string) error {

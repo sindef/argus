@@ -11,6 +11,7 @@ import (
 	"argus/internal/auth"
 	"argus/internal/kube"
 	"argus/internal/manager"
+	"argus/internal/ui"
 )
 
 type imageRow struct {
@@ -44,16 +45,16 @@ func (s *Server) managerImages(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	sort.Strings(hosts)
-	sources, _, err := s.imageSources(r.Context(), session(r).Org)
+	sources, _, err := s.imageSources(r.Context(), ui.Session(r).Org)
 	if err != nil {
 		errs = strings.TrimSpace(errs + " " + err.Error())
 	}
-	s.render(w, r, "manager-images.html", "layout", map[string]any{"Nav": "images", "Rows": out, "HostNames": hosts, "CanOperate": session(r).Role.Can(auth.Operator), "Error": errs,
-		"Library": s.library(session(r).Org), "HostArch": arch, "Templates": s.libraryTemplates(session(r).Org), "HostTemplates": s.hostTemplates(r), "Sources": sources, "Address": s.registryAddress(r.Context()), "Org": session(r).Org, "Super": superAdmin(r)})
+	s.Render(w, r, "manager-images.html", "layout", map[string]any{"Nav": "images", "Rows": out, "HostNames": hosts, "CanOperate": ui.Session(r).Role.Can(auth.Operator), "Error": errs,
+		"Library": s.library(ui.Session(r).Org), "HostArch": arch, "Templates": s.libraryTemplates(ui.Session(r).Org), "HostTemplates": s.hostTemplates(r), "Sources": sources, "Address": s.registryAddress(r.Context()), "Org": ui.Session(r).Org, "Super": superAdmin(r)})
 }
 
 func (s *Server) managerImageOp(w http.ResponseWriter, r *http.Request) {
-	org := session(r).Org
+	org := ui.Session(r).Org
 	if r.PathValue("op") != "library-add" {
 		r.ParseForm()
 	}
@@ -108,9 +109,9 @@ func (s *Server) managerImageOp(w http.ResponseWriter, r *http.Request) {
 		err = errors.New("unknown operation")
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: image %s %s%s", session(r).User, r.PathValue("op"), r.FormValue("image"), r.FormValue("name"))
+	log.Printf("%s: image %s %s%s", ui.Session(r).User, r.PathValue("op"), r.FormValue("image"), r.FormValue("name"))
 	w.Header().Set("HX-Refresh", "true")
 }

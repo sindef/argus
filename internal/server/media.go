@@ -16,6 +16,7 @@ import (
 	"argus/internal/lifecycle"
 	"argus/internal/manager"
 	"argus/internal/registry"
+	"argus/internal/ui"
 )
 
 func mediaImage(vm string) string {
@@ -84,20 +85,20 @@ func mediaSize(r *http.Request) int64 {
 func (s *Server) mediaMount(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
 	if err := s.ops(r).MountMedia(r.Context(), ns, name, r.Header.Get("Content-Type"), mediaSize(r), r.Body); err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: mounted local media on %s/%s", session(r).User, ns, name)
+	log.Printf("%s: mounted local media on %s/%s", ui.Session(r).User, ns, name)
 	w.Write([]byte("Media inserted"))
 }
 
 func (s *Server) mediaEject(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
 	if err := s.ops(r).EjectMedia(r.Context(), ns, name); err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: ejected media from %s/%s", session(r).User, ns, name)
+	log.Printf("%s: ejected media from %s/%s", ui.Session(r).User, ns, name)
 	w.Write([]byte("Media ejected"))
 }
 
@@ -110,8 +111,8 @@ func (s *Server) apiMedia(w http.ResponseWriter, r *http.Request) {
 		err = l.MountMedia(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.Header.Get("Content-Type"), mediaSize(r), r.Body)
 	}
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	writeJSON(w, map[string]string{})
+	ui.WriteJSON(w, map[string]string{})
 }

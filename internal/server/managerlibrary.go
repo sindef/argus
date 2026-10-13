@@ -28,6 +28,7 @@ import (
 	"argus/internal/netguard"
 	"argus/internal/registry"
 	"argus/internal/tlscert"
+	"argus/internal/ui"
 )
 
 const (
@@ -78,14 +79,6 @@ func secretKey(parts ...string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func (s *Server) loadJSON(ctx context.Context, key string, v any) (string, error) {
-	return auth.LoadJSON(ctx, s.auth.Secrets(), key, "config", v)
-}
-
-func (s *Server) saveJSON(ctx context.Context, key, rv string, v any) error {
-	return auth.SaveJSON(ctx, s.auth.Secrets(), key, "config", rv, v)
-}
-
 func (s *Server) startRegistry(ctx context.Context) error {
 	g, err := registry.New(filepath.Join(s.dataDir, "registry"))
 	if err != nil {
@@ -102,7 +95,7 @@ func (s *Server) startRegistry(ctx context.Context) error {
 
 func (s *Server) registryAddress(ctx context.Context) string {
 	var st struct{ Address string }
-	if _, err := s.loadJSON(ctx, registryKey, &st); err != nil {
+	if _, err := s.LoadJSON(ctx, registryKey, &st); err != nil {
 		log.Printf("registry address: %v", err)
 	}
 	return st.Address
@@ -120,7 +113,7 @@ func (s *Server) reloadManagerCert(ctx context.Context) error {
 	} else if host != "" {
 		names = append(names, host)
 	}
-	pki, err := tlscert.Load(ctx, s.auth.Secrets(), ips, names...)
+	pki, err := tlscert.Load(ctx, s.Auth.Secrets(), ips, names...)
 	if err != nil {
 		return err
 	}
@@ -173,18 +166,18 @@ func (s *Server) registryAuthorize(r *http.Request, repo string, a registry.Acce
 	g, ok := s.regAuth.users[key]
 	s.regAuth.mu.Unlock()
 	if !ok || time.Now().After(g.expires) {
-		ip := clientIP(r)
-		if s.limiter.blocked(ip) {
+		ip := ui.ClientIP(r)
+		if s.Limiter.Blocked(ip) {
 			return false
 		}
-		u, ok, err := s.auth.ForOrg(org).Verify(r.Context(), name, pass)
+		u, ok, err := s.Auth.ForOrg(org).Verify(r.Context(), name, pass)
 		if !ok {
 			if err == nil {
-				s.limiter.fail(ip)
+				s.Limiter.Fail(ip)
 			}
 			return false
 		}
-		s.limiter.succeed(ip)
+		s.Limiter.Succeed(ip)
 		g = userGrant{role: u.Role, scoped: len(u.Scopes) > 0, expires: time.Now().Add(5 * time.Minute)}
 		s.regAuth.mu.Lock()
 		s.regAuth.users[key] = g
@@ -195,10 +188,9 @@ func (s *Server) registryAuthorize(r *http.Request, repo string, a registry.Acce
 
 func (s *Server) serveRegistry(w http.ResponseWriter, r *http.Request) {
 	if (r.Method == http.MethodPut || r.Method == http.MethodDelete) && strings.Contains(r.URL.Path, "/manifests/") {
-		aw := &auditWriter{ResponseWriter: w, status: http.StatusOK}
-		s.registry.ServeHTTP(aw, r)
+		status := ui.RecordStatus(w, func(w http.ResponseWriter) { s.registry.ServeHTTP(w, r) })
 		org, name := s.registryUser(r)
-		s.record(s.auditUser(org, name), "registry "+r.Method+" "+strings.TrimPrefix(r.URL.Path, "/v2/"), aw.status < 400, "")
+		s.Record(s.AuditUser(org, name), "registry "+r.Method+" "+strings.TrimPrefix(r.URL.Path, "/v2/"), status < 400, "")
 		return
 	}
 	s.registry.ServeHTTP(w, r)
@@ -216,7 +208,7 @@ func (s *Server) library(org string) []libraryImage {
 
 func (s *Server) imageSources(ctx context.Context, org string) ([]ImageSource, string, error) {
 	var out []ImageSource
-	rv, err := s.loadJSON(ctx, sourcesKey+org, &out)
+	rv, err := s.LoadJSON(ctx, sourcesKey+org, &out)
 	return out, rv, err
 }
 
@@ -233,7 +225,7 @@ func freeSpace(dir string, need int64) error {
 
 func (s *Server) storeDisk(org, name, tag, file, arch string, src io.Reader) error {
 	switch {
-	case !validObject.MatchString(name):
+	case !ui.ValidObject.MatchString(name):
 		return errors.New("name must be lowercase letters, digits and dashes")
 	case !tagRE.MatchString(tag):
 		return errors.New("invalid tag")
@@ -285,7 +277,7 @@ func (p *progressReader) Read(b []byte) (int, error) {
 }
 
 func (s *Server) libraryAdd(r *http.Request) error {
-	org := session(r).Org
+	org := ui.Session(r).Org
 	mr, err := r.MultipartReader()
 	if err != nil {
 		return err
@@ -317,7 +309,7 @@ func (s *Server) libraryAdd(r *http.Request) error {
 		return errors.New("choose a file to upload")
 	case !strings.HasPrefix(src, "https://") && !strings.HasPrefix(src, "http://"):
 		return errors.New("enter an http or https URL")
-	case !validObject.MatchString(name) || !tagRE.MatchString(tag):
+	case !ui.ValidObject.MatchString(name) || !tagRE.MatchString(tag):
 		return errors.New("invalid name or tag")
 	}
 	return s.manager.Task(org, "Import "+name+":"+tag+" to library", "library:"+org+"/"+name, func(ctx context.Context, progress func(string)) error {
@@ -362,14 +354,14 @@ func (s *Server) nodesNamed(r *http.Request, names []string) ([]manager.Node, er
 }
 
 func (s *Server) librarySend(r *http.Request) error {
-	org := session(r).Org
+	org := ui.Session(r).Org
 	name, tag, _ := strings.Cut(r.FormValue("image"), ":")
 	hostName := r.FormValue("name")
 	size, err := gibibytes(r.FormValue("size"))
 	if err != nil {
 		return err
 	}
-	if !validObject.MatchString(hostName) {
+	if !ui.ValidObject.MatchString(hostName) {
 		return errors.New("name on hosts must be lowercase letters, digits and dashes")
 	}
 	if !slices.ContainsFunc(s.library(org), func(i libraryImage) bool { return i.Name == name && i.Tag == tag }) {
@@ -389,13 +381,13 @@ func (s *Server) librarySend(r *http.Request) error {
 }
 
 func (s *Server) importFromSource(r *http.Request) error {
-	org := session(r).Org
+	org := ui.Session(r).Org
 	size, err := gibibytes(r.FormValue("size"))
 	if err != nil {
 		return err
 	}
 	name, path := r.FormValue("name"), strings.TrimSpace(r.FormValue("path"))
-	if !validObject.MatchString(name) {
+	if !ui.ValidObject.MatchString(name) {
 		return errors.New("invalid name")
 	}
 	req := imageImportReq{Name: name, Size: size}
@@ -439,7 +431,7 @@ func (s *Server) importFromSource(r *http.Request) error {
 }
 
 func (s *Server) changeSources(r *http.Request, add bool) error {
-	org := session(r).Org
+	org := ui.Session(r).Org
 	sources, rv, err := s.imageSources(r.Context(), org)
 	if err != nil {
 		return err
@@ -462,7 +454,7 @@ func (s *Server) changeSources(r *http.Request, add bool) error {
 		}
 		sources = append(sources, src)
 	}
-	return s.saveJSON(r.Context(), sourcesKey+org, rv, sources)
+	return s.SaveJSON(r.Context(), sourcesKey+org, rv, sources)
 }
 
 func (s *Server) setRegistryAddress(r *http.Request) error {
@@ -474,12 +466,12 @@ func (s *Server) setRegistryAddress(r *http.Request) error {
 		return errors.New("enter a host name or IP address, optionally with :port")
 	}
 	var st struct{ Address string }
-	rv, err := s.loadJSON(r.Context(), registryKey, &st)
+	rv, err := s.LoadJSON(r.Context(), registryKey, &st)
 	if err != nil {
 		return err
 	}
 	st.Address = addr
-	if err := s.saveJSON(r.Context(), registryKey, rv, st); err != nil {
+	if err := s.SaveJSON(r.Context(), registryKey, rv, st); err != nil {
 		return err
 	}
 	return s.reloadManagerCert(r.Context())

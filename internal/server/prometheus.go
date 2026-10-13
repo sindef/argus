@@ -70,7 +70,7 @@ func (s *Server) apiPrometheus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	counts := map[string]int{"warning": 0, "critical": 0}
-	for _, a := range s.activeAlarms() {
+	for _, a := range s.ActiveAlarms() {
 		counts[a.Severity]++
 	}
 	for sev, n := range counts {

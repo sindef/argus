@@ -1,4 +1,4 @@
-package server
+package ui
 
 import (
 	"bytes"
@@ -59,18 +59,18 @@ func (a *auditWriter) Flush() {
 	}
 }
 
-func (s *Server) record(user, action string, ok bool, result string) {
-	s.auditLog.mu.Lock()
-	defer s.auditLog.mu.Unlock()
-	s.auditLog.entries = append(s.auditLog.entries, AuditEntry{Time: time.Now(), User: user, Action: action, OK: ok, Result: result})
+func (s *Core) Record(user, action string, ok bool, result string) {
+	s.audit.mu.Lock()
+	defer s.audit.mu.Unlock()
+	s.audit.entries = append(s.audit.entries, AuditEntry{Time: time.Now(), User: user, Action: action, OK: ok, Result: result})
 	log.Printf("audit: user=%q action=%q ok=%v result=%q", user, action, ok, result)
-	if n := len(s.auditLog.entries); n > auditKeep {
-		s.auditLog.entries = s.auditLog.entries[n-auditKeep:]
+	if n := len(s.audit.entries); n > auditKeep {
+		s.audit.entries = s.audit.entries[n-auditKeep:]
 	}
-	s.auditLog.dirty = true
+	s.audit.dirty = true
 }
 
-func (s *Server) audited(w http.ResponseWriter, r *http.Request, user string, h func(http.ResponseWriter)) {
+func (s *Core) audited(w http.ResponseWriter, r *http.Request, user string, h func(http.ResponseWriter)) {
 	if r.Method == http.MethodGet || r.Method == http.MethodHead || r.URL.Path == "/api/heartbeat" {
 		h(w)
 		return
@@ -78,7 +78,7 @@ func (s *Server) audited(w http.ResponseWriter, r *http.Request, user string, h 
 	aw := &auditWriter{ResponseWriter: w, status: http.StatusOK}
 	h(aw)
 	ok, result := auditResult(aw, w.Header())
-	s.record(user, r.Method+" "+r.URL.Path, ok, result)
+	s.Record(user, r.Method+" "+r.URL.Path, ok, result)
 }
 
 func auditResult(aw *auditWriter, h http.Header) (bool, string) {
@@ -95,13 +95,13 @@ func auditResult(aw *auditWriter, h http.Header) (bool, string) {
 	return false, body
 }
 
-func (s *Server) auditLoop(ctx context.Context) {
-	store := s.auth.Secrets()
+func (s *Core) auditLoop(ctx context.Context) {
+	store := s.Auth.Secrets()
 	var es []AuditEntry
 	if _, err := auth.LoadJSON(ctx, store, auditKey, "entries", &es); err == nil {
-		s.auditLog.mu.Lock()
-		s.auditLog.entries = append(es, s.auditLog.entries...)
-		s.auditLog.mu.Unlock()
+		s.audit.mu.Lock()
+		s.audit.entries = append(es, s.audit.entries...)
+		s.audit.mu.Unlock()
 	}
 	lifecycle.Every(ctx, 10*time.Second, false, "audit", s.flushAudit)
 	cctx, cancel := lifecycle.CleanupContext()
@@ -109,36 +109,36 @@ func (s *Server) auditLoop(ctx context.Context) {
 	s.flushAudit(cctx)
 }
 
-func (s *Server) flushAudit(ctx context.Context) {
-	s.auditLog.mu.Lock()
-	if !s.auditLog.dirty {
-		s.auditLog.mu.Unlock()
+func (s *Core) flushAudit(ctx context.Context) {
+	s.audit.mu.Lock()
+	if !s.audit.dirty {
+		s.audit.mu.Unlock()
 		return
 	}
-	b, err := json.Marshal(s.auditLog.entries)
-	s.auditLog.dirty = false
-	s.auditLog.mu.Unlock()
+	b, err := json.Marshal(s.audit.entries)
+	s.audit.dirty = false
+	s.audit.mu.Unlock()
 	if err != nil {
 		return
 	}
-	if err := auth.PutJSON(ctx, s.auth.Secrets(), auditKey, "entries", json.RawMessage(b)); err != nil {
+	if err := auth.PutJSON(ctx, s.Auth.Secrets(), auditKey, "entries", json.RawMessage(b)); err != nil {
 		log.Printf("audit: save: %v", err)
-		s.auditLog.mu.Lock()
-		s.auditLog.dirty = true
-		s.auditLog.mu.Unlock()
+		s.audit.mu.Lock()
+		s.audit.dirty = true
+		s.audit.mu.Unlock()
 	}
 }
 
-func (s *Server) auditPage(w http.ResponseWriter, r *http.Request) {
-	s.auditLog.mu.Lock()
+func (s *Core) auditPage(w http.ResponseWriter, r *http.Request) {
+	s.audit.mu.Lock()
 	var es []AuditEntry
-	for i := len(s.auditLog.entries) - 1; i >= 0; i-- {
-		e := s.auditLog.entries[i]
-		if s.manager == nil || superAdmin(r) || strings.HasPrefix(e.User, session(r).Org+"/") {
+	for i := len(s.audit.entries) - 1; i >= 0; i-- {
+		e := s.audit.entries[i]
+		if !s.MultiOrg || s.Mode.Super(r) || strings.HasPrefix(e.User, Session(r).Org+"/") {
 			es = append(es, e)
 		}
 	}
-	s.auditLog.mu.Unlock()
+	s.audit.mu.Unlock()
 	if q := strings.ToLower(strings.TrimSpace(r.FormValue("q"))); q != "" {
 		out := es[:0]
 		for _, e := range es {
@@ -148,12 +148,18 @@ func (s *Server) auditPage(w http.ResponseWriter, r *http.Request) {
 		}
 		es = out
 	}
-	s.render(w, r, "audit.html", "layout", map[string]any{"Nav": "audit", "Entries": es[:min(len(es), 500)]})
+	s.Render(w, r, "audit.html", "layout", map[string]any{"Nav": "audit", "Entries": es[:min(len(es), 500)]})
 }
 
-func (s *Server) auditUser(org, user string) string {
-	if s.manager == nil {
+func (s *Core) AuditUser(org, user string) string {
+	if !s.MultiOrg {
 		return user
 	}
 	return org + "/" + user
+}
+
+func RecordStatus(w http.ResponseWriter, h func(http.ResponseWriter)) int {
+	aw := &auditWriter{ResponseWriter: w, status: http.StatusOK}
+	h(aw)
+	return aw.status
 }

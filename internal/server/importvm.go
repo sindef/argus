@@ -29,6 +29,7 @@ import (
 
 	"argus/internal/kube"
 	"argus/internal/netguard"
+	"argus/internal/ui"
 )
 
 type ovfEnvelope struct {
@@ -119,7 +120,7 @@ func (s *Server) streamOVA(ctx context.Context, fields map[string]string, body i
 	if v.Name == "" {
 		v.Name = strings.Trim(strings.ToLower(nonName.ReplaceAllString(env.System.Name, "-")), "-")
 	}
-	if !validObject.MatchString(v.Name) || v.Network == "" {
+	if !ui.ValidObject.MatchString(v.Name) || v.Network == "" {
 		return "", errors.New("valid VM name and network required")
 	}
 	for _, it := range env.System.Items {
@@ -321,7 +322,7 @@ func (s *Server) importESXi(ctx context.Context, f func(string) string) (string,
 	if v.Name == "" {
 		v.Name = strings.Trim(strings.ToLower(nonName.ReplaceAllString(kv["displayname"], "-")), "-")
 	}
-	if !validObject.MatchString(v.Name) || v.Network == "" {
+	if !ui.ValidObject.MatchString(v.Name) || v.Network == "" {
 		return "", errors.New("valid VM name and network required")
 	}
 	if n, err := strconv.ParseInt(kv["numvcpus"], 10, 64); err == nil {
@@ -445,19 +446,19 @@ func (s *Server) serveESXi(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) importModal(w http.ResponseWriter, r *http.Request) {
 	f, _ := s.ops(r).VMForm(r.Context())
-	s.render(w, r, "vmnew.html", "import-modal", map[string]any{"Networks": f.Networks, "Pools": f.Pools, "Images": f.Images, "Arch": f.Arch})
+	s.Render(w, r, "vmnew.html", "import-modal", map[string]any{"Networks": f.Networks, "Pools": f.Pools, "Images": f.Images, "Arch": f.Arch})
 }
 
 func (s *Server) importVM(w http.ResponseWriter, r *http.Request) {
 	name, err := s.ops(r).Import(r.Context(), r.PathValue("source"), r.Header.Get("Content-Type"), r.Body)
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: import vm %s from %s", session(r).User, name, r.PathValue("source"))
-	if base, ok := r.Context().Value(baseKey{}).(string); ok {
-		redirect(w, r, strings.Replace(base, "/hosts/", "/nodes/", 1)+"/vms/"+kube.Namespace+"/"+name)
+	log.Printf("%s: import vm %s from %s", ui.Session(r).User, name, r.PathValue("source"))
+	if base := ui.Base(r); base != "" {
+		ui.Redirect(w, r, strings.Replace(base, "/hosts/", "/nodes/", 1)+"/vms/"+kube.Namespace+"/"+name)
 		return
 	}
-	redirect(w, r, "/vms/"+kube.Namespace+"/"+name)
+	ui.Redirect(w, r, "/vms/"+kube.Namespace+"/"+name)
 }

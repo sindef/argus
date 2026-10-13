@@ -15,6 +15,7 @@ import (
 	"argus/internal/hostd"
 	"argus/internal/kube"
 	"argus/internal/manager"
+	"argus/internal/ui"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
@@ -33,7 +34,7 @@ func (s *Server) networks(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	s.render(w, r, "networks.html", "layout", map[string]any{"Nav": "networks", "Networks": nets, "Attached": attached, "Bridges": s.bridges(r.Context()), "CanEdit": session(r).Role.Can(auth.Admin), "Error": errText(err)})
+	s.Render(w, r, "networks.html", "layout", map[string]any{"Nav": "networks", "Networks": nets, "Attached": attached, "Bridges": s.bridges(r.Context()), "CanEdit": ui.Session(r).Role.Can(auth.Admin), "Error": ui.ErrText(err)})
 }
 
 type networkReq struct {
@@ -64,7 +65,7 @@ func validNetwork(n networkReq) error {
 	if n.VLAN < 0 || n.VLAN > 4094 {
 		return errors.New("VLAN must be 1-4094")
 	}
-	if !validObject.MatchString(n.Name) {
+	if !ui.ValidObject.MatchString(n.Name) {
 		return errors.New("invalid name")
 	}
 	if n.RateMbps < 0 || n.RateMbps > 100000 {
@@ -88,20 +89,20 @@ func (s *Server) createNetwork(w http.ResponseWriter, r *http.Request) {
 		err = s.kube.CreateNetwork(r.Context(), n.kube())
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: save network %s vlan %d", session(r).User, name, vlan)
+	log.Printf("%s: save network %s vlan %d", ui.Session(r).User, name, vlan)
 	w.Header().Set("HX-Refresh", "true")
 }
 
 func (s *Server) deleteNetwork(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := s.kube.DeleteNetwork(r.Context(), name); err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: delete network %s", session(r).User, name)
+	log.Printf("%s: delete network %s", ui.Session(r).User, name)
 	w.Header().Set("HX-Refresh", "true")
 }
 
@@ -112,14 +113,14 @@ func (s *Server) apiNetworkOp(w http.ResponseWriter, r *http.Request) {
 		err = validNetwork(n)
 	}
 	if err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
+		ui.APIError(w, r, http.StatusBadRequest, err)
 		return
 	}
 	switch {
 	case r.PathValue("op") == "delete":
 		err = s.kube.DeleteNetwork(r.Context(), n.Name)
 	case n.Bridge != "" && !slices.Contains(s.bridges(r.Context()), n.Bridge):
-		err = fmt.Errorf("bridge %s not found on %s", n.Bridge, s.nodeName)
+		err = fmt.Errorf("bridge %s not found on %s", n.Bridge, s.NodeName)
 	case r.PathValue("op") == "update":
 		err = s.kube.UpdateNetwork(r.Context(), n.kube())
 	default:
@@ -129,11 +130,11 @@ func (s *Server) apiNetworkOp(w http.ResponseWriter, r *http.Request) {
 		err = nil
 	}
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	log.Printf("%s: network %s %s vlan %d", session(r).User, r.PathValue("op"), n.Name, n.VLAN)
-	writeJSON(w, map[string]string{})
+	log.Printf("%s: network %s %s vlan %d", ui.Session(r).User, r.PathValue("op"), n.Name, n.VLAN)
+	ui.WriteJSON(w, map[string]string{})
 }
 
 func (s *Server) bridges(ctx context.Context) []string {
@@ -175,7 +176,7 @@ func (s *Server) hostNetworkPage(w http.ResponseWriter, r *http.Request) {
 			free = append(free, i)
 		}
 	}
-	s.render(w, r, "hostnet.html", "layout", map[string]any{"Nav": "hostnet", "Net": info.Net, "Ports": free, "Migration": info.Migration, "Error": errText(err)})
+	s.Render(w, r, "hostnet.html", "layout", map[string]any{"Nav": "hostnet", "Net": info.Net, "Ports": free, "Migration": info.Migration, "Error": ui.ErrText(err)})
 }
 
 func (s *Server) ifaceModal(w http.ResponseWriter, r *http.Request) {
@@ -191,10 +192,10 @@ func (s *Server) ifaceModal(w http.ResponseWriter, r *http.Request) {
 		err = fmt.Errorf("interface %s not found", r.PathValue("name"))
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	s.render(w, r, "hostnet.html", "iface-modal", map[string]any{"I": iface, "DNS": hn.DNS, "Management": management(hn, *iface), "Migration": info.Migration == iface.Name})
+	s.Render(w, r, "hostnet.html", "iface-modal", map[string]any{"I": iface, "DNS": hn.DNS, "Management": management(hn, *iface), "Migration": info.Migration == iface.Name})
 }
 
 func (s *Server) hostNetworkAction(w http.ResponseWriter, r *http.Request) {
@@ -214,10 +215,10 @@ func (s *Server) hostNetworkAction(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.ops(r).NetworkOp(accessCtx(r), r.PathValue("op"), req)
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: host network %s %s", session(r).User, r.PathValue("op"), r.FormValue("iface"))
+	log.Printf("%s: host network %s %s", ui.Session(r).User, r.PathValue("op"), r.FormValue("iface"))
 	w.Header().Set("HX-Refresh", "true")
 }
 
@@ -226,10 +227,10 @@ type HostNetInfo = manager.HostNetwork
 func (s *Server) apiHostNetwork(w http.ResponseWriter, r *http.Request) {
 	hn, err := s.hostNet(r)
 	if err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, HostNetInfo{Net: hn, Migration: s.kube.MigrationBridge(r.Context())})
+	ui.WriteJSON(w, HostNetInfo{Net: hn, Migration: s.kube.MigrationBridge(r.Context())})
 }
 
 func bridgeSpec(r *http.Request) hostd.BridgeSpec {

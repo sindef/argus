@@ -11,12 +11,11 @@ import (
 	"path"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
-	"time"
 
 	"argus/internal/auth"
 	"argus/internal/kube"
+	"argus/internal/ui"
 
 	"github.com/gorilla/websocket"
 )
@@ -70,8 +69,8 @@ func (s *Server) vmData(r *http.Request) map[string]any {
 		"VMs":          filterVMs(vms, r.FormValue("q")),
 		"Selected":     sel,
 		"PowerActions": powerActions,
-		"CanOperate":   session(r).Role.Can(auth.Operator),
-		"Error":        errText(err),
+		"CanOperate":   ui.Session(r).Role.Can(auth.Operator),
+		"Error":        ui.ErrText(err),
 	}
 }
 
@@ -82,17 +81,17 @@ func (s *Server) vms(w http.ResponseWriter, r *http.Request) {
 	if ns, name := r.PathValue("ns"), r.PathValue("name"); name != "" {
 		data["Open"] = kube.VM{Namespace: ns, Name: name}
 	}
-	s.render(w, r, "vms.html", "layout", data)
+	s.Render(w, r, "vms.html", "layout", data)
 }
 
 func (s *Server) vmTable(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
-	s.render(w, r, "vms.html", "table", s.vmData(r))
+	s.Render(w, r, "vms.html", "table", s.vmData(r))
 }
 
 func (s *Server) navVMs(w http.ResponseWriter, r *http.Request) {
 	vms, _ := s.kube.ListVMs(r.Context())
-	s.render(w, r, "vms.html", "nav-vms", map[string]any{"VMs": vms, "CanOperate": session(r).Role.Can(auth.Operator)})
+	s.Render(w, r, "vms.html", "nav-vms", map[string]any{"VMs": vms, "CanOperate": ui.Session(r).Role.Can(auth.Operator)})
 }
 
 func (s *Server) vmDrawer(w http.ResponseWriter, r *http.Request) {
@@ -105,7 +104,7 @@ func (s *Server) vmDrawer(w http.ResponseWriter, r *http.Request) {
 	if !slices.Contains(drawerTabs, tab) {
 		tab = "overview"
 	}
-	data := map[string]any{"VM": vm, "Tab": tab, "Tabs": drawerTabs, "CanOperate": session(r).Role.Can(auth.Operator)}
+	data := map[string]any{"VM": vm, "Tab": tab, "Tabs": drawerTabs, "CanOperate": ui.Session(r).Role.Can(auth.Operator)}
 	switch tab {
 	case "snapshots":
 		data["Snapshots"], err = s.kube.ListSnapshots(r.Context(), vm.Namespace, vm.Name)
@@ -118,8 +117,8 @@ func (s *Server) vmDrawer(w http.ResponseWriter, r *http.Request) {
 	case "backups":
 		data["Backups"] = map[string]any{"B": s.vmBackupInfo(r.Context(), vm.Namespace, vm.Name), "P": "/vms/" + vm.Namespace + "/" + vm.Name, "H": "/vms/" + vm.Namespace + "/" + vm.Name, "Name": vm.Name, "CanOperate": data["CanOperate"]}
 	}
-	data["Error"] = errText(err)
-	s.render(w, r, "vms.html", "drawer", data)
+	data["Error"] = ui.ErrText(err)
+	s.Render(w, r, "vms.html", "drawer", data)
 }
 
 func (s *Server) bulk(w http.ResponseWriter, r *http.Request) {
@@ -130,12 +129,12 @@ func (s *Server) bulk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(sel) == 0 {
-		flash(w, r, errors.New("select at least one VM"))
+		ui.Flash(w, r, errors.New("select at least one VM"))
 		return
 	}
 	single := act == "clone" || act == "rename" || act == "template-copy"
 	if single && len(sel) != 1 {
-		flash(w, r, errors.New("select exactly one VM"))
+		ui.Flash(w, r, errors.New("select exactly one VM"))
 		return
 	}
 	prompt := strings.TrimSpace(r.Header.Get("HX-Prompt"))
@@ -150,10 +149,10 @@ func (s *Server) bulk(w http.ResponseWriter, r *http.Request) {
 			errs = append(errs, err.Error())
 			continue
 		}
-		log.Printf("%s: %s %s/%s %s", session(r).User, act, ns, name, prompt)
+		log.Printf("%s: %s %s/%s %s", ui.Session(r).User, act, ns, name, prompt)
 	}
 	if len(errs) > 0 {
-		flash(w, r, errors.New(strings.Join(errs, "; ")))
+		ui.Flash(w, r, errors.New(strings.Join(errs, "; ")))
 		return
 	}
 	w.Header().Set("HX-Refresh", "true")
@@ -164,15 +163,15 @@ func (s *Server) console(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("type") == "serial" {
 		kind = "console"
 	}
-	s.render(w, r, "console.html", "layout", map[string]any{"Namespace": r.PathValue("ns"), "Name": r.PathValue("name"), "Kind": kind, "Page": "/vms/" + r.PathValue("ns") + "/" + r.PathValue("name"), "Media": "/vms/" + r.PathValue("ns") + "/" + r.PathValue("name") + "/media", "WS": "/ws/" + r.PathValue("ns") + "/" + r.PathValue("name") + "/"})
+	s.Render(w, r, "console.html", "layout", map[string]any{"Namespace": r.PathValue("ns"), "Name": r.PathValue("name"), "Kind": kind, "Page": "/vms/" + r.PathValue("ns") + "/" + r.PathValue("name"), "Media": "/vms/" + r.PathValue("ns") + "/" + r.PathValue("name") + "/media", "WS": "/ws/" + r.PathValue("ns") + "/" + r.PathValue("name") + "/"})
 }
 
 func (s *Server) consoleWS(w http.ResponseWriter, r *http.Request) {
 	ns, name, kind := r.PathValue("ns"), r.PathValue("name"), r.PathValue("kind")
-	s.record(s.auditUser(session(r).Org, session(r).User), "open console of "+path.Join(r.PathValue("node"), ns, name), true, "")
+	s.Record(s.AuditUser(ui.Session(r).Org, ui.Session(r).User), "open console of "+path.Join(r.PathValue("node"), ns, name), true, "")
 	backend, err := s.ops(r).DialConsole(r.Context(), ns, name, kind)
 	if err != nil {
-		log.Printf("%s: %v", session(r).User, err)
+		log.Printf("%s: %v", ui.Session(r).User, err)
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -186,39 +185,11 @@ func (s *Server) consoleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer client.Close()
-	log.Printf("%s: %s %s/%s", session(r).User, kind, ns, name)
+	log.Printf("%s: %s %s/%s", ui.Session(r).User, kind, ns, name)
 	done := make(chan struct{}, 2)
 	go pipe(client, backend, done)
 	go pipe(backend, client, done)
-	s.waitConsole(r, done)
-}
-
-func (s *Server) sessionValid(r *http.Request) bool {
-	if tok := session(r).Token; tok != "" {
-		_, ok := s.auth.Session(tok)
-		return ok
-	}
-	if tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
-		t, valid := s.auth.CheckToken(r.Context(), tok)
-		return valid && t.Scope == ""
-	}
-	return false
-}
-
-func (s *Server) waitConsole(r *http.Request, done <-chan struct{}) {
-	t := time.NewTicker(10 * time.Second)
-	defer t.Stop()
-	for {
-		select {
-		case <-done:
-			return
-		case <-t.C:
-			if !s.sessionValid(r) {
-				log.Printf("%s: console closed, session revoked", session(r).User)
-				return
-			}
-		}
-	}
+	s.WaitConsole(r, done)
 }
 
 func pipe(dst, src *websocket.Conn, done chan<- struct{}) {
@@ -241,7 +212,7 @@ func (s *Server) newVM(w http.ResponseWriter, r *http.Request) {
 		tmpl = "modal"
 	}
 	slices.SortStableFunc(f.Pools, func(a, b kube.Pool) int { return cmp.Compare(b.Free, a.Free) })
-	s.render(w, r, "vmnew.html", tmpl, map[string]any{"Images": f.Images, "Templates": f.Templates, "Networks": f.Networks, "Pools": f.Pools, "Error": errText(err)})
+	s.Render(w, r, "vmnew.html", tmpl, map[string]any{"Images": f.Images, "Templates": f.Templates, "Networks": f.Networks, "Pools": f.Pools, "Error": ui.ErrText(err)})
 }
 
 func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {
@@ -276,12 +247,12 @@ func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {
 			VirtIO:         r.FormValue("virtio") != "",
 		}
 	}
-	err := intField(r, "cores", 1, 64, &spec.Cores)
+	err := ui.IntField(r, "cores", 1, 64, &spec.Cores)
 	if err == nil {
-		err = intField(r, "memory", 128, 262144, &spec.MemoryMiB)
+		err = ui.IntField(r, "memory", 128, 262144, &spec.MemoryMiB)
 	}
 	if err == nil {
-		err = intField(r, "disk", 1, 4096, &spec.DiskGiB)
+		err = ui.IntField(r, "disk", 1, 4096, &spec.DiskGiB)
 	}
 	if err == nil {
 		err = checkVMSpec(spec)
@@ -290,24 +261,15 @@ func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {
 		err = s.ops(r).CreateVM(r.Context(), createVMReq{Spec: spec, Pool: r.FormValue("pool")})
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: create vm %s", session(r).User, spec.Name)
-	if base, ok := r.Context().Value(baseKey{}).(string); ok {
-		redirect(w, r, strings.Replace(base, "/hosts/", "/nodes/", 1)+"/vms/"+kube.Namespace+"/"+spec.Name)
+	log.Printf("%s: create vm %s", ui.Session(r).User, spec.Name)
+	if base := ui.Base(r); base != "" {
+		ui.Redirect(w, r, strings.Replace(base, "/hosts/", "/nodes/", 1)+"/vms/"+kube.Namespace+"/"+spec.Name)
 		return
 	}
-	redirect(w, r, "/vms/"+kube.Namespace+"/"+spec.Name)
-}
-
-func intField(r *http.Request, field string, min, max int, dst *int) error {
-	n, err := strconv.Atoi(r.FormValue(field))
-	if err != nil || n < min || n > max {
-		return fmt.Errorf("%s must be %d-%d", field, min, max)
-	}
-	*dst = n
-	return nil
+	ui.Redirect(w, r, "/vms/"+kube.Namespace+"/"+spec.Name)
 }
 
 func (s *Server) addDisk(w http.ResponseWriter, r *http.Request) {
@@ -316,24 +278,24 @@ func (s *Server) addDisk(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if vol := r.FormValue("volume"); r.FormValue("source") == "volume" {
 		err = s.kube.AttachVolume(r.Context(), ns, name, vol)
-	} else if err = intField(r, "size", 1, 4096, &size); err == nil {
+	} else if err = ui.IntField(r, "size", 1, 4096, &size); err == nil {
 		var class string
 		if class, err = s.poolClass(r.Context(), r.FormValue("pool")); err == nil {
 			err = s.kube.AddDisk(r.Context(), ns, name, size, class)
 		}
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: add disk (%s) to %s/%s", session(r).User, r.FormValue("source"), ns, name)
+	log.Printf("%s: add disk (%s) to %s/%s", ui.Session(r).User, r.FormValue("source"), ns, name)
 	w.Header().Set("HX-Refresh", "true")
 }
 
 func (s *Server) newDisk(w http.ResponseWriter, r *http.Request) {
 	vm, err := s.kube.GetVM(r.Context(), r.PathValue("ns"), r.PathValue("name"))
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
 	vols, _ := s.kube.Volumes(r.Context())
@@ -343,19 +305,19 @@ func (s *Server) newDisk(w http.ResponseWriter, r *http.Request) {
 			free = append(free, v)
 		}
 	}
-	s.render(w, r, "vms.html", "disk-modal", map[string]any{"VM": vm, "Volumes": free, "Pools": s.poolChoices(r.Context())})
+	s.Render(w, r, "vms.html", "disk-modal", map[string]any{"VM": vm, "Volumes": free, "Pools": s.poolChoices(r.Context())})
 }
 
 func (s *Server) eventsPage(w http.ResponseWriter, r *http.Request) {
 	evs, err := s.kube.Events(r.Context(), kube.Namespace, "", 200)
-	s.render(w, r, "events.html", "layout", map[string]any{"Events": evs, "Error": errText(err), "Nav": "events"})
+	s.Render(w, r, "events.html", "layout", map[string]any{"Events": evs, "Error": ui.ErrText(err), "Nav": "events"})
 }
 
 var validHostname = regexp.MustCompile(`^[a-z0-9]([-a-z0-9.]{0,62}[a-z0-9])?$`)
 
 func checkVMSpec(spec kube.VMSpec) error {
 	switch {
-	case !validObject.MatchString(spec.Name):
+	case !ui.ValidObject.MatchString(spec.Name):
 		return errors.New("invalid name")
 	case spec.Network == "":
 		return errors.New("network required")
@@ -376,7 +338,7 @@ func validGuest(g kube.Guest) error {
 	switch {
 	case g.Hostname != "" && !validHostname.MatchString(g.Hostname):
 		return errors.New("invalid hostname")
-	case g.User != "" && !validName.MatchString(g.User):
+	case g.User != "" && !ui.ValidName.MatchString(g.User):
 		return errors.New("invalid user name")
 	case (len(g.SSHKeys) > 0 || g.Password != "") && g.User == "":
 		return errors.New("SSH keys and password need a user")
@@ -454,11 +416,11 @@ func (s *Server) hardwareModal(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
 	hw, err := s.ops(r).Hardware(r.Context(), ns, name)
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
 	f, _ := s.ops(r).VMForm(r.Context())
-	s.render(w, r, "vms.html", "hardware-modal", map[string]any{"HW": hw, "NS": ns, "Name": name, "Images": f.Images, "Networks": f.Networks, "Firmwares": kube.FirmwaresFor(f.Arch)})
+	s.Render(w, r, "vms.html", "hardware-modal", map[string]any{"HW": hw, "NS": ns, "Name": name, "Images": f.Images, "Networks": f.Networks, "Firmwares": kube.FirmwaresFor(f.Arch)})
 }
 
 func (s *Server) hardwareAction(w http.ResponseWriter, r *http.Request) {
@@ -469,30 +431,30 @@ func (s *Server) hardwareAction(w http.ResponseWriter, r *http.Request) {
 	case "save":
 		var cores, mem int
 		var cps int
-		if err = intField(r, "cores", 1, 64, &cores); err == nil {
-			err = intField(r, "memory", 128, 262144, &mem)
+		if err = ui.IntField(r, "cores", 1, 64, &cores); err == nil {
+			err = ui.IntField(r, "memory", 128, 262144, &mem)
 		}
 		if err == nil {
-			err = intField(r, "cores_per_socket", 1, 64, &cps)
+			err = ui.IntField(r, "cores_per_socket", 1, 64, &cps)
 		}
 		req.Hardware.Cores, req.Hardware.MemoryMiB, req.Hardware.CoresPerSocket = int64(cores), int64(mem), int64(cps)
 		if v := strings.TrimSpace(r.FormValue("memory_reserve")); v != "" && err == nil {
 			var reserve int
-			err = intField(r, "memory_reserve", 64, 262144, &reserve)
+			err = ui.IntField(r, "memory_reserve", 64, 262144, &reserve)
 			req.Hardware.MemoryReserve = int64(reserve)
 		}
 	case "resize":
 		var size int
-		err = intField(r, "size", 1, 65536, &size)
+		err = ui.IntField(r, "size", 1, 65536, &size)
 		req.SizeGiB = int64(size)
 	}
 	if err == nil {
 		err = s.ops(r).HardwareOp(r.Context(), ns, name, op, req)
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: hardware %s %s/%s", session(r).User, r.PathValue("op"), ns, name)
+	log.Printf("%s: hardware %s %s/%s", ui.Session(r).User, r.PathValue("op"), ns, name)
 	w.Header().Set("HX-Refresh", "true")
 }

@@ -13,6 +13,7 @@ import (
 	"argus/internal/auth"
 	"argus/internal/kube"
 	"argus/internal/manager"
+	"argus/internal/ui"
 	"argus/web"
 )
 
@@ -104,33 +105,33 @@ type v1Task struct {
 	Failed  bool      `json:"failed"`
 }
 
-func (s *Server) apiV1Routes() []route {
-	return []route{
-		{"GET /api/v1/openapi.json", auth.VMView, s.v1Spec},
-		{"GET /api/v1/hosts", auth.HostView, s.v1Hosts},
-		{"GET /api/v1/vms", auth.VMView, s.v1VMs},
-		{"GET /api/v1/tasks", auth.VMView, s.v1Tasks},
-		{"POST /api/v1/hosts/{node}/vms", auth.VMProvision, s.v1CreateVM},
-		{"GET /api/v1/hosts/{node}/vms/{name}", auth.VMView, s.v1VM},
-		{"PATCH /api/v1/hosts/{node}/vms/{name}", auth.VMConfig, s.v1UpdateVM},
-		{"GET /api/v1/hosts/{node}/images", auth.VMView, s.v1Images},
-		{"GET /api/v1/networks", auth.VMView, s.v1Networks},
-		{"POST /api/v1/networks", auth.NetworkConfig, s.v1SaveNetwork},
-		{"GET /api/v1/networks/{name}", auth.VMView, s.v1Network},
-		{"PUT /api/v1/networks/{name}", auth.NetworkConfig, s.v1SaveNetwork},
-		{"DELETE /api/v1/networks/{name}", auth.NetworkConfig, s.v1DeleteNetwork},
-		{"DELETE /api/v1/hosts/{node}/vms/{name}", auth.VMDelete, s.v1VMCall("delete")},
-		{"POST /api/v1/hosts/{node}/vms/{name}/power", auth.VMPower, s.v1Power},
-		{"POST /api/v1/hosts/{node}/vms/{name}/migrate", auth.VMMigrate, s.v1Migrate},
-		{"GET /api/v1/hosts/{node}/vms/{name}/snapshots", auth.VMView, s.v1Snapshots},
-		{"POST /api/v1/hosts/{node}/vms/{name}/snapshots", auth.VMSnapshot, s.v1VMCall("snapshots")},
-		{"POST /api/v1/hosts/{node}/vms/{name}/snapshots/{snap}/restore", auth.VMSnapshot, s.v1SnapshotOp("restore")},
-		{"DELETE /api/v1/hosts/{node}/vms/{name}/snapshots/{snap}", auth.VMSnapshot, s.v1SnapshotOp("delete")},
-		{"POST /api/v1/hosts/{node}/vms/{name}/backups", auth.VMBackup, s.v1Backup},
-		{"GET /api/v1/hosts/{node}/vms/{name}/backups", auth.VMView, s.v1Backup},
-		{"DELETE /api/v1/hosts/{node}/vms/{name}/backups/{id}", auth.VMBackup, s.v1Backup},
-		{"GET /api/v1/hosts/{node}/vms/{name}/backups/{id}/disks/{disk}/changes", auth.VMBackup, s.v1Backup},
-		{"GET /api/v1/hosts/{node}/vms/{name}/backups/{id}/disks/{disk}/data", auth.VMBackup, s.v1Backup},
+func (s *Server) apiV1Routes() []ui.Route {
+	return []ui.Route{
+		{Pattern: "GET /api/v1/openapi.json", Priv: auth.VMView, H: s.v1Spec},
+		{Pattern: "GET /api/v1/hosts", Priv: auth.HostView, H: s.v1Hosts},
+		{Pattern: "GET /api/v1/vms", Priv: auth.VMView, H: s.v1VMs},
+		{Pattern: "GET /api/v1/tasks", Priv: auth.VMView, H: s.v1Tasks},
+		{Pattern: "POST /api/v1/hosts/{node}/vms", Priv: auth.VMProvision, H: s.v1CreateVM},
+		{Pattern: "GET /api/v1/hosts/{node}/vms/{name}", Priv: auth.VMView, H: s.v1VM},
+		{Pattern: "PATCH /api/v1/hosts/{node}/vms/{name}", Priv: auth.VMConfig, H: s.v1UpdateVM},
+		{Pattern: "GET /api/v1/hosts/{node}/images", Priv: auth.VMView, H: s.v1Images},
+		{Pattern: "GET /api/v1/networks", Priv: auth.VMView, H: s.v1Networks},
+		{Pattern: "POST /api/v1/networks", Priv: auth.NetworkConfig, H: s.v1SaveNetwork},
+		{Pattern: "GET /api/v1/networks/{name}", Priv: auth.VMView, H: s.v1Network},
+		{Pattern: "PUT /api/v1/networks/{name}", Priv: auth.NetworkConfig, H: s.v1SaveNetwork},
+		{Pattern: "DELETE /api/v1/networks/{name}", Priv: auth.NetworkConfig, H: s.v1DeleteNetwork},
+		{Pattern: "DELETE /api/v1/hosts/{node}/vms/{name}", Priv: auth.VMDelete, H: s.v1VMCall("delete")},
+		{Pattern: "POST /api/v1/hosts/{node}/vms/{name}/power", Priv: auth.VMPower, H: s.v1Power},
+		{Pattern: "POST /api/v1/hosts/{node}/vms/{name}/migrate", Priv: auth.VMMigrate, H: s.v1Migrate},
+		{Pattern: "GET /api/v1/hosts/{node}/vms/{name}/snapshots", Priv: auth.VMView, H: s.v1Snapshots},
+		{Pattern: "POST /api/v1/hosts/{node}/vms/{name}/snapshots", Priv: auth.VMSnapshot, H: s.v1VMCall("snapshots")},
+		{Pattern: "POST /api/v1/hosts/{node}/vms/{name}/snapshots/{snap}/restore", Priv: auth.VMSnapshot, H: s.v1SnapshotOp("restore")},
+		{Pattern: "DELETE /api/v1/hosts/{node}/vms/{name}/snapshots/{snap}", Priv: auth.VMSnapshot, H: s.v1SnapshotOp("delete")},
+		{Pattern: "POST /api/v1/hosts/{node}/vms/{name}/backups", Priv: auth.VMBackup, H: s.v1Backup},
+		{Pattern: "GET /api/v1/hosts/{node}/vms/{name}/backups", Priv: auth.VMView, H: s.v1Backup},
+		{Pattern: "DELETE /api/v1/hosts/{node}/vms/{name}/backups/{id}", Priv: auth.VMBackup, H: s.v1Backup},
+		{Pattern: "GET /api/v1/hosts/{node}/vms/{name}/backups/{id}/disks/{disk}/changes", Priv: auth.VMBackup, H: s.v1Backup},
+		{Pattern: "GET /api/v1/hosts/{node}/vms/{name}/backups/{id}/disks/{disk}/data", Priv: auth.VMBackup, H: s.v1Backup},
 	}
 }
 
@@ -145,7 +146,7 @@ func (s *Server) v1Hosts(w http.ResponseWriter, r *http.Request) {
 		out = append(out, v1Host{Name: st.Node.Name, Datacenter: st.Node.Datacenter, Cluster: st.Node.Cluster, Arch: st.Arch(), Reachable: st.Reachable(),
 			Maintenance: st.Node.Maintenance, Error: st.Error, VMs: len(st.VMs)})
 	}
-	writeJSON(w, out)
+	ui.WriteJSON(w, out)
 }
 
 func (s *Server) v1VMs(w http.ResponseWriter, r *http.Request) {
@@ -155,21 +156,21 @@ func (s *Server) v1VMs(w http.ResponseWriter, r *http.Request) {
 			out = append(out, toV1VM(st.Node.Name, v))
 		}
 	}
-	writeJSON(w, out)
+	ui.WriteJSON(w, out)
 }
 
 func (s *Server) v1Tasks(w http.ResponseWriter, r *http.Request) {
 	out := []v1Task{}
-	for _, j := range s.manager.Jobs(session(r).Org) {
+	for _, j := range s.manager.Jobs(ui.Session(r).Org) {
 		out = append(out, v1Task{ID: j.ID, Kind: j.Kind, VM: j.VM, From: j.From, To: j.To, Started: j.Started, Status: j.Status, Done: j.Done, Failed: j.Failed})
 	}
-	writeJSON(w, out)
+	ui.WriteJSON(w, out)
 }
 
 func (s *Server) v1Node(w http.ResponseWriter, r *http.Request) (manager.Node, bool) {
 	n, err := s.orgNode(r)
 	if err != nil {
-		apiError(w, r, http.StatusNotFound, err)
+		ui.APIError(w, r, http.StatusNotFound, err)
 		return n, false
 	}
 	return n, true
@@ -182,22 +183,22 @@ func (s *Server) v1VM(w http.ResponseWriter, r *http.Request) {
 	}
 	var vm kube.VM
 	if err := n.Call(r.Context(), http.MethodGet, manager.APIPath("/api/vms/%s/%s", kube.Namespace, r.PathValue("name")), nil, &vm); err != nil {
-		apiError(w, r, http.StatusNotFound, err)
+		ui.APIError(w, r, http.StatusNotFound, err)
 		return
 	}
-	writeJSON(w, toV1VM(n.Name, vm))
+	ui.WriteJSON(w, toV1VM(n.Name, vm))
 }
 
 func (s *Server) v1Call(w http.ResponseWriter, r *http.Request, n manager.Node, path string, body any) {
 	if s.manager.Busy(n.Name, r.PathValue("name")) {
-		apiError(w, r, http.StatusConflict, errors.New("a migration of this VM is in progress"))
+		ui.APIError(w, r, http.StatusConflict, errors.New("a migration of this VM is in progress"))
 		return
 	}
 	if err := n.Call(r.Context(), http.MethodPost, path, body, nil); err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	writeJSONCode(w, http.StatusAccepted, map[string]string{})
+	ui.WriteJSONCode(w, http.StatusAccepted, map[string]string{})
 }
 
 func (s *Server) v1VMCall(op string) http.HandlerFunc {
@@ -220,8 +221,8 @@ func (s *Server) v1Power(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Action string `json:"action"`
 	}
-	if err := decodeJSON(r.Body, &req); err != nil || !kube.ValidAction(req.Action) {
-		apiError(w, r, http.StatusBadRequest, errors.New("action must be one of start, stop, poweroff, restart, pause, unpause"))
+	if err := ui.DecodeJSON(r.Body, &req); err != nil || !kube.ValidAction(req.Action) {
+		ui.APIError(w, r, http.StatusBadRequest, errors.New("action must be one of start, stop, poweroff, restart, pause, unpause"))
 		return
 	}
 	if n, ok := s.v1Node(w, r); ok {
@@ -236,7 +237,7 @@ func (s *Server) v1Snapshots(w http.ResponseWriter, r *http.Request) {
 	}
 	var snaps []kube.Snapshot
 	if err := n.Call(r.Context(), http.MethodGet, manager.APIPath("/api/vms/%s/%s/snapshots", kube.Namespace, r.PathValue("name")), nil, &snaps); err != nil {
-		apiError(w, r, http.StatusNotFound, err)
+		ui.APIError(w, r, http.StatusNotFound, err)
 		return
 	}
 	type v1Snap struct {
@@ -251,15 +252,15 @@ func (s *Server) v1Snapshots(w http.ResponseWriter, r *http.Request) {
 	for _, sn := range snaps {
 		out = append(out, v1Snap{sn.Name, sn.Created, sn.Ready, sn.Auto, sn.Parent, sn.Current})
 	}
-	writeJSON(w, out)
+	ui.WriteJSON(w, out)
 }
 
 func (s *Server) v1Migrate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		To string `json:"to"`
 	}
-	if err := decodeJSON(r.Body, &req); err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
+	if err := ui.DecodeJSON(r.Body, &req); err != nil {
+		ui.APIError(w, r, http.StatusBadRequest, err)
 		return
 	}
 	src, ok := s.v1Node(w, r)
@@ -274,16 +275,16 @@ func (s *Server) v1Migrate(w http.ResponseWriter, r *http.Request) {
 		err = s.migrate(r, src, dst, r.PathValue("name"))
 	}
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	writeJSONCode(w, http.StatusAccepted, map[string]string{})
+	ui.WriteJSONCode(w, http.StatusAccepted, map[string]string{})
 }
 
 func (s *Server) v1CreateVM(w http.ResponseWriter, r *http.Request) {
 	var req v1NewVM
-	if err := decodeJSON(r.Body, &req); err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
+	if err := ui.DecodeJSON(r.Body, &req); err != nil {
+		ui.APIError(w, r, http.StatusBadRequest, err)
 		return
 	}
 	n, ok := s.v1Node(w, r)
@@ -299,14 +300,14 @@ func (s *Server) v1CreateVM(w http.ResponseWriter, r *http.Request) {
 			Domain: w.Domain, DomainUser: w.DomainUser, DomainPassword: w.DomainPassword, Commands: w.Commands, VirtIO: w.VirtIO}
 	}
 	if err := checkVMSpec(spec); err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
+		ui.APIError(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if err := (remoteOps{n}).CreateVM(r.Context(), createVMReq{Spec: spec, Pool: req.Pool}); err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	writeJSONCode(w, http.StatusCreated, map[string]string{"host": n.Name, "name": spec.Name})
+	ui.WriteJSONCode(w, http.StatusCreated, map[string]string{"host": n.Name, "name": spec.Name})
 }
 
 func (s *Server) accountTokens(w http.ResponseWriter, r *http.Request) {
@@ -314,19 +315,19 @@ func (s *Server) accountTokens(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderAccountTokens(w http.ResponseWriter, r *http.Request, notice string, err error) {
-	sess := session(r)
-	ts, terr := s.auth.Tokens(r.Context())
+	sess := ui.Session(r)
+	ts, terr := s.Auth.Tokens(r.Context())
 	ts = slices.DeleteFunc(ts, func(t auth.Token) bool { return t.Org != sess.Org || t.User != sess.User })
 	if err == nil {
 		err = terr
 	}
-	failed(w, r, err)
-	s.render(w, r, "tokens.html", "layout", map[string]any{"Tokens": ts, "Notice": notice, "Error": errText(err)})
+	ui.Failed(w, r, err)
+	s.Render(w, r, "tokens.html", "layout", map[string]any{"Tokens": ts, "Notice": notice, "Error": ui.ErrText(err)})
 }
 
 func (s *Server) createAccountToken(w http.ResponseWriter, r *http.Request) {
-	sess, name := session(r), r.FormValue("name")
-	if !validName.MatchString(name) {
+	sess, name := ui.Session(r), r.FormValue("name")
+	if !ui.ValidName.MatchString(name) {
 		s.renderAccountTokens(w, r, "", errors.New("invalid token name"))
 		return
 	}
@@ -334,7 +335,7 @@ func (s *Server) createAccountToken(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("read") != "" {
 		t.Scope = auth.ReadScope
 	}
-	tok, err := s.auth.AddToken(r.Context(), t)
+	tok, err := s.Auth.AddToken(r.Context(), t)
 	if err != nil {
 		s.renderAccountTokens(w, r, "", err)
 		return
@@ -343,8 +344,8 @@ func (s *Server) createAccountToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteAccountToken(w http.ResponseWriter, r *http.Request) {
-	sess := session(r)
-	if err := s.auth.RemoveToken(r.Context(), sess.Org, sess.User, r.PathValue("name")); err != nil {
+	sess := ui.Session(r)
+	if err := s.Auth.RemoveToken(r.Context(), sess.Org, sess.User, r.PathValue("name")); err != nil {
 		s.renderAccountTokens(w, r, "", err)
 		return
 	}
@@ -374,7 +375,7 @@ func (s *Server) v1Backup(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := n.Open(r.Context(), r.Method, path, h, nil)
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
 	defer resp.Body.Close()

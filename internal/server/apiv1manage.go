@@ -8,6 +8,7 @@ import (
 
 	"argus/internal/kube"
 	"argus/internal/manager"
+	"argus/internal/ui"
 )
 
 type v1Image struct {
@@ -26,7 +27,7 @@ func (s *Server) v1Images(w http.ResponseWriter, r *http.Request) {
 	for _, img := range st.Images {
 		out = append(out, v1Image{img.Name, img.Size, img.Phase})
 	}
-	writeJSON(w, out)
+	ui.WriteJSON(w, out)
 }
 
 func (s *Server) v1UpdateVM(w http.ResponseWriter, r *http.Request) {
@@ -37,8 +38,8 @@ func (s *Server) v1UpdateVM(w http.ResponseWriter, r *http.Request) {
 		Folder     *string            `json:"folder"`
 		Attributes *map[string]string `json:"attributes"`
 	}
-	if err := decodeJSON(r.Body, &req); err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
+	if err := ui.DecodeJSON(r.Body, &req); err != nil {
+		ui.APIError(w, r, http.StatusBadRequest, err)
 		return
 	}
 	n, ok := s.v1Node(w, r)
@@ -46,7 +47,7 @@ func (s *Server) v1UpdateVM(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.manager.Busy(n.Name, r.PathValue("name")) {
-		apiError(w, r, http.StatusConflict, errors.New("a migration of this VM is in progress"))
+		ui.APIError(w, r, http.StatusConflict, errors.New("a migration of this VM is in progress"))
 		return
 	}
 	ctx, ns, name, ops := r.Context(), kube.Namespace, r.PathValue("name"), remoteOps{n}
@@ -73,13 +74,13 @@ func (s *Server) v1UpdateVM(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if err != nil {
-			apiError(w, r, http.StatusConflict, err)
+			ui.APIError(w, r, http.StatusConflict, err)
 			return
 		}
 	}
 	var vm kube.VM
 	if err := n.Call(ctx, http.MethodGet, manager.APIPath("/api/vms/%s/%s", ns, name), nil, &vm); err != nil {
-		apiError(w, r, http.StatusNotFound, err)
+		ui.APIError(w, r, http.StatusNotFound, err)
 		return
 	}
 	if req.Tags != nil || req.Folder != nil || req.Attributes != nil {
@@ -100,45 +101,45 @@ func (s *Server) v1UpdateVM(w http.ResponseWriter, r *http.Request) {
 		slices.Sort(lines)
 		body := map[string]string{"tags": strings.Join(tags, ","), "folder": folder, "attributes": strings.Join(lines, "\n")}
 		if err := n.Call(ctx, http.MethodPost, manager.APIPath("/api/vms/%s/%s/tags", ns, name), body, nil); err != nil {
-			apiError(w, r, http.StatusConflict, err)
+			ui.APIError(w, r, http.StatusConflict, err)
 			return
 		}
 		if err := n.Call(ctx, http.MethodGet, manager.APIPath("/api/vms/%s/%s", ns, name), nil, &vm); err != nil {
-			apiError(w, r, http.StatusBadGateway, err)
+			ui.APIError(w, r, http.StatusBadGateway, err)
 			return
 		}
 	}
 	go s.manager.Refresh(n.Name)
-	writeJSON(w, toV1VM(n.Name, vm))
+	ui.WriteJSON(w, toV1VM(n.Name, vm))
 }
 
 func (s *Server) v1Networks(w http.ResponseWriter, r *http.Request) {
-	ns, err := s.manager.Networks(r.Context(), session(r).Org)
+	ns, err := s.manager.Networks(r.Context(), ui.Session(r).Org)
 	if err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, append([]manager.Network{}, ns...))
+	ui.WriteJSON(w, append([]manager.Network{}, ns...))
 }
 
 func (s *Server) v1Network(w http.ResponseWriter, r *http.Request) {
-	ns, err := s.manager.Networks(r.Context(), session(r).Org)
+	ns, err := s.manager.Networks(r.Context(), ui.Session(r).Org)
 	if err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
 	i := slices.IndexFunc(ns, func(n manager.Network) bool { return n.Name == r.PathValue("name") })
 	if i < 0 {
-		apiError(w, r, http.StatusNotFound, errors.New("network not found"))
+		ui.APIError(w, r, http.StatusNotFound, errors.New("network not found"))
 		return
 	}
-	writeJSON(w, ns[i])
+	ui.WriteJSON(w, ns[i])
 }
 
 func (s *Server) v1SaveNetwork(w http.ResponseWriter, r *http.Request) {
 	var n manager.Network
-	if err := decodeJSON(r.Body, &n); err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
+	if err := ui.DecodeJSON(r.Body, &n); err != nil {
+		ui.APIError(w, r, http.StatusBadRequest, err)
 		return
 	}
 	op := "create"
@@ -146,28 +147,28 @@ func (s *Server) v1SaveNetwork(w http.ResponseWriter, r *http.Request) {
 		op, n.Name = "update", r.PathValue("name")
 	}
 	if err := checkNetworkDef(n); err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
+		ui.APIError(w, r, http.StatusBadRequest, err)
 		return
 	}
-	if err := s.manager.SaveNetwork(r.Context(), session(r).Org, n, op == "update"); err != nil {
-		apiError(w, r, http.StatusConflict, err)
+	if err := s.manager.SaveNetwork(r.Context(), ui.Session(r).Org, n, op == "update"); err != nil {
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
 	out := map[string]any{"network": n}
 	if errs := s.pushNetwork(r, op, n); errs != "" {
 		out["warning"] = "not applied on every host: " + errs
 	}
-	writeJSONCode(w, map[bool]int{true: http.StatusCreated, false: http.StatusOK}[op == "create"], out)
+	ui.WriteJSONCode(w, map[bool]int{true: http.StatusCreated, false: http.StatusOK}[op == "create"], out)
 }
 
 func (s *Server) v1DeleteNetwork(w http.ResponseWriter, r *http.Request) {
 	n := manager.Network{Name: r.PathValue("name")}
 	if errs := s.pushNetwork(r, "delete", n); errs != "" {
-		apiError(w, r, http.StatusConflict, errors.New(errs))
+		ui.APIError(w, r, http.StatusConflict, errors.New(errs))
 		return
 	}
-	if err := s.manager.DeleteNetwork(r.Context(), session(r).Org, n.Name); err != nil {
-		apiError(w, r, http.StatusConflict, err)
+	if err := s.manager.DeleteNetwork(r.Context(), ui.Session(r).Org, n.Name); err != nil {
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

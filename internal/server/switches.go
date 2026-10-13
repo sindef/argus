@@ -15,6 +15,7 @@ import (
 
 	"argus/internal/hostd"
 	"argus/internal/manager"
+	"argus/internal/ui"
 )
 
 type switchPort struct {
@@ -24,7 +25,7 @@ type switchPort struct {
 
 func (s *Server) switchHosts(r *http.Request, name string) []string {
 	var hosts []string
-	for _, h := range s.fleetHostNets(session(r).Org) {
+	for _, h := range s.fleetHostNets(ui.Session(r).Org) {
 		if slices.ContainsFunc(h.Bridges, func(b hostd.Iface) bool { return b.Name == name }) {
 			hosts = append(hosts, h.Node.Name)
 		}
@@ -77,7 +78,7 @@ func (s *Server) managerSwitchPorts(w http.ResponseWriter, r *http.Request) {
 		}
 		return a.VM+a.Name < b.VM+b.Name
 	})
-	s.render(w, r, "networks.html", "switch-ports", map[string]any{"Name": name, "Ports": ports, "Error": errs})
+	s.Render(w, r, "networks.html", "switch-ports", map[string]any{"Name": name, "Ports": ports, "Error": errs})
 }
 
 func (s *Server) managerSwitchTeaming(w http.ResponseWriter, r *http.Request) {
@@ -86,7 +87,7 @@ func (s *Server) managerSwitchTeaming(w http.ResponseWriter, r *http.Request) {
 	if v := r.FormValue("mtu"); v != "" {
 		var err error
 		if t.MTU, err = strconv.Atoi(v); err != nil {
-			flash(w, r, errors.New("invalid MTU"))
+			ui.Flash(w, r, errors.New("invalid MTU"))
 			return
 		}
 	}
@@ -106,7 +107,7 @@ func (s *Server) managerSwitchTeaming(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		log.Printf("%s: teaming of %s on %s set to %+v", session(r).User, name, h, t)
+		log.Printf("%s: teaming of %s on %s set to %+v", ui.Session(r).User, name, h, t)
 		s.manager.Refresh(h)
 		out = append(out, fmt.Sprintf("%s: %s updated and confirmed", h, name))
 	}

@@ -25,6 +25,7 @@ import (
 	"argus/internal/manager"
 	"argus/internal/netguard"
 	"argus/internal/sealed"
+	"argus/internal/ui"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -36,6 +37,10 @@ type vmRow struct {
 	Cluster    string
 	Protected  *manager.Protected
 	Replica    bool
+}
+
+func (v vmRow) Page() string {
+	return fmt.Sprintf("/nodes/%s/vms/%s/%s", v.Host, v.Namespace, v.Name)
 }
 
 type hostRow struct {
@@ -62,7 +67,7 @@ type datacenterView struct {
 }
 
 func superAdmin(r *http.Request) bool {
-	return session(r).Org == manager.DefaultOrg && session(r).Role == auth.Admin
+	return ui.Session(r).Org == manager.DefaultOrg && ui.Session(r).Role == auth.Admin
 }
 
 func groupName(s string) string {
@@ -171,9 +176,9 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 		c.VMs += h.VMs
 		c.Status = worse(c.Status, h.Status)
 	}
-	groups, _ := s.manager.Groups(r.Context(), session(r).Org)
+	groups, _ := s.manager.Groups(r.Context(), ui.Session(r).Org)
 	for _, g := range groups {
-		if len(session(r).Scopes) > 0 || dc != "" && dc != g.Datacenter {
+		if len(ui.Session(r).Scopes) > 0 || dc != "" && dc != g.Datacenter {
 			continue
 		}
 		if dcs[g.Datacenter] == nil {
@@ -253,8 +258,8 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 		"CoresUsed":    coresUsed,
 		"Mem":          mem,
 		"MemUsed":      memUsed,
-		"CanOperate":   session(r).Role.Can(auth.Operator),
-		"IsAdmin":      session(r).Role.Can(auth.Admin),
+		"CanOperate":   ui.Session(r).Role.Can(auth.Operator),
+		"IsAdmin":      ui.Session(r).Role.Can(auth.Admin),
 		"Super":        superAdmin(r),
 	}
 }
@@ -281,7 +286,7 @@ func (s *Server) managerHome(w http.ResponseWriter, r *http.Request) {
 	}
 	data["Tab"], data["Range"] = tab, r.URL.Query().Get("range")
 	if tab == "networks" {
-		defs, _ := s.manager.Networks(r.Context(), session(r).Org)
+		defs, _ := s.manager.Networks(r.Context(), ui.Session(r).Org)
 		data["Networks"] = slices.DeleteFunc(defs, func(n manager.Network) bool {
 			return len(n.Scopes) > 0 && dc != "" && !slices.ContainsFunc(n.Scopes, func(sc string) bool {
 				d, c, _ := strings.Cut(sc, "/")
@@ -290,7 +295,7 @@ func (s *Server) managerHome(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	if tab == "drs" && cl != "" {
-		org := session(r).Org
+		org := ui.Session(r).Org
 		data["ClusterSettings"], _ = s.manager.ClusterSettings(r.Context(), org, dc, cl)
 		data["Recommendations"], data["RuleKinds"] = s.manager.Recommendations(org, dc, cl), manager.RuleKinds
 		var vms, hosts []string
@@ -307,7 +312,7 @@ func (s *Server) managerHome(w http.ResponseWriter, r *http.Request) {
 		slices.Sort(vms)
 		data["ClusterVMs"], data["ClusterHosts"] = vms, hosts
 	}
-	s.render(w, r, "manager.html", "layout", data)
+	s.Render(w, r, "manager.html", "layout", data)
 }
 
 func (s *Server) managerVMs(w http.ResponseWriter, r *http.Request) {
@@ -315,13 +320,13 @@ func (s *Server) managerVMs(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/?tab=vms", http.StatusSeeOther)
 		return
 	}
-	s.render(w, r, "manager.html", "vm-table", s.managerData(r))
+	s.Render(w, r, "manager.html", "vm-table", s.managerData(r))
 }
 
 func (s *Server) managerTree(w http.ResponseWriter, r *http.Request) {
 	data := s.managerData(r)
 	data["Nav"] = r.FormValue("nav")
-	s.render(w, r, "manager.html", "tree", data)
+	s.Render(w, r, "manager.html", "tree", data)
 }
 
 func (s *Server) managerConsole(w http.ResponseWriter, r *http.Request) {
@@ -336,7 +341,7 @@ func (s *Server) managerConsole(w http.ResponseWriter, r *http.Request) {
 	}
 	ns, name := r.PathValue("ns"), r.PathValue("name")
 	page := fmt.Sprintf("/nodes/%s/vms/%s/%s", n.Name, ns, name)
-	s.render(w, r, "console.html", "layout", map[string]any{"Namespace": ns, "Name": name, "Kind": kind, "Page": page, "WS": page + "/ws/", "Nav": "vm:" + n.Name + "/" + name,
+	s.Render(w, r, "console.html", "layout", map[string]any{"Namespace": ns, "Name": name, "Kind": kind, "Page": page, "WS": page + "/ws/", "Nav": "vm:" + n.Name + "/" + name,
 		"Media": fmt.Sprintf("/hosts/%s/vms/%s/%s/media", n.Name, ns, name)})
 }
 
@@ -358,8 +363,8 @@ func inScope(scopes []string, n manager.Node) bool {
 }
 
 func (s *Server) jobs(r *http.Request) []manager.Job {
-	js := s.manager.Jobs(session(r).Org)
-	if len(session(r).Scopes) == 0 {
+	js := s.manager.Jobs(ui.Session(r).Org)
+	if len(ui.Session(r).Scopes) == 0 {
 		return js
 	}
 	hosts := map[string]bool{}
@@ -418,8 +423,8 @@ func (s *Server) managerVM(w http.ResponseWriter, r *http.Request) {
 		err = n.Call(r.Context(), http.MethodGet, manager.APIPath("/api/vms/%s/%s/backups", ns, name), nil, &b)
 		data["Backups"] = map[string]any{"B": b, "P": fmt.Sprintf("/nodes/%s/vms/%s/%s", n.Name, ns, name), "H": fmt.Sprintf("/hosts/%s/vms/%s/%s", n.Name, ns, name), "Name": name, "CanOperate": data["CanOperate"]}
 	}
-	data["Error"] = errText(err)
-	s.render(w, r, "manager-vm.html", "layout", data)
+	data["Error"] = ui.ErrText(err)
+	s.Render(w, r, "manager-vm.html", "layout", data)
 }
 
 func (s *Server) managerMigrate(w http.ResponseWriter, r *http.Request) {
@@ -435,10 +440,10 @@ func (s *Server) managerMigrate(w http.ResponseWriter, r *http.Request) {
 		err = s.migrate(r, src, dst, r.PathValue("name"))
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: migrate %s/%s from %s to %s", session(r).User, r.PathValue("ns"), r.PathValue("name"), src.Name, dst.Name)
+	log.Printf("%s: migrate %s/%s from %s to %s", ui.Session(r).User, r.PathValue("ns"), r.PathValue("name"), src.Name, dst.Name)
 	w.Header().Set("HX-Refresh", "true")
 }
 
@@ -455,7 +460,7 @@ func (s *Server) migrate(r *http.Request, src, dst manager.Node, name string) er
 
 func (s *Server) managerProtect(w http.ResponseWriter, r *http.Request) {
 	var interval int
-	err := intField(r, "interval", 5, 1440, &interval)
+	err := ui.IntField(r, "interval", 5, 1440, &interval)
 	if err == nil {
 		_, err = s.orgNode(r)
 	}
@@ -466,10 +471,10 @@ func (s *Server) managerProtect(w http.ResponseWriter, r *http.Request) {
 		err = s.manager.Protect(r.Context(), r.PathValue("node"), r.PathValue("name"), r.FormValue("replica"), interval, r.FormValue("priority"))
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: protect %s on %s, replica on %s", session(r).User, r.PathValue("name"), r.PathValue("node"), r.FormValue("replica"))
+	log.Printf("%s: protect %s on %s, replica on %s", ui.Session(r).User, r.PathValue("name"), r.PathValue("node"), r.FormValue("replica"))
 	w.Header().Set("HX-Refresh", "true")
 }
 
@@ -479,10 +484,10 @@ func (s *Server) managerUnprotect(w http.ResponseWriter, r *http.Request) {
 		err = s.manager.Unprotect(r.Context(), r.PathValue("node"), r.PathValue("name"))
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: unprotect %s", session(r).User, r.PathValue("name"))
+	log.Printf("%s: unprotect %s", ui.Session(r).User, r.PathValue("name"))
 	w.Header().Set("HX-Refresh", "true")
 }
 
@@ -491,7 +496,7 @@ func (s *Server) managerHosts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderHosts(w http.ResponseWriter, r *http.Request, err error) {
-	failed(w, r, err)
+	ui.Failed(w, r, err)
 	data := s.managerData(r)
 	data["Nav"] = "hosts"
 	if err != nil {
@@ -509,7 +514,7 @@ func (s *Server) renderHosts(w http.ResponseWriter, r *http.Request, err error) 
 	data["Ranges"] = ranges
 	data["Migration"] = mig
 	data["DC"], data["Cluster"] = r.FormValue("dc"), r.FormValue("cluster")
-	s.render(w, r, "hosts.html", "layout", data)
+	s.Render(w, r, "hosts.html", "layout", data)
 }
 
 func (s *Server) managerAddNode(w http.ResponseWriter, r *http.Request) {
@@ -517,54 +522,54 @@ func (s *Server) managerAddNode(w http.ResponseWriter, r *http.Request) {
 	u, err := url.Parse(addr)
 	if err != nil || u.Scheme != "https" || u.Host == "" {
 		err = errors.New("address must be https://host")
-	} else if !validObject.MatchString(name) {
+	} else if !ui.ValidObject.MatchString(name) {
 		err = errors.New("invalid host name")
 	}
 	if err == nil {
-		err = s.manager.AddNode(r.Context(), session(r).Org, name, u.Scheme+"://"+u.Host, r.FormValue("token"), r.FormValue("fingerprint"), strings.TrimSpace(r.FormValue("datacenter")), strings.TrimSpace(r.FormValue("cluster")))
+		err = s.manager.AddNode(r.Context(), ui.Session(r).Org, name, u.Scheme+"://"+u.Host, r.FormValue("token"), r.FormValue("fingerprint"), strings.TrimSpace(r.FormValue("datacenter")), strings.TrimSpace(r.FormValue("cluster")))
 	}
 	if err != nil {
 		s.renderHosts(w, r, err)
 		return
 	}
 	s.manager.Refresh(name)
-	log.Printf("%s: added host %s at %s", session(r).User, name, addr)
+	log.Printf("%s: added host %s at %s", ui.Session(r).User, name, addr)
 	http.Redirect(w, r, "/hosts", http.StatusSeeOther)
 }
 
 func (s *Server) managerNodeAccess(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("node")
-	if err := s.manager.UpdateNodeAccess(r.Context(), session(r).Org, name, strings.TrimSpace(r.FormValue("url")), strings.TrimSpace(r.FormValue("token")), r.FormValue("fingerprint")); err != nil {
-		flash(w, r, err)
+	if err := s.manager.UpdateNodeAccess(r.Context(), ui.Session(r).Org, name, strings.TrimSpace(r.FormValue("url")), strings.TrimSpace(r.FormValue("token")), r.FormValue("fingerprint")); err != nil {
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: updated connection for host %s", session(r).User, name)
+	log.Printf("%s: updated connection for host %s", ui.Session(r).User, name)
 	w.Header().Set("HX-Refresh", "true")
 }
 
 func (s *Server) managerRotateToken(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("node")
-	if err := s.manager.RotateToken(r.Context(), session(r).Org, name); err != nil {
-		flash(w, r, err)
+	if err := s.manager.RotateToken(r.Context(), ui.Session(r).Org, name); err != nil {
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: rotated the API token for host %s", session(r).User, name)
+	log.Printf("%s: rotated the API token for host %s", ui.Session(r).User, name)
 	w.Header().Set("HX-Refresh", "true")
 }
 
 func (s *Server) managerRemoveNode(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("node")
-	if err := s.manager.RemoveNode(r.Context(), session(r).Org, name); err != nil {
+	if err := s.manager.RemoveNode(r.Context(), ui.Session(r).Org, name); err != nil {
 		if r.Header.Get("HX-Request") != "" {
-			flash(w, r, err)
+			ui.Flash(w, r, err)
 			return
 		}
 		s.renderHosts(w, r, err)
 		return
 	}
 	s.manager.PollAll(r.Context())
-	log.Printf("%s: removed host %s", session(r).User, name)
-	redirect(w, r, "/hosts")
+	log.Printf("%s: removed host %s", ui.Session(r).User, name)
+	ui.Redirect(w, r, "/hosts")
 }
 
 func (s *Server) managerSettings(w http.ResponseWriter, r *http.Request) {
@@ -572,8 +577,8 @@ func (s *Server) managerSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, notice string, err error) {
-	failed(w, r, err)
-	org, oerr := s.manager.Org(r.Context(), session(r).Org)
+	ui.Failed(w, r, err)
+	org, oerr := s.manager.Org(r.Context(), ui.Session(r).Org)
 	if err == nil {
 		err = oerr
 	}
@@ -581,7 +586,7 @@ func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, notice s
 	if superAdmin(r) {
 		data["Orgs"], _ = s.manager.Orgs(r.Context())
 		data["Migration"], _ = s.manager.MigrationSettings(r.Context())
-		data["Notify"], _, _ = s.loadNotify(r.Context())
+		data["Notify"], _, _ = s.LoadNotify(r.Context())
 		data["HA"] = s.manager.HASettings(r.Context())
 		data["Cert"] = s.certInfo()
 	}
@@ -589,11 +594,11 @@ func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, notice s
 		w.WriteHeader(http.StatusBadRequest)
 		data["Error"] = err.Error()
 	}
-	s.render(w, r, "settings.html", "layout", data)
+	s.Render(w, r, "settings.html", "layout", data)
 }
 
 func (s *Server) managerSSO(w http.ResponseWriter, r *http.Request) {
-	org, err := s.manager.Org(r.Context(), session(r).Org)
+	org, err := s.manager.Org(r.Context(), ui.Session(r).Org)
 	if err != nil {
 		s.renderSettings(w, r, "", err)
 		return
@@ -616,12 +621,12 @@ func (s *Server) managerSSO(w http.ResponseWriter, r *http.Request) {
 		s.renderSettings(w, r, "", err)
 		return
 	}
-	log.Printf("%s: updated SSO for %s", session(r).User, org.ID)
+	log.Printf("%s: updated SSO for %s", ui.Session(r).User, org.ID)
 	s.renderSettings(w, r, "Single sign-on saved.", nil)
 }
 
 func (s *Server) managerLDAP(w http.ResponseWriter, r *http.Request) {
-	org, err := s.manager.Org(r.Context(), session(r).Org)
+	org, err := s.manager.Org(r.Context(), ui.Session(r).Org)
 	if err != nil {
 		s.renderSettings(w, r, "", err)
 		return
@@ -650,7 +655,7 @@ func (s *Server) managerLDAP(w http.ResponseWriter, r *http.Request) {
 		s.renderSettings(w, r, "", err)
 		return
 	}
-	log.Printf("%s: updated directory sign-in for %s", session(r).User, org.ID)
+	log.Printf("%s: updated directory sign-in for %s", ui.Session(r).User, org.ID)
 	s.renderSettings(w, r, "Directory sign-in saved.", nil)
 }
 
@@ -665,10 +670,10 @@ func (s *Server) managerRenameOrg(w http.ResponseWriter, r *http.Request) {
 		err = s.manager.SaveOrg(r.Context(), org)
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: renamed organization %s to %s", session(r).User, org.ID, name)
+	log.Printf("%s: renamed organization %s to %s", ui.Session(r).User, org.ID, name)
 	w.Header().Set("HX-Refresh", "true")
 }
 
@@ -678,7 +683,7 @@ func (s *Server) managerAddOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, name := r.FormValue("id"), strings.TrimSpace(r.FormValue("name"))
-	if !validObject.MatchString(id) || name == "" {
+	if !ui.ValidObject.MatchString(id) || name == "" {
 		s.renderSettings(w, r, "", errors.New("invalid organization"))
 		return
 	}
@@ -691,11 +696,11 @@ func (s *Server) managerAddOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pw := auth.RandomPassword()
-	if _, err := s.auth.ForOrg(id).Bootstrap(r.Context(), pw); err != nil {
+	if _, err := s.Auth.ForOrg(id).Bootstrap(r.Context(), pw); err != nil {
 		s.renderSettings(w, r, "", err)
 		return
 	}
-	log.Printf("%s: created organization %s", session(r).User, id)
+	log.Printf("%s: created organization %s", ui.Session(r).User, id)
 	s.renderSettings(w, r, "Organization "+name+" created. Initial login: admin / "+pw, nil)
 }
 
@@ -708,8 +713,8 @@ func (s *Server) managerDeleteOrg(w http.ResponseWriter, r *http.Request) {
 		s.renderSettings(w, r, "", err)
 		return
 	}
-	s.auth.DropOrg(r.PathValue("id"))
-	log.Printf("%s: deleted organization %s", session(r).User, r.PathValue("id"))
+	s.Auth.DropOrg(r.PathValue("id"))
+	log.Printf("%s: deleted organization %s", ui.Session(r).User, r.PathValue("id"))
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
@@ -720,7 +725,7 @@ func (s *Server) managerMigrationSettings(w http.ResponseWriter, r *http.Request
 	}
 	vlan := 0
 	if v := r.FormValue("vlan"); v != "" {
-		if err := intField(r, "vlan", 0, 4094, &vlan); err != nil {
+		if err := ui.IntField(r, "vlan", 0, 4094, &vlan); err != nil {
 			s.renderSettings(w, r, "", err)
 			return
 		}
@@ -729,7 +734,7 @@ func (s *Server) managerMigrationSettings(w http.ResponseWriter, r *http.Request
 		s.renderSettings(w, r, "", err)
 		return
 	}
-	log.Printf("%s: migration network vlan %d %s", session(r).User, vlan, r.FormValue("subnet"))
+	log.Printf("%s: migration network vlan %d %s", ui.Session(r).User, vlan, r.FormValue("subnet"))
 	s.renderSettings(w, r, "Applying the migration network; see Hosts for each host's status.", nil)
 }
 
@@ -753,7 +758,7 @@ func (s *Server) managerVMMetrics(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	ps := s.manager.VMSeries(n.Name, ns, name, time.Now().Add(-rangeDuration(r.URL.Query().Get("range"))))
+	ps := s.manager.VMSeries(n.Name, ns, name, time.Now().Add(-ui.RangeDuration(r.URL.Query().Get("range"))))
 	cols := map[string][]float32{}
 	t := make([]int64, len(ps))
 	for i, p := range ps {
@@ -765,11 +770,11 @@ func (s *Server) managerVMMetrics(w http.ResponseWriter, r *http.Request) {
 		cols["rx"] = append(cols["rx"], p.V[4])
 		cols["tx"] = append(cols["tx"], p.V[5])
 	}
-	writeJSON(w, map[string]any{"t": t, "cols": cols})
+	ui.WriteJSON(w, map[string]any{"t": t, "cols": cols})
 }
 
 func (s *Server) managerFleetMetrics(w http.ResponseWriter, r *http.Request) {
-	since := time.Now().Add(-rangeDuration(r.URL.Query().Get("range")))
+	since := time.Now().Add(-ui.RangeDuration(r.URL.Query().Get("range")))
 	var nodes []string
 	if n := r.URL.Query().Get("node"); n != "" {
 		if _, err := s.nodeIn(r, n); err != nil {
@@ -799,19 +804,7 @@ func (s *Server) managerFleetMetrics(w http.ResponseWriter, r *http.Request) {
 		cols["poolUsed"] = append(cols["poolUsed"], p.V[4])
 		cols["poolFree"] = append(cols["poolFree"], p.V[5])
 	}
-	writeJSON(w, map[string]any{"t": t, "cols": cols})
-}
-
-func rangeDuration(r string) time.Duration {
-	switch r {
-	case "7d":
-		return 7 * 24 * time.Hour
-	case "30d":
-		return 30 * 24 * time.Hour
-	case "1y":
-		return 365 * 24 * time.Hour
-	}
-	return 24 * time.Hour
+	ui.WriteJSON(w, map[string]any{"t": t, "cols": cols})
 }
 
 type hostEvent struct {
@@ -868,38 +861,38 @@ func (s *Server) managerEvents(w http.ResponseWriter, r *http.Request) {
 	if len(evs) > 200 {
 		evs = evs[:200]
 	}
-	rules, err := s.manager.AlarmRules(r.Context(), session(r).Org)
+	rules, err := s.manager.AlarmRules(r.Context(), ui.Session(r).Org)
 	if err != nil && errs == "" {
 		errs = err.Error()
 	}
-	pm, _ := r.Context().Value(permKey{}).(perms)
-	s.render(w, r, "events.html", "layout", map[string]any{"Events": evs, "Error": errs, "Nav": "events", "Jobs": s.jobs(r),
-		"AlarmRules": rules, "AlarmMetrics": manager.AlarmMetrics, "EditAlarms": auth.AllowsAnywhere(pm.grants, auth.Administer)})
+	_, grants, _ := ui.Perms(r)
+	s.Render(w, r, "events.html", "layout", map[string]any{"Events": evs, "Error": errs, "Nav": "events", "Jobs": s.jobs(r),
+		"AlarmRules": rules, "AlarmMetrics": manager.AlarmMetrics, "EditAlarms": auth.AllowsAnywhere(grants, auth.Administer)})
 }
 
 func (s *Server) managerAlarmRule(w http.ResponseWriter, r *http.Request) {
 	num := func(k string) float64 { v, _ := strconv.ParseFloat(r.FormValue(k), 64); return v }
 	rule := manager.AlarmRule{Name: strings.TrimSpace(r.FormValue("name")), Metric: r.FormValue("metric"), Warn: num("warn"), Critical: num("critical"),
 		Minutes: int(num("minutes")), Scope: strings.TrimSpace(r.FormValue("scope")), Tag: strings.TrimSpace(r.FormValue("tag"))}
-	if err := s.manager.SaveAlarmRule(r.Context(), session(r).Org, r.FormValue("old"), rule, r.PathValue("op") == "delete"); err != nil {
-		flash(w, r, err)
+	if err := s.manager.SaveAlarmRule(r.Context(), ui.Session(r).Org, r.FormValue("old"), rule, r.PathValue("op") == "delete"); err != nil {
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: alarm %s %s", session(r).User, r.PathValue("op"), rule.Name)
+	log.Printf("%s: alarm %s %s", ui.Session(r).User, r.PathValue("op"), rule.Name)
 	w.Header().Set("HX-Refresh", "true")
 }
 
 func (s *Server) managerResolve(w http.ResponseWriter, r *http.Request) {
 	visible := slices.ContainsFunc(s.jobs(r), func(j manager.Job) bool { return j.ID == r.PathValue("id") })
 	if !visible {
-		flash(w, r, errors.New("no unresolved job with that ID"))
+		ui.Flash(w, r, errors.New("no unresolved job with that ID"))
 		return
 	}
-	if err := s.manager.Resolve(r.Context(), session(r).Org, r.PathValue("id")); err != nil {
-		flash(w, r, err)
+	if err := s.manager.Resolve(r.Context(), ui.Session(r).Org, r.PathValue("id")); err != nil {
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: resolved job %s", session(r).User, r.PathValue("id"))
+	log.Printf("%s: resolved job %s", ui.Session(r).User, r.PathValue("id"))
 	w.Header().Set("HX-Refresh", "true")
 }
 
@@ -913,7 +906,7 @@ func (s *Server) managerBackup(w http.ResponseWriter, r *http.Request) {
 		s.renderSettings(w, r, "", errors.New("backup passphrase must be at least 12 characters"))
 		return
 	}
-	ex, ok := s.auth.Secrets().(interface {
+	ex, ok := s.Auth.Secrets().(interface {
 		Export(context.Context) (map[string]dbstore.Record, error)
 	})
 	if !ok {
@@ -955,7 +948,7 @@ func (s *Server) managerBackup(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="argus-manager-%s.backup"`, time.Now().Format("20060102-1504")))
 	w.Write(out)
-	s.record(s.auditUser(session(r).Org, session(r).User), "download configuration backup", true, "")
+	s.Record(s.AuditUser(ui.Session(r).Org, ui.Session(r).User), "download configuration backup", true, "")
 }
 
 type haRow struct {
@@ -978,10 +971,10 @@ func (s *Server) managerFailover(w http.ResponseWriter, r *http.Request) {
 		err = s.manager.ManualFailover(r.Context(), owner, vm)
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: manual failover of %s from %s", session(r).User, vm, owner)
+	log.Printf("%s: manual failover of %s from %s", ui.Session(r).User, vm, owner)
 	w.Header().Set("HX-Refresh", "true")
 }
 
@@ -994,7 +987,7 @@ func (s *Server) managerHASettings(w http.ResponseWriter, r *http.Request) {
 		s.renderSettings(w, r, "", err)
 		return
 	}
-	log.Printf("%s: automatic failover %v", session(r).User, r.FormValue("automatic") != "")
+	log.Printf("%s: automatic failover %v", ui.Session(r).User, r.FormValue("automatic") != "")
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 

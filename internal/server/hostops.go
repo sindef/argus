@@ -3,7 +3,6 @@ package server
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -19,11 +18,11 @@ import (
 	"argus/internal/hostd"
 	"argus/internal/kube"
 	"argus/internal/manager"
+	"argus/internal/ui"
 	"argus/internal/vsphere"
 	"argus/internal/wire"
 
 	"github.com/gorilla/websocket"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 type dashStats struct {
@@ -150,7 +149,7 @@ func (l localOps) DashStats(ctx context.Context) (dashStats, error) {
 		if v.Running {
 			out.Running++
 			out.VCPUs += int(v.Cores)
-			out.VMMem += quantityBytes(v.Memory)
+			out.VMMem += ui.QuantityBytes(v.Memory)
 		}
 	}
 	return out, nil
@@ -546,7 +545,7 @@ func (o remoteOps) Import(ctx context.Context, source, contentType string, body 
 	}
 	defer resp.Body.Close()
 	var out struct{ Name string }
-	return out.Name, decodeJSON(resp.Body, &out)
+	return out.Name, ui.DecodeJSON(resp.Body, &out)
 }
 
 func (o remoteOps) VCenterVMs(ctx context.Context, fields map[string]string) ([]vsphere.VM, error) {
@@ -598,7 +597,7 @@ func serveDownload(w http.ResponseWriter, r *http.Request, d download, err error
 		if errors.As(err, &se) {
 			code = se.code
 		}
-		log.Printf("%s: %s: %v", session(r).User, r.URL.Path, err)
+		log.Printf("%s: %s: %v", ui.Session(r).User, r.URL.Path, err)
 		http.Error(w, err.Error(), code)
 		return
 	}
@@ -612,69 +611,43 @@ func serveDownload(w http.ResponseWriter, r *http.Request, d download, err error
 	}
 	n, err := io.Copy(w, d)
 	if err != nil {
-		log.Printf("%s: %s: %v after %d bytes", session(r).User, r.URL.Path, err, n)
+		log.Printf("%s: %s: %v after %d bytes", ui.Session(r).User, r.URL.Path, err, n)
 		panic(http.ErrAbortHandler)
 	}
-	log.Printf("%s: %s: %d bytes", session(r).User, r.URL.Path, n)
+	log.Printf("%s: %s: %d bytes", ui.Session(r).User, r.URL.Path, n)
 }
 
-func (s *Server) apiOp(w http.ResponseWriter, r *http.Request, in any, fn func() (any, error)) {
-	if in != nil {
-		if err := decodeJSON(r.Body, in); err != nil {
-			apiError(w, r, http.StatusBadRequest, err)
-			return
-		}
-	}
-	out, err := fn()
-	if errors.Is(err, errUnknownAction) {
-		apiError(w, r, http.StatusBadRequest, err)
-		return
-	}
-	if apierrors.IsNotFound(err) {
-		apiError(w, r, http.StatusNotFound, err)
-		return
-	}
-	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
-		return
-	}
-	if out == nil {
-		out = map[string]string{}
-	}
-	writeJSON(w, out)
-}
-
-func (s *Server) hostAPIRoutes() []route {
+func (s *Server) hostAPIRoutes() []ui.Route {
 	l := localOps{s}
 	routes := map[string]http.HandlerFunc{
 		"GET /api/host/dashboard": func(w http.ResponseWriter, r *http.Request) {
-			s.apiOp(w, r, nil, func() (any, error) { return l.DashStats(r.Context()) })
+			s.APIOp(w, r, nil, func() (any, error) { return l.DashStats(r.Context()) })
 		},
 		"GET /api/host/devices": func(w http.ResponseWriter, r *http.Request) {
-			s.apiOp(w, r, nil, func() (any, error) { return l.Devices(r.Context()) })
+			s.APIOp(w, r, nil, func() (any, error) { return l.Devices(r.Context()) })
 		},
 		"POST /api/host/devices": func(w http.ResponseWriter, r *http.Request) {
 			var req deviceReq
-			s.apiOp(w, r, &req, func() (any, error) { return nil, l.DeviceOp(r.Context(), req) })
+			s.APIOp(w, r, &req, func() (any, error) { return nil, l.DeviceOp(r.Context(), req) })
 		},
 		"GET /api/host/disks": func(w http.ResponseWriter, r *http.Request) {
-			s.apiOp(w, r, nil, func() (any, error) { return l.Disks(r.Context()) })
+			s.APIOp(w, r, nil, func() (any, error) { return l.Disks(r.Context()) })
 		},
 		"GET /api/host/disks/{name}": func(w http.ResponseWriter, r *http.Request) {
-			s.apiOp(w, r, nil, func() (any, error) { return l.Disk(r.Context(), r.PathValue("name")) })
+			s.APIOp(w, r, nil, func() (any, error) { return l.Disk(r.Context(), r.PathValue("name")) })
 		},
 		"POST /api/host/disks/{name}/{action}": func(w http.ResponseWriter, r *http.Request) {
 			var req struct{ Confirm, Test string }
-			s.apiOp(w, r, &req, func() (any, error) {
+			s.APIOp(w, r, &req, func() (any, error) {
 				return nil, l.DiskAction(r.Context(), r.PathValue("name"), r.PathValue("action"), req.Confirm, req.Test)
 			})
 		},
 		"GET /api/host/pools": func(w http.ResponseWriter, r *http.Request) {
-			s.apiOp(w, r, nil, func() (any, error) { return l.Pools(r.Context()) })
+			s.APIOp(w, r, nil, func() (any, error) { return l.Pools(r.Context()) })
 		},
 		"POST /api/host/pools/{name}/{op}": func(w http.ResponseWriter, r *http.Request) {
 			var req poolOpReq
-			s.apiOp(w, r, &req, func() (any, error) { return nil, l.PoolOp(r.Context(), r.PathValue("name"), r.PathValue("op"), req) })
+			s.APIOp(w, r, &req, func() (any, error) { return nil, l.PoolOp(r.Context(), r.PathValue("name"), r.PathValue("op"), req) })
 		},
 		"POST /api/host/network/{op}": func(w http.ResponseWriter, r *http.Request) {
 			var req netOpReq
@@ -682,10 +655,10 @@ func (s *Server) hostAPIRoutes() []route {
 			if r.PathValue("op") == "bridge" {
 				in = &req.Bridge
 			}
-			s.apiOp(w, r, in, func() (any, error) { return nil, l.NetworkOp(accessCtx(r), r.PathValue("op"), req) })
+			s.APIOp(w, r, in, func() (any, error) { return nil, l.NetworkOp(accessCtx(r), r.PathValue("op"), req) })
 		},
 		"GET /api/host/network/bridges/{name}/ports": func(w http.ResponseWriter, r *http.Request) {
-			s.apiOp(w, r, nil, func() (any, error) {
+			s.APIOp(w, r, nil, func() (any, error) {
 				if s.hostd == nil {
 					return nil, errNoHostd
 				}
@@ -694,7 +667,7 @@ func (s *Server) hostAPIRoutes() []route {
 		},
 		"POST /api/host/firewall": func(w http.ResponseWriter, r *http.Request) {
 			var vms []hostd.FWVM
-			s.apiOp(w, r, &vms, func() (any, error) {
+			s.APIOp(w, r, &vms, func() (any, error) {
 				if s.hostd == nil {
 					return nil, errNoHostd
 				}
@@ -703,38 +676,38 @@ func (s *Server) hostAPIRoutes() []route {
 		},
 		"POST /api/host/cpu-baseline": func(w http.ResponseWriter, r *http.Request) {
 			var req wire.CPUBaselineRequest
-			s.apiOp(w, r, &req, func() (any, error) { return nil, s.kube.SetCPUBaseline(r.Context(), req.Model) })
+			s.APIOp(w, r, &req, func() (any, error) { return nil, s.kube.SetCPUBaseline(r.Context(), req.Model) })
 		},
 		"GET /api/host/vm-form": func(w http.ResponseWriter, r *http.Request) {
-			s.apiOp(w, r, nil, func() (any, error) { return l.VMForm(r.Context()) })
+			s.APIOp(w, r, nil, func() (any, error) { return l.VMForm(r.Context()) })
 		},
 		"POST /api/vms": func(w http.ResponseWriter, r *http.Request) {
 			var req createVMReq
-			s.apiOp(w, r, &req, func() (any, error) { return nil, l.CreateVM(r.Context(), req) })
+			s.APIOp(w, r, &req, func() (any, error) { return nil, l.CreateVM(r.Context(), req) })
 		},
 		"GET /api/vms/{ns}/{name}/hardware": func(w http.ResponseWriter, r *http.Request) {
-			s.apiOp(w, r, nil, func() (any, error) { return l.Hardware(r.Context(), r.PathValue("ns"), r.PathValue("name")) })
+			s.APIOp(w, r, nil, func() (any, error) { return l.Hardware(r.Context(), r.PathValue("ns"), r.PathValue("name")) })
 		},
 		"POST /api/vms/{ns}/{name}/hardware/{op}": func(w http.ResponseWriter, r *http.Request) {
 			var req hwOpReq
-			s.apiOp(w, r, &req, func() (any, error) {
+			s.APIOp(w, r, &req, func() (any, error) {
 				return nil, l.HardwareOp(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.PathValue("op"), req)
 			})
 		},
 		"POST /api/vms/import/{source}": func(w http.ResponseWriter, r *http.Request) {
-			s.apiOp(w, r, nil, func() (any, error) {
+			s.APIOp(w, r, nil, func() (any, error) {
 				name, err := l.Import(r.Context(), r.PathValue("source"), r.Header.Get("Content-Type"), r.Body)
 				return map[string]string{"name": name}, err
 			})
 		},
 		"POST /api/vms/import/vcenter-vms": func(w http.ResponseWriter, r *http.Request) {
 			var fields map[string]string
-			s.apiOp(w, r, &fields, func() (any, error) { return l.VCenterVMs(r.Context(), fields) })
+			s.APIOp(w, r, &fields, func() (any, error) { return l.VCenterVMs(r.Context(), fields) })
 		},
 		"GET /api/vms/{ns}/{name}/ovf": func(w http.ResponseWriter, r *http.Request) {
 			x, err := l.OVF(r.Context(), r.PathValue("ns"), r.PathValue("name"))
 			if err != nil {
-				apiError(w, r, http.StatusNotFound, err)
+				ui.APIError(w, r, http.StatusNotFound, err)
 				return
 			}
 			w.Header().Set("Content-Type", "application/xml")
@@ -745,18 +718,11 @@ func (s *Server) hostAPIRoutes() []route {
 			serveDownload(w, r, d, err)
 		},
 	}
-	var rs []route
+	var rs []ui.Route
 	for pattern, h := range routes {
-		rs = append(rs, route{pattern, auth.Administer, h})
+		rs = append(rs, ui.Route{Pattern: pattern, Priv: auth.Administer, H: h})
 	}
 	return rs
-}
-
-func decodeJSON(r io.Reader, v any) error {
-	if err := json.NewDecoder(r).Decode(v); err != nil && !errors.Is(err, io.EOF) {
-		return err
-	}
-	return nil
 }
 
 func accessCtx(r *http.Request) context.Context {

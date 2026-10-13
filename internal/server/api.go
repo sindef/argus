@@ -15,35 +15,19 @@ import (
 	"argus/internal/kube"
 	"argus/internal/lifecycle"
 	"argus/internal/tlscert"
+	"argus/internal/ui"
 	"argus/internal/wire"
 )
-
-func writeJSON(w http.ResponseWriter, v any) {
-	writeJSONCode(w, http.StatusOK, v)
-}
-
-func writeJSONCode(w http.ResponseWriter, code int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(v)
-}
-
-func apiError(w http.ResponseWriter, r *http.Request, status int, err error) {
-	log.Printf("%s: %s %s: %v", session(r).User, r.Method, r.URL.Path, err)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-}
 
 func (s *Server) apiNode(w http.ResponseWriter, r *http.Request) {
 	n, err := s.kube.RunningVMs(r.Context())
 	if err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
 	mem, _ := memInfo()
 	cpu, _ := s.kube.CPUInfo(r.Context())
-	writeJSON(w, kube.NodeInfo{Name: s.nodeName, Version: s.version, CAFingerprint: tlscert.Fingerprint(s.caPEM), RunningVMs: n, CPUCores: int64(runtime.NumCPU()), Arch: runtime.GOARCH, MemoryBytes: mem, BootTime: bootTime(), CPU: cpu})
+	ui.WriteJSON(w, kube.NodeInfo{Name: s.NodeName, Version: s.Version, CAFingerprint: tlscert.Fingerprint(s.caPEM), RunningVMs: n, CPUCores: int64(runtime.NumCPU()), Arch: runtime.GOARCH, MemoryBytes: mem, BootTime: bootTime(), CPU: cpu})
 }
 
 func bootTime() time.Time {
@@ -62,60 +46,60 @@ func bootTime() time.Time {
 func (s *Server) apiVMs(w http.ResponseWriter, r *http.Request) {
 	vms, err := s.kube.ListVMs(r.Context())
 	if err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, vms)
+	ui.WriteJSON(w, vms)
 }
 
 func (s *Server) apiNetworks(w http.ResponseWriter, r *http.Request) {
 	nets, err := s.kube.ListNetworks(r.Context())
 	if err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, nets)
+	ui.WriteJSON(w, nets)
 }
 
 func (s *Server) apiDisks(w http.ResponseWriter, r *http.Request) {
 	st, err := s.kube.DiskStatus(r.Context(), r.PathValue("ns"), r.PathValue("name"))
 	if err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, st)
+	ui.WriteJSON(w, st)
 }
 
 func (s *Server) apiExport(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
 	var req wire.ExportRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.BaseURL == "" {
-		apiError(w, r, http.StatusBadRequest, errors.New("baseURL required"))
+		ui.APIError(w, r, http.StatusBadRequest, errors.New("baseURL required"))
 		return
 	}
 	ex, err := s.kube.ExportVM(r.Context(), ns, name, req.BaseURL, string(s.caPEM))
 	if err != nil {
 		cctx, cancel := lifecycle.CleanupContext()
 		defer cancel()
-		apiError(w, r, http.StatusConflict, errors.Join(err, s.kube.DeleteExport(cctx, ns, name)))
+		ui.APIError(w, r, http.StatusConflict, errors.Join(err, s.kube.DeleteExport(cctx, ns, name)))
 		return
 	}
-	log.Printf("%s: export %s/%s", session(r).User, ns, name)
-	writeJSON(w, ex)
+	log.Printf("%s: export %s/%s", ui.Session(r).User, ns, name)
+	ui.WriteJSON(w, ex)
 }
 
 func (s *Server) apiUnexport(w http.ResponseWriter, r *http.Request) {
 	if err := s.kube.DeleteExport(r.Context(), r.PathValue("ns"), r.PathValue("name")); err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, map[string]string{})
+	ui.WriteJSON(w, map[string]string{})
 }
 
 func (s *Server) apiImport(w http.ResponseWriter, r *http.Request) {
 	var req wire.ImportRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || !validObject.MatchString(req.Name) || req.Operation == "" {
-		apiError(w, r, http.StatusBadRequest, errors.New("invalid import request"))
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || !ui.ValidObject.MatchString(req.Name) || req.Operation == "" {
+		ui.APIError(w, r, http.StatusBadRequest, errors.New("invalid import request"))
 		return
 	}
 	class, err := s.poolClass(r.Context(), req.Pool)
@@ -123,19 +107,19 @@ func (s *Server) apiImport(w http.ResponseWriter, r *http.Request) {
 		err = s.kube.ImportVM(r.Context(), kube.Namespace, req.Name, req.Operation, req.Export, kube.ImportOptions{StorageClass: class, Template: req.Template})
 	}
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	log.Printf("%s: import vm %s", session(r).User, req.Name)
-	writeJSON(w, map[string]string{})
+	log.Printf("%s: import vm %s", ui.Session(r).User, req.Name)
+	ui.WriteJSON(w, map[string]string{})
 }
 
 func (s *Server) apiImported(w http.ResponseWriter, r *http.Request) {
 	if err := s.kube.FinishImport(r.Context(), r.PathValue("ns"), r.PathValue("name")); err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, map[string]string{})
+	ui.WriteJSON(w, map[string]string{})
 }
 
 func (s *Server) caCert(w http.ResponseWriter, r *http.Request) {
@@ -173,137 +157,137 @@ func (s *Server) exportPassthrough(w http.ResponseWriter, r *http.Request) {
 func (s *Server) apiKubeVirtCA(w http.ResponseWriter, r *http.Request) {
 	ca, err := s.kube.KubeVirtCA(r.Context())
 	if err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, map[string]string{"ca": ca})
+	ui.WriteJSON(w, map[string]string{"ca": ca})
 }
 
 func (s *Server) apiExternalCA(w http.ResponseWriter, r *http.Request) {
 	var req wire.ExternalCARequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
+		ui.APIError(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if err := s.kube.SetExternalCA(r.Context(), req.Bundle); err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, map[string]string{})
+	ui.WriteJSON(w, map[string]string{})
 }
 
 func (s *Server) apiMigrationNetwork(w http.ResponseWriter, r *http.Request) {
 	var m kube.MigrationNetwork
 	if err := json.NewDecoder(r.Body).Decode(&m); err != nil || m.Subnet == "" || m.RangeStart == "" || m.RangeEnd == "" || m.VLAN < 0 || m.VLAN > 4094 {
-		apiError(w, r, http.StatusBadRequest, errors.New("invalid migration network"))
+		ui.APIError(w, r, http.StatusBadRequest, errors.New("invalid migration network"))
 		return
 	}
 	ip, err := s.kube.SetMigrationNetwork(r.Context(), m)
 	if err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	log.Printf("%s: migration network vlan %d %s-%s, handler at %s", session(r).User, m.VLAN, m.RangeStart, m.RangeEnd, ip)
-	writeJSON(w, map[string]string{"address": ip})
+	log.Printf("%s: migration network vlan %d %s-%s, handler at %s", ui.Session(r).User, m.VLAN, m.RangeStart, m.RangeEnd, ip)
+	ui.WriteJSON(w, map[string]string{"address": ip})
 }
 
 func (s *Server) apiRemoveMigrationNetwork(w http.ResponseWriter, r *http.Request) {
 	if err := s.kube.RemoveMigrationNetwork(r.Context()); err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	log.Printf("%s: removed migration network", session(r).User)
-	writeJSON(w, map[string]string{})
+	log.Printf("%s: removed migration network", ui.Session(r).User)
+	ui.WriteJSON(w, map[string]string{})
 }
 
 func (s *Server) apiVMSpec(w http.ResponseWriter, r *http.Request) {
 	spec, err := s.kube.VMSpec(r.Context(), r.PathValue("ns"), r.PathValue("name"))
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	writeJSON(w, spec)
+	ui.WriteJSON(w, spec)
 }
 
 func (s *Server) apiReceive(w http.ResponseWriter, r *http.Request) {
 	var req wire.ReceiveRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || !validObject.MatchString(req.Name) || req.MigrationID == "" {
-		apiError(w, r, http.StatusBadRequest, errors.New("invalid receive request"))
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || !ui.ValidObject.MatchString(req.Name) || req.MigrationID == "" {
+		ui.APIError(w, r, http.StatusBadRequest, errors.New("invalid receive request"))
 		return
 	}
 	addr, err := s.kube.Receive(r.Context(), kube.Namespace, req.Name, req.MigrationID, req.Spec)
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	log.Printf("%s: receiving %s at %s", session(r).User, req.Name, addr)
-	writeJSON(w, wire.ReceiveResponse{SyncAddress: addr})
+	log.Printf("%s: receiving %s at %s", ui.Session(r).User, req.Name, addr)
+	ui.WriteJSON(w, wire.ReceiveResponse{SyncAddress: addr})
 }
 
 func (s *Server) apiSend(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
 	var req wire.SendRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.MigrationID == "" || req.ConnectURL == "" {
-		apiError(w, r, http.StatusBadRequest, errors.New("invalid send request"))
+		ui.APIError(w, r, http.StatusBadRequest, errors.New("invalid send request"))
 		return
 	}
 	if err := s.kube.Send(r.Context(), ns, name, req.MigrationID, req.ConnectURL); err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	log.Printf("%s: sending %s/%s to %s", session(r).User, ns, name, req.ConnectURL)
-	writeJSON(w, map[string]string{})
+	log.Printf("%s: sending %s/%s to %s", ui.Session(r).User, ns, name, req.ConnectURL)
+	ui.WriteJSON(w, map[string]string{})
 }
 
 func (s *Server) apiMigrationPhase(w http.ResponseWriter, r *http.Request) {
 	op := r.URL.Query().Get("operation")
 	if op == "" {
-		apiError(w, r, http.StatusBadRequest, errors.New("operation required"))
+		ui.APIError(w, r, http.StatusBadRequest, errors.New("operation required"))
 		return
 	}
 	phase, err := s.kube.MigrationPhase(r.Context(), r.PathValue("ns"), op)
 	if err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, map[string]string{"phase": phase})
+	ui.WriteJSON(w, map[string]string{"phase": phase})
 }
 
 func (s *Server) apiMigrationCleanup(w http.ResponseWriter, r *http.Request) {
 	var req wire.OperationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Operation == "" {
-		apiError(w, r, http.StatusBadRequest, errors.New("operation required"))
+		ui.APIError(w, r, http.StatusBadRequest, errors.New("operation required"))
 		return
 	}
 	if err := s.kube.CleanupMigration(r.Context(), r.PathValue("ns"), req.Operation); err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, map[string]string{})
+	ui.WriteJSON(w, map[string]string{})
 }
 
 func (s *Server) apiAbort(w http.ResponseWriter, r *http.Request) {
 	var req wire.OperationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Operation == "" {
-		apiError(w, r, http.StatusBadRequest, errors.New("operation required"))
+		ui.APIError(w, r, http.StatusBadRequest, errors.New("operation required"))
 		return
 	}
 	ns, name := r.PathValue("ns"), r.PathValue("name")
 	if err := s.kube.DeleteOwnedVM(r.Context(), ns, name, req.Operation); err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	log.Printf("%s: abort %s for %s/%s", session(r).User, req.Operation, ns, name)
-	writeJSON(w, map[string]string{})
+	log.Printf("%s: abort %s for %s/%s", ui.Session(r).User, req.Operation, ns, name)
+	ui.WriteJSON(w, map[string]string{})
 }
 
 func (s *Server) apiVM(w http.ResponseWriter, r *http.Request) {
 	vm, err := s.kube.GetVM(r.Context(), r.PathValue("ns"), r.PathValue("name"))
 	if err != nil {
-		apiError(w, r, http.StatusNotFound, err)
+		ui.APIError(w, r, http.StatusNotFound, err)
 		return
 	}
-	writeJSON(w, vm)
+	ui.WriteJSON(w, vm)
 }
 
 func (s *Server) apiEvents(w http.ResponseWriter, r *http.Request) {
@@ -313,25 +297,25 @@ func (s *Server) apiEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	evs, err := s.kube.Events(r.Context(), ns, r.PathValue("name"), 50)
 	if err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, evs)
+	ui.WriteJSON(w, evs)
 }
 
 func (s *Server) apiSnapshots(w http.ResponseWriter, r *http.Request) {
 	snaps, err := s.kube.ListSnapshots(r.Context(), r.PathValue("ns"), r.PathValue("name"))
 	if err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, snaps)
+	ui.WriteJSON(w, snaps)
 }
 
 func (s *Server) apiMetrics(w http.ResponseWriter, r *http.Request) {
 	vms, err := s.kube.VMMetrics(r.Context())
 	if err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
 	m := kube.MetricsSample{Time: time.Now(), VMs: vms}
@@ -343,7 +327,7 @@ func (s *Server) apiMetrics(w http.ResponseWriter, r *http.Request) {
 			m.PoolFree += p.Free
 		}
 	}
-	writeJSON(w, m)
+	ui.WriteJSON(w, m)
 }
 
 func cpuTimes() (total, idle float64) {
@@ -380,8 +364,8 @@ func memInfo() (total, used int64) {
 
 func (s *Server) apiSyncController(w http.ResponseWriter, r *http.Request) {
 	if err := s.kube.EnsureSyncController(r.Context()); err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, map[string]string{})
+	ui.WriteJSON(w, map[string]string{})
 }

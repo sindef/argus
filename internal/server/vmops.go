@@ -12,14 +12,13 @@ import (
 	"argus/internal/auth"
 	"argus/internal/kube"
 	"argus/internal/manager"
+	"argus/internal/ui"
 	"argus/internal/wire"
 )
 
-var errUnknownAction = errors.New("unknown action")
-
 func (l localOps) Power(ctx context.Context, ns, name, act string) error {
 	if !kube.ValidAction(act) {
-		return errUnknownAction
+		return ui.ErrUnknownAction
 	}
 	return l.s.kube.Action(ctx, ns, name, act)
 }
@@ -44,14 +43,14 @@ func (l localOps) SnapshotOp(ctx context.Context, ns, name, snap, op string) err
 func (l localOps) Meta(ctx context.Context, ns, name, op string, req wire.MetaRequest) error {
 	switch op {
 	case "clone":
-		if !validObject.MatchString(req.Value) {
+		if !ui.ValidObject.MatchString(req.Value) {
 			return errors.New("invalid clone name")
 		}
 		return l.s.kube.Clone(ctx, ns, name, req.Value, req.Template)
 	case "rename":
 		return l.s.kube.Rename(ctx, ns, name, req.Value)
 	}
-	return errUnknownAction
+	return ui.ErrUnknownAction
 }
 
 func (l localOps) RemoveDisk(ctx context.Context, ns, name, disk string) error {
@@ -134,7 +133,7 @@ func vmAction(ctx context.Context, o hostOps, ns, name, act, prompt string) erro
 	case act == "clone", act == "template-copy":
 		return o.Meta(ctx, ns, name, "clone", wire.MetaRequest{Value: prompt, Template: act == "template-copy"})
 	}
-	return errUnknownAction
+	return ui.ErrUnknownAction
 }
 
 func (s *Server) onNode(h http.HandlerFunc) http.HandlerFunc {
@@ -145,7 +144,7 @@ func (s *Server) onNode(h http.HandlerFunc) http.HandlerFunc {
 			err = errors.New(r.PathValue("name") + " has a migration in progress")
 		}
 		if err != nil {
-			flash(w, r, err)
+			ui.Flash(w, r, err)
 			return
 		}
 		h(w, r.WithContext(context.WithValue(r.Context(), opsKey{}, remoteOps{n})))
@@ -159,7 +158,7 @@ func (s *Server) permits(r *http.Request, p auth.Privilege) bool {
 	if o, ok := s.ops(r).(remoteOps); ok {
 		return s.can(r, p, o.n, r.PathValue("name"))
 	}
-	return granted(r, p)
+	return ui.Granted(r, p)
 }
 
 func formMap(r *http.Request) map[string]string {
@@ -173,10 +172,10 @@ func formMap(r *http.Request) map[string]string {
 
 func (s *Server) vmDone(w http.ResponseWriter, r *http.Request, err error, what string) {
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: %s %s/%s", session(r).User, what, r.PathValue("ns"), r.PathValue("name"))
+	log.Printf("%s: %s %s/%s", ui.Session(r).User, what, r.PathValue("ns"), r.PathValue("name"))
 	w.Header().Set("HX-Refresh", "true")
 }
 
@@ -189,8 +188,8 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 	prompt := strings.TrimSpace(r.Header.Get("HX-Prompt"))
 	err := vmAction(r.Context(), s.ops(r), ns, name, act, prompt)
 	if err == nil && act == "delete" {
-		log.Printf("%s: delete %s/%s", session(r).User, ns, name)
-		redirect(w, r, "/")
+		log.Printf("%s: delete %s/%s", ui.Session(r).User, ns, name)
+		ui.Redirect(w, r, "/")
 		return
 	}
 	s.vmDone(w, r, err, act+" "+prompt)
@@ -223,10 +222,10 @@ func (s *Server) scheduleForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiVMOp(w http.ResponseWriter, r *http.Request, in any, fn func(ctx context.Context, l localOps, ns, name string) error) {
-	s.apiOp(w, r, in, func() (any, error) {
+	s.APIOp(w, r, in, func() (any, error) {
 		err := fn(r.Context(), localOps{s}, r.PathValue("ns"), r.PathValue("name"))
 		if err == nil {
-			log.Printf("%s: %s %s", session(r).User, r.Method, r.URL.Path)
+			log.Printf("%s: %s %s", ui.Session(r).User, r.Method, r.URL.Path)
 		}
 		return nil, err
 	})

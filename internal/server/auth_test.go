@@ -99,7 +99,7 @@ func (h *harness) outcome(t *testing.T, method, path, who, origin string) (out s
 	case strings.HasPrefix(who, "token:"):
 		r.Header.Set("Authorization", "Bearer "+h.tokens[strings.TrimPrefix(who, "token:")])
 	case who != "":
-		r.AddCookie(&http.Cookie{Name: h.s.cookieName(), Value: h.cookies[who]})
+		r.AddCookie(&http.Cookie{Name: h.s.Cookie, Value: h.cookies[who]})
 	}
 	w := httptest.NewRecorder()
 	defer func() {

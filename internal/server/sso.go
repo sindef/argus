@@ -70,7 +70,7 @@ func (s *Server) ssoStart(w http.ResponseWriter, r *http.Request) {
 	conf, _, _, err := s.oauthConfig(r, org)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		s.render(w, r, "login.html", "auth", s.loginData(r, err.Error()))
+		s.Render(w, r, "login.html", "auth", s.LoginView(r, err.Error()))
 		return
 	}
 	state, flow := randomHex(16), ssoFlow{binding: randomHex(16), org: org, verifier: oauth2.GenerateVerifier(), nonce: randomHex(16), remember: r.FormValue("remember") != "", expires: time.Now().Add(10 * time.Minute)}
@@ -90,7 +90,7 @@ func (s *Server) ssoCallback(w http.ResponseWriter, r *http.Request) {
 	fail := func(msg string, err error) {
 		log.Printf("sso: %s: %v", msg, err)
 		w.WriteHeader(http.StatusUnauthorized)
-		s.render(w, r, "login.html", "auth", s.loginData(r, msg))
+		s.Render(w, r, "login.html", "auth", s.LoginView(r, msg))
 	}
 	state := r.URL.Query().Get("state")
 	s.sso.mu.Lock()
@@ -140,7 +140,7 @@ func (s *Server) ssoCallback(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	store := s.auth.ForOrg(flow.org)
+	store := s.Auth.ForOrg(flow.org)
 	role, scopes, matched, ok := store.SSOAccess(r.Context(), claimed)
 	if !ok {
 		fail("Your account has no access to this organization", errors.New(user+": no mapped group"))
@@ -151,7 +151,7 @@ func (s *Server) ssoCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	session := store.NewSession(auth.Session{User: user, Role: role, SSO: true, Scopes: scopes}, flow.remember)
-	s.setSessionCookie(w, session, flow.remember)
+	s.SetSessionCookie(w, session, flow.remember)
 	log.Printf("sso: %s signed in to %s as %s", user, flow.org, role)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

@@ -10,6 +10,7 @@ import (
 
 	"argus/internal/hostd"
 	"argus/internal/kube"
+	"argus/internal/ui"
 )
 
 type poolRow struct {
@@ -41,13 +42,13 @@ func (s *Server) poolChoices(ctx context.Context) []kube.Pool {
 
 func (s *Server) poolsPage(w http.ResponseWriter, r *http.Request) {
 	pv, err := s.ops(r).Pools(r.Context())
-	s.render(w, r, "pools.html", "layout", map[string]any{"Nav": "pools", "Pools": pv.Pools, "Importable": pv.Importable, "Error": errText(err)})
+	s.Render(w, r, "pools.html", "layout", map[string]any{"Nav": "pools", "Pools": pv.Pools, "Importable": pv.Importable, "Error": ui.ErrText(err)})
 }
 
 func (s *Server) poolModal(w http.ResponseWriter, r *http.Request) {
 	disks, err := s.ops(r).Disks(r.Context())
 	free := slices.DeleteFunc(disks, func(d hostd.Disk) bool { return !d.Free() })
-	s.render(w, r, "pools.html", "pool-modal", map[string]any{"Disks": free, "Pool": r.PathValue("name"), "Error": errText(err)})
+	s.Render(w, r, "pools.html", "pool-modal", map[string]any{"Disks": free, "Pool": r.PathValue("name"), "Error": ui.ErrText(err)})
 }
 
 func vdevs(kind string, width int, disks []string) ([]hostd.Vdev, error) {
@@ -115,10 +116,10 @@ func (s *Server) poolAction(w http.ResponseWriter, r *http.Request) {
 		err = s.ops(r).PoolOp(r.Context(), name, op, req)
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: pool %s %s", session(r).User, op, name)
+	log.Printf("%s: pool %s %s", ui.Session(r).User, op, name)
 	w.Header().Set("HX-Refresh", "true")
 }
 

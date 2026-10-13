@@ -20,6 +20,7 @@ import (
 	"argus/internal/auth"
 	"argus/internal/hostd"
 	"argus/internal/tlscert"
+	"argus/internal/ui"
 	"argus/internal/wire"
 )
 
@@ -30,7 +31,7 @@ func (s *Server) host(w http.ResponseWriter, r *http.Request) {
 		s.renderHost(w, r, "", nil)
 		return
 	}
-	s.render(w, r, "host.html", "state", map[string]any{
+	s.Render(w, r, "host.html", "state", map[string]any{
 		"Release": readEnv(s.releaseFile),
 		"Status":  strings.TrimSpace(readFile(filepath.Join(s.runDir, "status"))),
 		"Log":     tail(readFile(filepath.Join(s.runDir, "upgrade.log")), 15),
@@ -69,13 +70,13 @@ func (s *Server) requestHost(r *http.Request, action, img string) error {
 	if err := os.Rename(tmp, filepath.Join(s.runDir, "request")); err != nil {
 		return err
 	}
-	log.Printf("%s: host %s", session(r).User, req)
+	log.Printf("%s: host %s", ui.Session(r).User, req)
 	return nil
 }
 
 func (s *Server) hostRequest(w http.ResponseWriter, r *http.Request) {
 	if err := s.requestHost(r, r.PathValue("action"), strings.TrimSpace(r.FormValue("image"))); err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
 	w.Header().Set("HX-Refresh", "true")
@@ -83,21 +84,21 @@ func (s *Server) hostRequest(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiHostRequest(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Image string }
-	if err := decodeJSON(r.Body, &req); err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
+	if err := ui.DecodeJSON(r.Body, &req); err != nil {
+		ui.APIError(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if err := s.requestHost(r, r.PathValue("action"), strings.TrimSpace(req.Image)); err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	writeJSON(w, map[string]string{})
+	ui.WriteJSON(w, map[string]string{})
 }
 
 func (s *Server) apiHostStatus(w http.ResponseWriter, r *http.Request) {
 	n, err := s.kube.RunningVMs(r.Context())
 	if err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
 	reason := ""
@@ -115,7 +116,7 @@ func (s *Server) apiHostStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	status := strings.TrimSpace(readFile(filepath.Join(s.runDir, "status")))
-	writeJSON(w, wire.HostStatus{Status: status, State: wire.StateOf(status), Version: readEnv(s.releaseFile)["KAIROS_VERSION"], Running: n, Ready: reason == "", Reason: reason})
+	ui.WriteJSON(w, wire.HostStatus{Status: status, State: wire.StateOf(status), Version: readEnv(s.releaseFile)["KAIROS_VERSION"], Running: n, Ready: reason == "", Reason: reason})
 }
 
 var errMaintenance = errors.New("host maintenance in progress")
@@ -161,8 +162,8 @@ func tail(s string, n int) string {
 }
 
 func (s *Server) renderHost(w http.ResponseWriter, r *http.Request, notice string, err error) {
-	failed(w, r, err)
-	tokens, terr := s.auth.Tokens(r.Context())
+	ui.Failed(w, r, err)
+	tokens, terr := s.Auth.Tokens(r.Context())
 	if err == nil {
 		err = terr
 	}
@@ -172,7 +173,7 @@ func (s *Server) renderHost(w http.ResponseWriter, r *http.Request, notice strin
 		"Tokens":        tokens,
 		"CAFingerprint": tlscert.Fingerprint(s.caPEM),
 		"Notice":        notice,
-		"Error":         errText(err),
+		"Error":         ui.ErrText(err),
 	}
 	if s.runDir != "" {
 		data["Release"] = readEnv(s.releaseFile)
@@ -188,14 +189,14 @@ func (s *Server) renderHost(w http.ResponseWriter, r *http.Request, notice strin
 		}
 		data["Targets"] = ts
 	}
-	data["Notify"], _, _ = s.loadNotify(r.Context())
+	data["Notify"], _, _ = s.LoadNotify(r.Context())
 	data["Cert"] = s.certInfo()
-	s.render(w, r, "host.html", "layout", data)
+	s.Render(w, r, "host.html", "layout", data)
 }
 
 func (s *Server) createToken(w http.ResponseWriter, r *http.Request) {
 	name := r.FormValue("name")
-	if !validName.MatchString(name) {
+	if !ui.ValidName.MatchString(name) {
 		s.renderHost(w, r, "", errors.New("invalid token name"))
 		return
 	}
@@ -203,22 +204,22 @@ func (s *Server) createToken(w http.ResponseWriter, r *http.Request) {
 	if scope != auth.MetricsScope && scope != auth.ReadScope {
 		scope = ""
 	}
-	tok, err := s.auth.CreateToken(r.Context(), name, scope)
+	tok, err := s.Auth.CreateToken(r.Context(), name, scope)
 	if err != nil {
 		s.renderHost(w, r, "", err)
 		return
 	}
-	log.Printf("%s: created API token %s", session(r).User, name)
+	log.Printf("%s: created API token %s", ui.Session(r).User, name)
 	s.renderHost(w, r, "Token "+name+": "+tok, nil)
 }
 
 func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	if err := s.auth.DeleteToken(r.Context(), name); err != nil {
+	if err := s.Auth.DeleteToken(r.Context(), name); err != nil {
 		s.renderHost(w, r, "", err)
 		return
 	}
-	log.Printf("%s: revoked API token %s", session(r).User, name)
+	log.Printf("%s: revoked API token %s", ui.Session(r).User, name)
 	http.Redirect(w, r, "/host", http.StatusSeeOther)
 }
 
@@ -258,7 +259,7 @@ func (s *Server) applyHostSettings(ctx context.Context, u HostSettingsUpdate) er
 	}
 	if u.MigrationBridge != nil && *u.MigrationBridge != s.kube.MigrationBridge(ctx) {
 		if !slices.Contains(s.bridges(ctx), *u.MigrationBridge) {
-			return fmt.Errorf("bridge %s not found on %s", *u.MigrationBridge, s.nodeName)
+			return fmt.Errorf("bridge %s not found on %s", *u.MigrationBridge, s.NodeName)
 		}
 		return s.kube.SetMigrationBridge(ctx, *u.MigrationBridge)
 	}
@@ -268,10 +269,10 @@ func (s *Server) applyHostSettings(ctx context.Context, u HostSettingsUpdate) er
 func (s *Server) apiHostSettings(w http.ResponseWriter, r *http.Request) {
 	st, err := s.hostSettings(r.Context())
 	if err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, st)
+	ui.WriteJSON(w, st)
 }
 
 func (s *Server) apiApplyHostSettings(w http.ResponseWriter, r *http.Request) {
@@ -281,11 +282,11 @@ func (s *Server) apiApplyHostSettings(w http.ResponseWriter, r *http.Request) {
 		err = s.applyHostSettings(r.Context(), u)
 	}
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	log.Printf("%s: host settings applied", session(r).User)
-	writeJSON(w, map[string]string{})
+	log.Printf("%s: host settings applied", ui.Session(r).User)
+	ui.WriteJSON(w, map[string]string{})
 }
 
 func fields(v string) []string { return strings.Fields(strings.ReplaceAll(v, ",", " ")) }
@@ -306,10 +307,10 @@ func (s *Server) hostSettingsForm(w http.ResponseWriter, r *http.Request) {
 		u.Backup, u.BackupPassphrase = &backup, &pass
 	}
 	if err := s.applyHostSettings(r.Context(), u); err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: host settings saved", session(r).User)
+	log.Printf("%s: host settings saved", ui.Session(r).User)
 	w.Header().Set("HX-Refresh", "true")
 }
 
@@ -343,21 +344,21 @@ func (s *Server) setCertificate(w http.ResponseWriter, r *http.Request) {
 	case s.certs == nil:
 		err = errors.New("certificates are not managed by this server")
 	case r.FormValue("revert") != "":
-		err = s.certs.Set(r.Context(), s.auth.Secrets(), nil, nil)
+		err = s.certs.Set(r.Context(), s.Auth.Secrets(), nil, nil)
 	default:
 		var cert, key []byte
 		if cert, err = formFile(r, "cert"); err == nil {
 			key, err = formFile(r, "key")
 		}
 		if err == nil {
-			err = s.certs.Set(r.Context(), s.auth.Secrets(), cert, key)
+			err = s.certs.Set(r.Context(), s.Auth.Secrets(), cert, key)
 		}
 	}
 	if err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: web certificate updated", session(r).User)
+	log.Printf("%s: web certificate updated", ui.Session(r).User)
 	w.Header().Set("HX-Refresh", "true")
 }
 
@@ -377,65 +378,65 @@ func (s *Server) backupTargetForm(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
 	defer cancel()
 	if err := s.saveTarget(ctx, t, r.PathValue("op") == "remove"); err != nil {
-		flash(w, r, err)
+		ui.Flash(w, r, err)
 		return
 	}
-	log.Printf("%s: backup target %s %s", session(r).User, t.Name, r.PathValue("op"))
+	log.Printf("%s: backup target %s %s", ui.Session(r).User, t.Name, r.PathValue("op"))
 	w.Header().Set("HX-Refresh", "true")
 }
 
 func (s *Server) apiBackupTargets(w http.ResponseWriter, r *http.Request) {
 	ts, err := s.backupTargets(r.Context())
 	if err != nil {
-		apiError(w, r, http.StatusBadGateway, err)
+		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
 	for i := range ts {
 		ts[i].SecretKey, ts[i].Passphrase = "", ""
 	}
-	writeJSON(w, ts)
+	ui.WriteJSON(w, ts)
 }
 
 func (s *Server) apiBackupTargetOp(w http.ResponseWriter, r *http.Request) {
 	var t BackupTarget
 	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
+		ui.APIError(w, r, http.StatusBadRequest, err)
 		return
 	}
 	t.Kind = "s3"
 	if err := s.saveTarget(r.Context(), t, r.PathValue("op") == "remove"); err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	writeJSON(w, map[string]string{})
+	ui.WriteJSON(w, map[string]string{})
 }
 
 func (s *Server) apiRotateToken(w http.ResponseWriter, r *http.Request) {
-	caller := strings.TrimPrefix(session(r).User, "token:")
+	caller := strings.TrimPrefix(ui.Session(r).User, "token:")
 	base := strings.TrimRight(strings.TrimRight(caller, "0123456789"), "-")
 	if base == "" {
 		base = "manager"
 	}
 	name := base + "-" + time.Now().UTC().Format("20060102150405")
-	tok, err := s.auth.CreateToken(r.Context(), name, "")
+	tok, err := s.Auth.CreateToken(r.Context(), name, "")
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	log.Printf("%s: rotated API token to %s", session(r).User, name)
-	writeJSON(w, map[string]string{"name": name, "token": tok, "old": caller})
+	log.Printf("%s: rotated API token to %s", ui.Session(r).User, name)
+	ui.WriteJSON(w, map[string]string{"name": name, "token": tok, "old": caller})
 }
 
 func (s *Server) apiRetireToken(w http.ResponseWriter, r *http.Request) {
 	var req wire.RetireTokenRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" || "token:"+req.Name == session(r).User {
-		apiError(w, r, http.StatusBadRequest, errors.New("name of another token required"))
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" || "token:"+req.Name == ui.Session(r).User {
+		ui.APIError(w, r, http.StatusBadRequest, errors.New("name of another token required"))
 		return
 	}
-	if err := s.auth.DeleteToken(r.Context(), req.Name); err != nil {
-		apiError(w, r, http.StatusConflict, err)
+	if err := s.Auth.DeleteToken(r.Context(), req.Name); err != nil {
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	log.Printf("%s: retired API token %s", session(r).User, req.Name)
-	writeJSON(w, map[string]string{})
+	log.Printf("%s: retired API token %s", ui.Session(r).User, req.Name)
+	ui.WriteJSON(w, map[string]string{})
 }

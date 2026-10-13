@@ -19,6 +19,7 @@ import (
 	"argus/internal/kube"
 	"argus/internal/lifecycle"
 	"argus/internal/netguard"
+	"argus/internal/ui"
 	"argus/internal/wire"
 )
 
@@ -53,43 +54,43 @@ func (s *Server) writeFence() {
 func (s *Server) apiHeartbeat(w http.ResponseWriter, r *http.Request) {
 	var req wire.Heartbeat
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
+		ui.APIError(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.ha.mu.Lock()
 	s.ha.last, s.ha.owned, s.ha.replicas = time.Now(), req.Owned, req.Replicas
 	s.ha.mu.Unlock()
 	s.writeFence()
-	writeJSON(w, map[string]string{})
+	ui.WriteJSON(w, map[string]string{})
 }
 
 func (s *Server) apiProbe(w http.ResponseWriter, r *http.Request) {
 	if err := netguard.CheckURL(r.Context(), r.URL.Query().Get("url")); err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
+		ui.APIError(w, r, http.StatusBadRequest, err)
 		return
 	}
-	writeJSON(w, map[string]bool{"reachable": reachable(r.URL.Query().Get("url"))})
+	ui.WriteJSON(w, map[string]bool{"reachable": reachable(r.URL.Query().Get("url"))})
 }
 
 func (s *Server) apiSetHA(w http.ResponseWriter, r *http.Request) {
 	var req wire.HARequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
+		ui.APIError(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if err := s.kube.SetHA(r.Context(), r.PathValue("ns"), r.PathValue("name"), req.Enabled); err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	log.Printf("%s: ha %v for %s/%s", session(r).User, req.Enabled, r.PathValue("ns"), r.PathValue("name"))
-	writeJSON(w, map[string]string{})
+	log.Printf("%s: ha %v for %s/%s", ui.Session(r).User, req.Enabled, r.PathValue("ns"), r.PathValue("name"))
+	ui.WriteJSON(w, map[string]string{})
 }
 
 func (s *Server) apiSnapshotExport(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
 	var req wire.ExportRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.BaseURL == "" {
-		apiError(w, r, http.StatusBadRequest, errors.New("baseURL required"))
+		ui.APIError(w, r, http.StatusBadRequest, errors.New("baseURL required"))
 		return
 	}
 	if req.BaseURL == "self" {
@@ -99,10 +100,10 @@ func (s *Server) apiSnapshotExport(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		cctx, cancel := lifecycle.CleanupContext()
 		defer cancel()
-		apiError(w, r, http.StatusConflict, errors.Join(err, s.kube.DeleteExport(cctx, ns, name)))
+		ui.APIError(w, r, http.StatusConflict, errors.Join(err, s.kube.DeleteExport(cctx, ns, name)))
 		return
 	}
-	writeJSON(w, ex)
+	ui.WriteJSON(w, ex)
 }
 
 func reachable(raw string) bool {
@@ -176,7 +177,7 @@ func (s *Server) apiReplica(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
 	var req wire.ReplicaRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
+		ui.APIError(w, r, http.StatusBadRequest, err)
 		return
 	}
 	var out any = map[string]string{}
@@ -202,8 +203,8 @@ func (s *Server) apiReplica(w http.ResponseWriter, r *http.Request) {
 		err = errors.New("unknown replica operation")
 	}
 	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
+		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}
-	writeJSON(w, out)
+	ui.WriteJSON(w, out)
 }
