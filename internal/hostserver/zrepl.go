@@ -122,7 +122,7 @@ func (s *Server) apiZFSSend(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiZFSRecv(w http.ResponseWriter, r *http.Request) {
-	err := s.kube.Stopped(r.Context(), r.PathValue("ns"), r.PathValue("name"))
+	err := s.kube.StoppedReplica(r.Context(), r.PathValue("ns"), r.PathValue("name"))
 	var ds string
 	if err == nil {
 		ds, err = s.zfsDataset(r)

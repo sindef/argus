@@ -86,6 +86,9 @@ func (c *Manager) Protect(ctx context.Context, owner, vm, replica string, interv
 	if rn.Org != o.Org {
 		return errors.New("replica must be in the same organization")
 	}
+	if st, ok := c.NodeState(replica); ok && slices.ContainsFunc(st.VMs, func(v kube.VM) bool { return v.Name == vm }) {
+		return fmt.Errorf("%s already has a VM named %s", replica, vm)
+	}
 	if interval < 5 {
 		return errors.New("interval must be at least 5 minutes")
 	}

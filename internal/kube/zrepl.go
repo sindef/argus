@@ -66,9 +66,20 @@ func (c *Client) Unfreeze(ctx context.Context, ns, name string) error {
 	return c.subresource(ctx, ns, "virtualmachineinstances", name, "unfreeze", "{}")
 }
 
-func (c *Client) Stopped(ctx context.Context, ns, name string) error {
+func (c *Client) StoppedReplica(ctx context.Context, ns, name string) error {
 	if _, err := c.dyn.Resource(vmiGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
 		return fmt.Errorf("power off %s first", name)
+	}
+	vm, err := c.dyn.Resource(vmGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	return isReplica(vm.Object, name)
+}
+
+func isReplica(o obj, name string) error {
+	if l, _, _ := unstructured.NestedString(o, "metadata", "labels", haLabel); l != "true" {
+		return fmt.Errorf("%s on this host is not an HA replica; refusing to overwrite it", name)
 	}
 	return nil
 }

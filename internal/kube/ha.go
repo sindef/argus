@@ -212,7 +212,7 @@ var genSuffix = regexp.MustCompile(`-g[0-9]+$`)
 func replGenName(vm string) string { return "argus-replgen-" + vm }
 
 func (c *Client) RefreshReplicaDisks(ctx context.Context, ns, vm string, ex Export) (map[string]string, error) {
-	if _, err := c.dyn.Resource(vmGVR).Namespace(ns).Get(ctx, vm, metav1.GetOptions{}); err != nil {
+	if err := c.StoppedReplica(ctx, ns, vm); err != nil {
 		return nil, err
 	}
 	src := replGenName(vm)
@@ -280,6 +280,9 @@ func (c *Client) SwapReplica(ctx context.Context, ns, vm string, spec obj, mappi
 	}
 	var old []string
 	err := c.editStoppedVM(ctx, ns, vm, func(o obj) error {
+		if err := isReplica(o, vm); err != nil {
+			return err
+		}
 		old = old[:0]
 		templates, _, _ := unstructured.NestedSlice(o, "spec", "dataVolumeTemplates")
 		for _, t := range templates {
