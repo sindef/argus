@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	"argus/internal/auth"
 	"argus/internal/kube"
 	"argus/internal/manager"
@@ -33,6 +35,8 @@ type v1VM struct {
 	Running      bool              `json:"running"`
 	Cores        int64             `json:"cores"`
 	Memory       string            `json:"memory"`
+	MemoryMiB    int64             `json:"memoryMiB"`
+	Networks     []string          `json:"networks,omitempty"`
 	StorageBytes int64             `json:"storageBytes"`
 	Tags         []string          `json:"tags,omitempty"`
 	Folder       string            `json:"folder,omitempty"`
@@ -46,7 +50,12 @@ type v1VM struct {
 }
 
 func toV1VM(host string, v kube.VM) v1VM {
-	return v1VM{Host: host, Name: v.Name, DisplayName: v.DisplayName, Status: v.Status, Running: v.Running, Cores: v.Cores, Memory: v.Memory,
+	var nets []string
+	for _, nic := range v.NICs {
+		nets = append(nets, nic.Network[strings.Index(nic.Network, "/")+1:])
+	}
+	mem, _ := resource.ParseQuantity(v.Memory)
+	return v1VM{MemoryMiB: mem.Value() >> 20, Networks: nets, Host: host, Name: v.Name, DisplayName: v.DisplayName, Status: v.Status, Running: v.Running, Cores: v.Cores, Memory: v.Memory,
 		StorageBytes: v.StorageBytes, Tags: v.Tags, Folder: v.Folder, Attributes: v.Attributes, Template: v.Template, OS: v.OS, IPs: v.IPs(), Started: v.Started, Restart: v.PendingRestart, Agent: v.Agent}
 }
 
@@ -106,6 +115,13 @@ func (s *Server) apiV1Routes() {
 		"GET /api/v1/tasks":                                                     {auth.VMView, s.v1Tasks},
 		"POST /api/v1/hosts/{node}/vms":                                         {auth.VMProvision, s.v1CreateVM},
 		"GET /api/v1/hosts/{node}/vms/{name}":                                   {auth.VMView, s.v1VM},
+		"PATCH /api/v1/hosts/{node}/vms/{name}":                                 {auth.VMConfig, s.v1UpdateVM},
+		"GET /api/v1/hosts/{node}/images":                                       {auth.VMView, s.v1Images},
+		"GET /api/v1/networks":                                                  {auth.VMView, s.v1Networks},
+		"POST /api/v1/networks":                                                 {auth.NetworkConfig, s.v1SaveNetwork},
+		"GET /api/v1/networks/{name}":                                           {auth.VMView, s.v1Network},
+		"PUT /api/v1/networks/{name}":                                           {auth.NetworkConfig, s.v1SaveNetwork},
+		"DELETE /api/v1/networks/{name}":                                        {auth.NetworkConfig, s.v1DeleteNetwork},
 		"DELETE /api/v1/hosts/{node}/vms/{name}":                                {auth.VMDelete, s.v1VMCall("delete")},
 		"POST /api/v1/hosts/{node}/vms/{name}/power":                            {auth.VMPower, s.v1Power},
 		"POST /api/v1/hosts/{node}/vms/{name}/migrate":                          {auth.VMMigrate, s.v1Migrate},

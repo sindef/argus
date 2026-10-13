@@ -245,6 +245,60 @@
       }
      }
     ]
+   },
+   "patch": {
+    "summary": "Update a VM",
+    "description": "Requires vm.config.",
+    "responses": {
+     "200": {
+      "description": "VM",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/VM"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/VMUpdate"
+       }
+      }
+     }
+    }
    }
   },
   "/hosts/{host}/vms/{name}/power": {
@@ -822,6 +876,227 @@
      }
     }
    }
+  },
+  "/hosts/{host}/images": {
+   "get": {
+    "summary": "List images on a host",
+    "description": "Requires vm.view.",
+    "responses": {
+     "200": {
+      "description": "Images",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Image"
+         }
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/networks": {
+   "get": {
+    "summary": "List network definitions",
+    "description": "Requires vm.view.",
+    "responses": {
+     "200": {
+      "description": "Networks",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Network"
+         }
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "summary": "Define a network and create it on hosts in scope",
+    "description": "Requires network.config.",
+    "responses": {
+     "201": {
+      "description": "Created",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NetworkResult"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Network"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/networks/{name}": {
+   "get": {
+    "summary": "Get a network definition",
+    "description": "Requires vm.view.",
+    "responses": {
+     "200": {
+      "description": "Network",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Network"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   },
+   "put": {
+    "summary": "Update a network definition and apply it",
+    "description": "Requires network.config.",
+    "responses": {
+     "200": {
+      "description": "Updated",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NetworkResult"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Network"
+       }
+      }
+     }
+    }
+   },
+   "delete": {
+    "summary": "Delete a network from all hosts",
+    "description": "Requires network.config.",
+    "responses": {
+     "204": {
+      "description": "Deleted"
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
   }
  },
  "components": {
@@ -934,6 +1209,15 @@
      "attributes": {
       "type": "object",
       "additionalProperties": {
+       "type": "string"
+      }
+     },
+     "memoryMiB": {
+      "type": "integer"
+     },
+     "networks": {
+      "type": "array",
+      "items": {
        "type": "string"
       }
      }
@@ -1168,6 +1452,105 @@
        "minItems": 2,
        "maxItems": 2
       }
+     }
+    }
+   },
+   "VMUpdate": {
+    "type": "object",
+    "description": "Only the fields given are changed. CPU and memory changes on a running VM apply at its next restart (restartRequired).",
+    "properties": {
+     "cores": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 64
+     },
+     "memoryMiB": {
+      "type": "integer",
+      "minimum": 128
+     },
+     "tags": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "folder": {
+      "type": "string"
+     },
+     "attributes": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "string"
+      }
+     }
+    }
+   },
+   "Image": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "size": {
+      "type": "string"
+     },
+     "phase": {
+      "type": "string"
+     }
+    }
+   },
+   "Network": {
+    "type": "object",
+    "required": [
+     "name"
+    ],
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "vlan": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4094,
+      "description": "0 for untagged"
+     },
+     "bridge": {
+      "type": "string",
+      "description": "Host bridge, default br0"
+     },
+     "cidr": {
+      "type": "string"
+     },
+     "gateway": {
+      "type": "string"
+     },
+     "description": {
+      "type": "string"
+     },
+     "scopes": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Datacenters or datacenter/cluster; empty for every host"
+     },
+     "spoofCheck": {
+      "type": "boolean"
+     },
+     "rateMbps": {
+      "type": "integer"
+     }
+    }
+   },
+   "NetworkResult": {
+    "type": "object",
+    "properties": {
+     "network": {
+      "$ref": "#/components/schemas/Network"
+     },
+     "warning": {
+      "type": "string",
+      "description": "Set when some hosts could not apply the change"
      }
     }
    }

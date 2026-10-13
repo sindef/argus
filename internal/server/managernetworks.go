@@ -206,11 +206,8 @@ func (s *Server) managerAddNetwork(w http.ResponseWriter, r *http.Request) {
 		err = validNetwork(req)
 	}
 	n := manager.Network{Name: req.Name, VLAN: req.VLAN, Bridge: req.Bridge, SpoofCheck: req.SpoofCheck, RateMbps: req.RateMbps, CIDR: strings.TrimSpace(r.FormValue("cidr")), Gateway: strings.TrimSpace(r.FormValue("gateway")), Description: strings.TrimSpace(r.FormValue("description")), Scopes: scopeList(r.FormValue("scopes"))}
-	if _, _, cerr := net.ParseCIDR(n.CIDR); err == nil && n.CIDR != "" && cerr != nil {
-		err = errors.New("invalid CIDR")
-	}
-	if err == nil && n.Gateway != "" && net.ParseIP(n.Gateway) == nil {
-		err = errors.New("invalid gateway")
+	if err == nil {
+		err = checkNetworkDef(n)
 	}
 	op := "create"
 	if r.FormValue("edit") != "" {
@@ -265,6 +262,19 @@ func (s *Server) managerNetworkOp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Refresh", "true")
+}
+
+func checkNetworkDef(n manager.Network) error {
+	if err := validNetwork(netReq(n)); err != nil {
+		return err
+	}
+	if _, _, err := net.ParseCIDR(n.CIDR); n.CIDR != "" && err != nil {
+		return errors.New("invalid CIDR")
+	}
+	if n.Gateway != "" && net.ParseIP(n.Gateway) == nil {
+		return errors.New("invalid gateway")
+	}
+	return nil
 }
 
 func netReq(n manager.Network) networkReq {
