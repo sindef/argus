@@ -77,13 +77,26 @@ func (c *Manager) SaveAlarmRule(ctx context.Context, org, old string, r AlarmRul
 	return store.SaveJSON(ctx, c.store, alarmRulesKey(org), "rules", rv, rs)
 }
 
+const maxSampleGap = int64(3 * hostStep / time.Second)
+
 func window(ps []Point, minutes int, now time.Time) []Point {
 	if len(ps) == 0 || now.Unix()-ps[len(ps)-1].T > 15*60 {
 		return nil
 	}
 	cut := now.Add(-time.Duration(minutes) * time.Minute).Unix()
-	i := sort.Search(len(ps), func(i int) bool { return ps[i].T >= cut })
-	return ps[min(i, len(ps)-1):]
+	i := sort.Search(len(ps), func(i int) bool { return ps[i].T > cut }) - 1
+	if minutes <= 0 {
+		i = len(ps) - 1
+	}
+	if i < 0 {
+		return nil
+	}
+	for j := i + 1; j < len(ps); j++ {
+		if ps[j].T-ps[j-1].T > maxSampleGap {
+			return nil
+		}
+	}
+	return ps[i:]
 }
 
 func (r AlarmRule) judge(ps []Point, value func(Point) (float64, bool)) (string, float64) {

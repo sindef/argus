@@ -33,4 +33,15 @@ func TestAlarmRuleSustained(t *testing.T) {
 	if got := window(pts(99), 3, now.Add(20*time.Minute)); got != nil {
 		t.Error("stale samples raised an alarm")
 	}
+	if got := window(pts(99, 99), 3, now); got != nil {
+		t.Error("history shorter than the duration raised an alarm")
+	}
+	gap := pts(99, 99, 99, 99)
+	gap[0].T -= 1200
+	if got := window(gap[1:], 2, now); got == nil {
+		t.Error("full history did not qualify")
+	}
+	if got := window(gap, 15, now); got != nil {
+		t.Error("history with a sampling gap qualified")
+	}
 }
