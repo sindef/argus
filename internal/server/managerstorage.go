@@ -70,7 +70,7 @@ func (s *Server) managerStorage(w http.ResponseWriter, r *http.Request) {
 		attachable[h.Node.Name] = stoppedVMs(h.NodeState.VMs)
 	}
 	data["Nav"], data["Pools"], data["Total"], data["Used"], data["Status"], data["Error"] = "storage", pools, total, used, status, errs
-	data["Volumes"], data["Attachable"] = vols, attachable
+	data["Volumes"], data["Attachable"], data["PoolNames"], data["PoolFilter"] = vols, attachable, volumePools(vols), r.FormValue("pool")
 	s.render(w, r, "storage.html", "layout", data)
 }
 

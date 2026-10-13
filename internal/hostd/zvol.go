@@ -10,6 +10,7 @@ import (
 type ZVol struct {
 	Size      int64 `json:"size"`
 	Allocated int64 `json:"allocated"`
+	SnapUsed  int64 `json:"snapUsed"`
 	Thick     bool  `json:"thick"`
 }
 
@@ -23,7 +24,7 @@ func ZVols(ctx context.Context, datasets []string) (map[string]ZVol, error) {
 	if len(datasets) == 0 {
 		return out, nil
 	}
-	res, err := run(ctx, "zfs", append([]string{"get", "-H", "-p", "-o", "name,property,value", "volsize,referenced,refreservation"}, datasets...)...)
+	res, err := run(ctx, "zfs", append([]string{"get", "-H", "-p", "-o", "name,property,value", "volsize,referenced,usedbysnapshots,refreservation"}, datasets...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -39,6 +40,8 @@ func ZVols(ctx context.Context, datasets []string) (map[string]ZVol, error) {
 			z.Size = n
 		case "referenced":
 			z.Allocated = n
+		case "usedbysnapshots":
+			z.SnapUsed = n
 		case "refreservation":
 			z.Thick = n > 0
 		}

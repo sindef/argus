@@ -1,9 +1,11 @@
 package server
 
 import (
+	"cmp"
 	"compress/gzip"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"maps"
@@ -18,6 +20,7 @@ import (
 
 	"argus/internal/auth"
 	"argus/internal/hostd"
+	"argus/internal/kube"
 	"argus/internal/manager"
 )
 
@@ -25,9 +28,8 @@ const flrMaxAge = 2 * time.Hour
 
 type flrSession struct {
 	ID      string          `json:"id"`
-	NS      string          `json:"ns"`
-	VM      string          `json:"vm"`
-	Stamp   string          `json:"stamp"`
+	Owner   string          `json:"owner"`
+	Stamp   string          `json:"stamp,omitempty"`
 	State   string          `json:"state"`
 	Error   string          `json:"error,omitempty"`
 	Parts   []hostd.FLRPart `json:"parts"`
@@ -37,6 +39,46 @@ type flrSession struct {
 type flrState struct {
 	mu sync.Mutex
 	m  map[string]*flrSession
+}
+
+func vmOwner(ns, name string) string { return "vm:" + ns + "/" + name }
+
+func volumeOwner(name string) string { return "volume:" + name }
+
+func ownerOf(r *http.Request) string {
+	if v := r.PathValue("vol"); v != "" {
+		return volumeOwner(v)
+	}
+	return vmOwner(r.PathValue("ns"), r.PathValue("name"))
+}
+
+func (s *Server) flrBegin(owner, stamp string, load func(ctx context.Context, id string) error) string {
+	sess := &flrSession{ID: newToken()[:16], Owner: owner, Stamp: stamp, State: "Unpacking", Started: time.Now()}
+	s.flr.mu.Lock()
+	if s.flr.m == nil {
+		s.flr.m = map[string]*flrSession{}
+	}
+	s.flr.m[sess.ID] = sess
+	s.flr.mu.Unlock()
+	go func() {
+		ctx := context.Background()
+		err := load(ctx, sess.ID)
+		parts, perr := s.hostd.FLRParts(ctx, sess.ID)
+		if err == nil {
+			err = perr
+		}
+		if err == nil && len(parts) == 0 {
+			err = errors.New("no readable file systems; supported are ext2/3/4, XFS, Btrfs, NTFS, FAT and exFAT")
+		}
+		s.flr.mu.Lock()
+		sess.State, sess.Parts = "Ready", parts
+		if err != nil {
+			sess.State, sess.Error = "Failed", err.Error()
+		}
+		s.flr.mu.Unlock()
+		log.Printf("file browse %s of %s: %v", sess.ID, owner, err)
+	}()
+	return sess.ID
 }
 
 func (s *Server) flrStart(ctx context.Context, ns, name, store, stamp string) (string, error) {
@@ -55,41 +97,38 @@ func (s *Server) flrStart(ctx context.Context, ns, name, store, stamp string) (s
 	if err != nil {
 		return "", err
 	}
-	sess := &flrSession{ID: newToken()[:16], NS: ns, VM: name, Stamp: stamp, State: "Unpacking", Started: time.Now()}
-	s.flr.mu.Lock()
-	if s.flr.m == nil {
-		s.flr.m = map[string]*flrSession{}
-	}
-	s.flr.m[sess.ID] = sess
-	s.flr.mu.Unlock()
-	go func() {
-		ctx := context.Background()
-		var err error
+	return s.flrBegin(vmOwner(ns, name), stamp, func(ctx context.Context, id string) error {
 		for _, file := range slices.Sorted(maps.Keys(man.Files)) {
-			disk, ok := strings.CutSuffix(file, ".img.gz")
-			if !ok {
-				continue
-			}
-			if err = s.flrLoad(ctx, st, rel+"/"+file, man.Files[file], sess.ID, disk); err != nil {
-				break
+			if disk, ok := strings.CutSuffix(file, ".img.gz"); ok {
+				if err := s.flrLoad(ctx, st, rel+"/"+file, man.Files[file], id, disk); err != nil {
+					return err
+				}
 			}
 		}
-		parts, perr := s.hostd.FLRParts(ctx, sess.ID)
-		if err == nil {
-			err = perr
+		return nil
+	}), nil
+}
+
+func (s *Server) flrVolume(ctx context.Context, name string) (string, error) {
+	if s.hostd == nil {
+		return "", errNoHostd
+	}
+	vols, err := s.kube.Volumes(ctx)
+	if err != nil {
+		return "", err
+	}
+	i := slices.IndexFunc(vols, func(v kube.Volume) bool { return v.Name == name })
+	if i < 0 || vols[i].Dataset == "" {
+		return "", fmt.Errorf("volume %s not found on a ZFS pool", name)
+	}
+	if vm := cmp.Or(vols[i].UsedBy, vols[i].Owner); vm != "" {
+		if v, err := s.kube.GetVM(ctx, kube.Namespace, vm); err == nil && v.Running {
+			return "", fmt.Errorf("power off %s first", vm)
 		}
-		if err == nil && len(parts) == 0 {
-			err = errors.New("no readable file systems; supported are ext2/3/4, XFS, Btrfs, NTFS, FAT and exFAT")
-		}
-		s.flr.mu.Lock()
-		sess.State, sess.Parts = "Ready", parts
-		if err != nil {
-			sess.State, sess.Error = "Failed", err.Error()
-		}
-		s.flr.mu.Unlock()
-		log.Printf("file restore %s of %s/%s: %v", sess.ID, name, stamp, err)
-	}()
-	return sess.ID, nil
+	}
+	return s.flrBegin(volumeOwner(name), "", func(ctx context.Context, id string) error {
+		return s.hostd.FLRAttachVolume(ctx, id, "disk", vols[i].Dataset)
+	}), nil
 }
 
 func (s *Server) flrLoad(ctx context.Context, st backupStore, rel string, want hostd.ManifestFile, id, disk string) error {
@@ -111,18 +150,18 @@ func (s *Server) flrLoad(ctx context.Context, st backupStore, rel string, want h
 	return err
 }
 
-func (s *Server) flrSession(ns, name, id string) (flrSession, error) {
+func (s *Server) flrSession(owner, id string) (flrSession, error) {
 	s.flr.mu.Lock()
 	defer s.flr.mu.Unlock()
 	sess, ok := s.flr.m[id]
-	if !ok || sess.NS != ns || sess.VM != name {
+	if !ok || sess.Owner != owner {
 		return flrSession{}, errors.New("file browsing session not found or expired")
 	}
 	return *sess, nil
 }
 
-func (s *Server) flrClose(ctx context.Context, ns, name, id string) error {
-	if _, err := s.flrSession(ns, name, id); err != nil {
+func (s *Server) flrClose(ctx context.Context, owner, id string) error {
+	if _, err := s.flrSession(owner, id); err != nil {
 		return err
 	}
 	if err := s.hostd.FLRClose(ctx, id); err != nil {
@@ -151,19 +190,23 @@ func (l localOps) FLRStart(ctx context.Context, ns, name, store, stamp string) (
 	return l.s.flrStart(ctx, ns, name, store, stamp)
 }
 
-func (l localOps) FLR(ctx context.Context, ns, name, id string) (flrSession, error) {
-	return l.s.flrSession(ns, name, id)
+func (l localOps) FLRVolume(ctx context.Context, name string) (string, error) {
+	return l.s.flrVolume(ctx, name)
 }
 
-func (l localOps) FLRList(ctx context.Context, ns, name, id, part, dir string) ([]hostd.FLREntry, error) {
-	if _, err := l.s.flrSession(ns, name, id); err != nil {
+func (l localOps) FLR(ctx context.Context, owner, id string) (flrSession, error) {
+	return l.s.flrSession(owner, id)
+}
+
+func (l localOps) FLRList(ctx context.Context, owner, id, part, dir string) ([]hostd.FLREntry, error) {
+	if _, err := l.s.flrSession(owner, id); err != nil {
 		return nil, err
 	}
 	return l.s.hostd.FLRList(ctx, id, part, dir)
 }
 
-func (l localOps) FLRFile(w http.ResponseWriter, r *http.Request, ns, name, id, part, file string) {
-	if _, err := l.s.flrSession(ns, name, id); err != nil {
+func (l localOps) FLRFile(w http.ResponseWriter, r *http.Request, owner, id, part, file string) {
+	if _, err := l.s.flrSession(owner, id); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
@@ -179,31 +222,40 @@ func (l localOps) FLRFile(w http.ResponseWriter, r *http.Request, ns, name, id, 
 	io.Copy(w, resp.Body)
 }
 
-func (l localOps) FLRClose(ctx context.Context, ns, name, id string) error {
-	return l.s.flrClose(ctx, ns, name, id)
+func (l localOps) FLRClose(ctx context.Context, owner, id string) error {
+	return l.s.flrClose(ctx, owner, id)
 }
 
-func flrPath(ns, name, id, rest string) string {
-	return manager.APIPath("/api/vms/%s/%s/flr/%s", ns, name, id) + rest
+func flrAPI(owner string) string {
+	if vol, ok := strings.CutPrefix(owner, "volume:"); ok {
+		return manager.APIPath("/api/volumes/%s/flr", vol)
+	}
+	ns, name, _ := strings.Cut(strings.TrimPrefix(owner, "vm:"), "/")
+	return manager.APIPath("/api/vms/%s/%s/flr", ns, name)
 }
 
 func (o remoteOps) FLRStart(ctx context.Context, ns, name, store, stamp string) (string, error) {
 	var out struct{ ID string }
-	return out.ID, o.n.Call(ctx, http.MethodPost, manager.APIPath("/api/vms/%s/%s/flr", ns, name), map[string]string{"store": store, "stamp": stamp}, &out)
+	return out.ID, o.n.Call(ctx, http.MethodPost, flrAPI(vmOwner(ns, name)), map[string]string{"store": store, "stamp": stamp}, &out)
 }
 
-func (o remoteOps) FLR(ctx context.Context, ns, name, id string) (flrSession, error) {
+func (o remoteOps) FLRVolume(ctx context.Context, name string) (string, error) {
+	var out struct{ ID string }
+	return out.ID, o.n.Call(ctx, http.MethodPost, flrAPI(volumeOwner(name)), nil, &out)
+}
+
+func (o remoteOps) FLR(ctx context.Context, owner, id string) (flrSession, error) {
 	var out flrSession
-	return out, o.get(ctx, flrPath(ns, name, id, ""), &out)
+	return out, o.get(ctx, flrAPI(owner)+"/"+url.PathEscape(id), &out)
 }
 
-func (o remoteOps) FLRList(ctx context.Context, ns, name, id, part, dir string) ([]hostd.FLREntry, error) {
+func (o remoteOps) FLRList(ctx context.Context, owner, id, part, dir string) ([]hostd.FLREntry, error) {
 	var out []hostd.FLREntry
-	return out, o.get(ctx, flrPath(ns, name, id, "/ls?"+url.Values{"part": {part}, "path": {dir}}.Encode()), &out)
+	return out, o.get(ctx, flrAPI(owner)+"/"+url.PathEscape(id)+"/ls?"+url.Values{"part": {part}, "path": {dir}}.Encode(), &out)
 }
 
-func (o remoteOps) FLRFile(w http.ResponseWriter, r *http.Request, ns, name, id, part, file string) {
-	resp, err := o.n.Open(r.Context(), http.MethodGet, flrPath(ns, name, id, "/file?"+url.Values{"part": {part}, "path": {file}}.Encode()), nil, nil)
+func (o remoteOps) FLRFile(w http.ResponseWriter, r *http.Request, owner, id, part, file string) {
+	resp, err := o.n.Open(r.Context(), http.MethodGet, flrAPI(owner)+"/"+url.PathEscape(id)+"/file?"+url.Values{"part": {part}, "path": {file}}.Encode(), nil, nil)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
@@ -215,14 +267,22 @@ func (o remoteOps) FLRFile(w http.ResponseWriter, r *http.Request, ns, name, id,
 	io.Copy(w, resp.Body)
 }
 
-func (o remoteOps) FLRClose(ctx context.Context, ns, name, id string) error {
-	return o.post(ctx, flrPath(ns, name, id, "/close"), nil)
+func (o remoteOps) FLRClose(ctx context.Context, owner, id string) error {
+	return o.post(ctx, flrAPI(owner)+"/"+url.PathEscape(id)+"/close", nil)
+}
+
+func filesBase(r *http.Request) string {
+	base, _ := r.Context().Value(baseKey{}).(string)
+	if vol := r.PathValue("vol"); vol != "" {
+		return base + "/volumes/" + vol + "/files"
+	}
+	return base + "/vms/" + r.PathValue("ns") + "/" + r.PathValue("name") + "/files"
 }
 
 func (s *Server) filesPage(w http.ResponseWriter, r *http.Request) {
-	ns, name, q := r.PathValue("ns"), r.PathValue("name"), r.URL.Query()
-	data := map[string]any{"Nav": "vms", "NS": ns, "Name": name, "Part": q.Get("part"), "Path": strings.Trim(q.Get("path"), "/")}
-	sess, err := s.ops(r).FLR(r.Context(), ns, name, q.Get("id"))
+	q, owner := r.URL.Query(), ownerOf(r)
+	data := map[string]any{"Nav": "volumes", "Files": filesBase(r), "Name": cmp.Or(r.PathValue("vol"), r.PathValue("name")), "Part": q.Get("part"), "Path": strings.Trim(q.Get("path"), "/")}
+	sess, err := s.ops(r).FLR(r.Context(), owner, q.Get("id"))
 	if r.Header.Get("HX-Request") != "" {
 		if err != nil || sess.State != "Unpacking" {
 			w.Header().Set("HX-Refresh", "true")
@@ -231,73 +291,91 @@ func (s *Server) filesPage(w http.ResponseWriter, r *http.Request) {
 	}
 	data["S"] = sess
 	if err == nil && sess.State == "Ready" && q.Get("part") != "" {
-		data["Entries"], err = s.ops(r).FLRList(r.Context(), ns, name, sess.ID, q.Get("part"), q.Get("path"))
+		data["Entries"], err = s.ops(r).FLRList(r.Context(), owner, sess.ID, q.Get("part"), q.Get("path"))
 	}
 	data["Error"] = errText(err)
 	s.render(w, r, "files.html", "layout", data)
 }
 
 func (s *Server) filesStart(w http.ResponseWriter, r *http.Request) {
-	ns, name := r.PathValue("ns"), r.PathValue("name")
-	id, err := s.ops(r).FLRStart(r.Context(), ns, name, r.FormValue("store"), r.FormValue("stamp"))
+	var id string
+	var err error
+	if vol := r.PathValue("vol"); vol != "" {
+		id, err = s.ops(r).FLRVolume(r.Context(), vol)
+	} else {
+		id, err = s.ops(r).FLRStart(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.FormValue("store"), r.FormValue("stamp"))
+	}
 	if err != nil {
 		flash(w, r, err)
 		return
 	}
-	log.Printf("%s: browse backup %s of %s/%s", session(r).User, r.FormValue("stamp"), ns, name)
-	base, _ := r.Context().Value(baseKey{}).(string)
-	w.Header().Set("HX-Redirect", base+"/vms/"+ns+"/"+name+"/files?id="+id)
+	log.Printf("%s: browse files of %s %s", session(r).User, ownerOf(r), r.FormValue("stamp"))
+	w.Header().Set("HX-Redirect", filesBase(r)+"?id="+id)
 }
 
 func (s *Server) filesDownload(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	log.Printf("%s: download %s from backup browse %s of %s", session(r).User, q.Get("path"), q.Get("id"), r.PathValue("name"))
-	s.ops(r).FLRFile(w, r, r.PathValue("ns"), r.PathValue("name"), q.Get("id"), q.Get("part"), q.Get("path"))
+	log.Printf("%s: download %s from %s", session(r).User, q.Get("path"), ownerOf(r))
+	s.ops(r).FLRFile(w, r, ownerOf(r), q.Get("id"), q.Get("part"), q.Get("path"))
 }
 
 func (s *Server) filesClose(w http.ResponseWriter, r *http.Request) {
-	ns, name := r.PathValue("ns"), r.PathValue("name")
-	if err := s.ops(r).FLRClose(r.Context(), ns, name, r.FormValue("id")); err != nil {
+	if err := s.ops(r).FLRClose(r.Context(), ownerOf(r), r.FormValue("id")); err != nil {
 		flash(w, r, err)
 		return
 	}
 	base, _ := r.Context().Value(baseKey{}).(string)
-	if host, ok := strings.CutPrefix(base, "/hosts/"); ok {
-		base = "/nodes/" + host
+	host, onManager := strings.CutPrefix(base, "/hosts/")
+	switch {
+	case r.PathValue("vol") != "" && onManager:
+		w.Header().Set("HX-Redirect", "/storage#s-volumes")
+	case r.PathValue("vol") != "":
+		w.Header().Set("HX-Redirect", "/volumes")
+	case onManager:
+		w.Header().Set("HX-Redirect", "/nodes/"+host+"/vms/"+r.PathValue("ns")+"/"+r.PathValue("name")+"?tab=backups")
+	default:
+		w.Header().Set("HX-Redirect", "/vms/"+r.PathValue("ns")+"/"+r.PathValue("name")+"?tab=backups")
 	}
-	w.Header().Set("HX-Redirect", base+"/vms/"+ns+"/"+name+"?tab=backups")
 }
 
 func (s *Server) flrAPIRoutes() {
 	l := localOps{s}
-	routes := map[string]http.HandlerFunc{
-		"POST /api/vms/{ns}/{name}/flr": func(w http.ResponseWriter, r *http.Request) {
-			var req struct{ Store, Stamp string }
-			s.apiOp(w, r, &req, func() (any, error) {
-				id, err := l.FLRStart(r.Context(), r.PathValue("ns"), r.PathValue("name"), req.Store, req.Stamp)
-				return map[string]string{"id": id}, err
-			})
-		},
-		"GET /api/vms/{ns}/{name}/flr/{id}": func(w http.ResponseWriter, r *http.Request) {
-			s.apiOp(w, r, nil, func() (any, error) {
-				return l.FLR(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.PathValue("id"))
-			})
-		},
-		"GET /api/vms/{ns}/{name}/flr/{id}/ls": func(w http.ResponseWriter, r *http.Request) {
-			s.apiOp(w, r, nil, func() (any, error) {
-				return l.FLRList(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.PathValue("id"), r.URL.Query().Get("part"), r.URL.Query().Get("path"))
-			})
-		},
-		"GET /api/vms/{ns}/{name}/flr/{id}/file": func(w http.ResponseWriter, r *http.Request) {
-			l.FLRFile(w, r, r.PathValue("ns"), r.PathValue("name"), r.PathValue("id"), r.URL.Query().Get("part"), r.URL.Query().Get("path"))
-		},
-		"POST /api/vms/{ns}/{name}/flr/{id}/close": func(w http.ResponseWriter, r *http.Request) {
-			s.apiOp(w, r, nil, func() (any, error) {
-				return nil, l.FLRClose(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.PathValue("id"))
-			})
-		},
+	start := func(w http.ResponseWriter, r *http.Request) {
+		var req struct{ Store, Stamp string }
+		var in any = &req
+		if r.PathValue("vol") != "" {
+			in = nil
+		}
+		s.apiOp(w, r, in, func() (any, error) {
+			var id string
+			var err error
+			if vol := r.PathValue("vol"); vol != "" {
+				id, err = l.FLRVolume(r.Context(), vol)
+			} else {
+				id, err = l.FLRStart(r.Context(), r.PathValue("ns"), r.PathValue("name"), req.Store, req.Stamp)
+			}
+			return map[string]string{"id": id}, err
+		})
 	}
-	for pattern, h := range routes {
-		s.mux.HandleFunc(pattern, s.require(auth.Admin, h))
+	status := func(w http.ResponseWriter, r *http.Request) {
+		s.apiOp(w, r, nil, func() (any, error) { return l.FLR(r.Context(), ownerOf(r), r.PathValue("id")) })
+	}
+	list := func(w http.ResponseWriter, r *http.Request) {
+		s.apiOp(w, r, nil, func() (any, error) {
+			return l.FLRList(r.Context(), ownerOf(r), r.PathValue("id"), r.URL.Query().Get("part"), r.URL.Query().Get("path"))
+		})
+	}
+	file := func(w http.ResponseWriter, r *http.Request) {
+		l.FLRFile(w, r, ownerOf(r), r.PathValue("id"), r.URL.Query().Get("part"), r.URL.Query().Get("path"))
+	}
+	closeSession := func(w http.ResponseWriter, r *http.Request) {
+		s.apiOp(w, r, nil, func() (any, error) { return nil, l.FLRClose(r.Context(), ownerOf(r), r.PathValue("id")) })
+	}
+	for _, prefix := range []string{"/api/vms/{ns}/{name}/flr", "/api/volumes/{vol}/flr"} {
+		s.mux.HandleFunc("POST "+prefix, s.require(auth.Admin, start))
+		s.mux.HandleFunc("GET "+prefix+"/{id}", s.require(auth.Admin, status))
+		s.mux.HandleFunc("GET "+prefix+"/{id}/ls", s.require(auth.Admin, list))
+		s.mux.HandleFunc("GET "+prefix+"/{id}/file", s.require(auth.Admin, file))
+		s.mux.HandleFunc("POST "+prefix+"/{id}/close", s.require(auth.Admin, closeSession))
 	}
 }

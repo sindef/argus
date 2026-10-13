@@ -110,6 +110,15 @@ func NewServer() *Server {
 		log.Printf("file restore %s %s: %v", r.PathValue("id"), r.PathValue("disk"), err)
 		reply(w, nil, err)
 	})
+	s.mux.HandleFunc("POST /flr/{id}/{disk}/attach", func(w http.ResponseWriter, r *http.Request) {
+		var req struct{ Dataset string }
+		err := decode(r, &req)
+		if err == nil {
+			err = FLRAttachVolume(r.Context(), r.PathValue("id"), r.PathValue("disk"), req.Dataset)
+		}
+		log.Printf("file browse %s %s: %v", r.PathValue("id"), req.Dataset, err)
+		reply(w, nil, err)
+	})
 	s.mux.HandleFunc("GET /flr/{id}", func(w http.ResponseWriter, r *http.Request) {
 		parts, err := FLRParts(r.PathValue("id"))
 		reply(w, parts, err)

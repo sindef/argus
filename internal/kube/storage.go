@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -49,9 +50,40 @@ type Volume struct {
 	Owner     string
 	UsedBy    string
 	Snapshots []string
+	Dataset   string
+	Allocated int64
+	SnapUsed  int64
+	Thick     bool
 }
 
 func (v Volume) Standalone() bool { return !v.Image && v.Owner == "" }
+
+func (v Volume) Pool() string {
+	pool, _, _ := strings.Cut(v.Dataset, "/")
+	return pool
+}
+
+func (c *Client) volumeDatasets(ctx context.Context) map[string]string {
+	out := map[string]string{}
+	pvcs, err := c.dyn.Resource(pvcGVR).Namespace(Namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return out
+	}
+	zvols, err := c.dyn.Resource(zfsVolumeGVR).Namespace(zfsNamespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return out
+	}
+	pools := map[string]string{}
+	for _, z := range zvols.Items {
+		pools[z.GetName()], _, _ = unstructured.NestedString(z.Object, "spec", "poolName")
+	}
+	for _, p := range pvcs.Items {
+		if pv, _, _ := unstructured.NestedString(p.Object, "spec", "volumeName"); pools[pv] != "" {
+			out[p.GetName()] = pools[pv] + "/" + pv
+		}
+	}
+	return out
+}
 
 func (v Volume) SizeGiB() int64 { return (v.Size + 1<<30 - 1) >> 30 }
 
@@ -141,10 +173,11 @@ func (c *Client) Volumes(ctx context.Context) ([]Volume, error) {
 	for _, s := range snaps.Items {
 		bySource[s.GetLabels()[volumeLabel]] = append(bySource[s.GetLabels()[volumeLabel]], s.GetName())
 	}
+	datasets := c.volumeDatasets(ctx)
 	out := make([]Volume, 0, len(dvs.Items))
 	for _, dv := range dvs.Items {
 		o := dv.Object
-		v := Volume{Name: dv.GetName(), Created: dv.GetCreationTimestamp().Time, Image: dv.GetLabels()[imageLabel] == "true", UsedBy: usedBy[dv.GetName()], Snapshots: bySource[dv.GetName()]}
+		v := Volume{Name: dv.GetName(), Created: dv.GetCreationTimestamp().Time, Image: dv.GetLabels()[imageLabel] == "true", UsedBy: usedBy[dv.GetName()], Snapshots: bySource[dv.GetName()], Dataset: datasets[dv.GetName()]}
 		size, _, _ := unstructured.NestedString(o, "spec", "storage", "resources", "requests", "storage")
 		v.Size = quantity(size)
 		v.Phase, _, _ = unstructured.NestedString(o, "status", "phase")

@@ -1,12 +1,12 @@
-{{define "content"}}{{$base := printf "%s/vms/%s/%s/files" .Base .NS .Name}}{{$s := .S}}
+{{define "content"}}{{$base := .Files}}{{$s := .S}}
 <div class="page-head">
   <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-download"/></svg>
-  <div><h1>Files in backup {{with $s.Stamp}}{{stamp .}}{{end}}</h1><div class="crumbs">{{.Name}}</div></div>
+  <div><h1>Files in {{with $s.Stamp}}backup {{stamp .}}{{else}}volume {{$.Name}}{{end}}</h1><div class="crumbs">{{.Name}}</div></div>
   {{if $s.ID}}<div class="actions"><button class="btn" hx-post="{{$base}}/close" hx-vals='{"id":"{{$s.ID}}"}' hx-target="#flash">Close</button></div>{{end}}
 </div>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
 {{if eq $s.State "Unpacking"}}
-<div class="card" hx-get="{{$base}}?id={{$s.ID}}" hx-trigger="every 3s" hx-swap="none"><p class="muted">Unpacking the backup on the host. Large disks take a while.</p></div>
+<div class="card" hx-get="{{$base}}?id={{$s.ID}}" hx-trigger="every 3s" hx-swap="none"><p class="muted">Opening on the host. Large disks take a while.</p></div>
 {{else if eq $s.State "Failed"}}
 <p class="error">{{$s.Error}}</p>
 {{else if eq $s.State "Ready"}}

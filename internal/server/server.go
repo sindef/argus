@@ -406,6 +406,10 @@ var hostRoutes = []hostRouteDef{
 	{"POST /vms/{ns}/{name}/files", auth.Operator, auth.VMBackup, (*Server).filesStart},
 	{"GET /vms/{ns}/{name}/files/download", auth.Operator, auth.VMBackup, (*Server).filesDownload},
 	{"POST /vms/{ns}/{name}/files/close", auth.Operator, auth.VMBackup, (*Server).filesClose},
+	{"GET /volumes/{vol}/files", auth.Operator, auth.VMBackup, (*Server).filesPage},
+	{"POST /volumes/{vol}/files", auth.Operator, auth.VMBackup, (*Server).filesStart},
+	{"GET /volumes/{vol}/files/download", auth.Operator, auth.VMBackup, (*Server).filesDownload},
+	{"POST /volumes/{vol}/files/close", auth.Operator, auth.VMBackup, (*Server).filesClose},
 	{"POST /vms/{ns}/{name}/media", auth.Operator, auth.VMConfig, (*Server).mediaMount},
 	{"POST /vms/{ns}/{name}/media/eject", auth.Operator, auth.VMConfig, (*Server).mediaEject},
 }
@@ -495,7 +499,7 @@ func (s *Server) requireOrg(min auth.Role, h http.HandlerFunc) http.HandlerFunc 
 
 var safeSegment = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$`)
 
-var segmentParams = []string{"ns", "name", "op", "node", "id", "action", "disk", "snap", "kind", "file", "volume", "source", "export", "vm", "stamp", "org"}
+var segmentParams = []string{"ns", "name", "op", "node", "id", "action", "disk", "snap", "kind", "file", "volume", "source", "export", "vm", "stamp", "org", "vol"}
 
 func validSegments(r *http.Request) bool {
 	for _, k := range segmentParams {

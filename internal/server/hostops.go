@@ -93,10 +93,11 @@ type hostOps interface {
 	OVF(ctx context.Context, ns, name string) (string, error)
 	Devices(ctx context.Context) (hostd.Devices, error)
 	FLRStart(ctx context.Context, ns, name, store, stamp string) (string, error)
-	FLR(ctx context.Context, ns, name, id string) (flrSession, error)
-	FLRList(ctx context.Context, ns, name, id, part, dir string) ([]hostd.FLREntry, error)
-	FLRFile(w http.ResponseWriter, r *http.Request, ns, name, id, part, file string)
-	FLRClose(ctx context.Context, ns, name, id string) error
+	FLRVolume(ctx context.Context, name string) (string, error)
+	FLR(ctx context.Context, owner, id string) (flrSession, error)
+	FLRList(ctx context.Context, owner, id, part, dir string) ([]hostd.FLREntry, error)
+	FLRFile(w http.ResponseWriter, r *http.Request, owner, id, part, file string)
+	FLRClose(ctx context.Context, owner, id string) error
 	MountMedia(ctx context.Context, ns, name, contentType string, size int64, body io.Reader) error
 	EjectMedia(ctx context.Context, ns, name string) error
 	DeviceOp(ctx context.Context, req deviceReq) error

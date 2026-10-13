@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"slices"
 	"time"
 
 	"argus/internal/auth"
@@ -32,6 +33,20 @@ func (s *Server) storage(ctx context.Context) (storageInfo, error) {
 		return storageInfo{}, err
 	}
 	vols, err := s.kube.Volumes(ctx)
+	if err == nil && s.hostd != nil {
+		var datasets []string
+		for _, v := range vols {
+			if v.Dataset != "" {
+				datasets = append(datasets, v.Dataset)
+			}
+		}
+		if zv, zerr := s.hostd.ZVols(ctx, datasets); zerr == nil {
+			for i, v := range vols {
+				z := zv[v.Dataset]
+				vols[i].Allocated, vols[i].SnapUsed, vols[i].Thick = z.Allocated, z.SnapUsed, z.Thick
+			}
+		}
+	}
 	return storageInfo{Pools: pools, Volumes: vols}, err
 }
 
@@ -79,6 +94,20 @@ type hostVolume struct {
 	Host string
 }
 
+func volumePools(vols []hostVolume) []string {
+	var out []string
+	for _, v := range vols {
+		if p := v.Pool(); p != "" && !slices.Contains(out, p) {
+			out = append(out, p)
+		}
+	}
+	slices.Sort(out)
+	if len(out) < 2 {
+		return nil
+	}
+	return out
+}
+
 func stoppedVMs(vms []kube.VM) []string {
 	var out []string
 	for _, v := range vms {
@@ -96,7 +125,8 @@ func (s *Server) volumesPage(w http.ResponseWriter, r *http.Request) {
 	for i, v := range st.Volumes {
 		rows[i] = hostVolume{Volume: v}
 	}
-	s.render(w, r, "volumes.html", "layout", map[string]any{"Nav": "volumes", "Pools": st.Pools, "Volumes": rows, "Attachable": map[string][]string{"": stoppedVMs(vms)}, "PoolChoices": s.poolChoices(r.Context()), "CanOperate": session(r).Role.Can(auth.Operator), "Error": errText(err)})
+	s.render(w, r, "volumes.html", "layout", map[string]any{"Nav": "volumes", "Pools": st.Pools, "Volumes": rows, "Attachable": map[string][]string{"": stoppedVMs(vms)}, "PoolChoices": s.poolChoices(r.Context()), "CanOperate": session(r).Role.Can(auth.Operator), "Error": errText(err),
+		"PoolNames": volumePools(rows), "PoolFilter": r.FormValue("pool")})
 }
 
 func (s *Server) volumeAction(w http.ResponseWriter, r *http.Request) {

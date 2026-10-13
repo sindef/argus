@@ -99,6 +99,10 @@ func (c *Client) FLRLoad(ctx context.Context, id, disk string, image io.Reader) 
 	return err
 }
 
+func (c *Client) FLRAttachVolume(ctx context.Context, id, disk, dataset string) error {
+	return c.do(ctx, http.MethodPost, "/flr/"+id+"/"+disk+"/attach", map[string]string{"dataset": dataset}, nil)
+}
+
 func (c *Client) FLRParts(ctx context.Context, id string) ([]FLRPart, error) {
 	var out []FLRPart
 	return out, c.do(ctx, http.MethodGet, "/flr/"+id, nil, &out)

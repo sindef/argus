@@ -229,20 +229,24 @@
 {{define "volume-table"}}
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Name</th>{{if .Manager}}<th>Host</th>{{end}}<th>Type</th><th>Size</th><th>Used by</th><th>Snapshots</th><th>Status</th><th></th></tr></thead>
-  <tbody>{{range .Volumes}}{{$base := "/volumes"}}{{if .Host}}{{$base = printf "/hosts/%s/volumes" .Host}}{{end}}{{$f := printf `{"action":"%s/resize","name":"%s","size":"%d","kind":"%s","usedby":"%s","snaps":"%d","phase":"%s"}` $base .Name .SizeGiB (or (and .Image "Image") (and .Owner "VM disk") "Volume") (or .UsedBy .Owner "—") (len .Snapshots) .Phase}}
+  {{with .PoolNames}}<nav class="seg spaced"><a href="?"{{if not $.PoolFilter}} class="active"{{end}}>All pools</a>{{range .}}<a href="?pool={{.}}"{{if eq . $.PoolFilter}} class="active"{{end}}>{{.}}</a>{{end}}</nav>{{end}}
+  <thead><tr><th>Name</th>{{if .Manager}}<th>Host</th>{{end}}<th>Type</th><th>Pool</th><th>Size</th><th>Allocated <span class="help" title="Space used in the pool now; snapshots of the volume hold more.">?</span></th><th>Used by</th><th>Snapshots</th><th>Status</th><th></th></tr></thead>
+  <tbody>{{range .Volumes}}{{if or (not $.PoolFilter) (eq .Pool $.PoolFilter)}}{{$base := "/volumes"}}{{if .Host}}{{$base = printf "/hosts/%s/volumes" .Host}}{{end}}{{$f := printf `{"action":"%s/resize","name":"%s","size":"%d","kind":"%s","usedby":"%s","snaps":"%d","phase":"%s"}` $base .Name .SizeGiB (or (and .Image "Image") (and .Owner "VM disk") "Volume") (or .UsedBy .Owner "—") (len .Snapshots) .Phase}}
   <tr data-context class="clickable" data-dialog="volume-edit" data-fill='{{$f}}'>
     <td>{{template "icon" "hard-drive"}}{{.Name}}</td>
     {{if $.Manager}}<td>{{.Host}}</td>{{end}}
     <td>{{if .Image}}Image{{else if .Owner}}VM disk{{else}}Volume{{end}}</td>
-    <td>{{bytes .Size}}</td>
+    <td>{{with .Pool}}{{.}}{{else}}<span class="muted">—</span>{{end}}</td>
+    <td>{{bytes .Size}}{{if .Thick}} <span class="badge">thick</span>{{end}}</td>
+    <td>{{if .Dataset}}{{bytes .Allocated}}{{if .SnapUsed}} <span class="muted" title="Held by snapshots">+{{bytes .SnapUsed}}</span>{{end}}{{else}}<span class="muted">—</span>{{end}}</td>
     <td>{{with .UsedBy}}{{.}}{{else}}{{with .Owner}}{{.}}{{else}}<span class="muted">—</span>{{end}}{{end}}</td>
     <td>{{len .Snapshots}}</td>
     <td><span class="dot {{.Phase}}">{{.Phase}}{{if and .Progress (ne .Phase "Succeeded")}} {{.Progress}}{{end}}</span></td>
-    <td class="row-actions">{{if and $.CanOperate .Standalone}}
+    <td class="row-actions">{{if $.CanOperate}}
       <div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
         <div class="menu-list" hidden hx-target="#flash">
-          {{if not .UsedBy}}{{$vms := index $.Attachable .Host}}{{if $vms}}
+          {{if .Dataset}}<button hx-post="{{$base}}/{{.Name}}/files" title="Read-only. VM disks only while the VM is off.">{{template "icon" "file-text"}}Browse files</button>{{end}}
+          {{if .Standalone}}{{if .Dataset}}<hr>{{end}}{{if not .UsedBy}}{{$vms := index $.Attachable .Host}}{{if $vms}}
           <form class="form" style="padding:8px" hx-post="{{$base}}/attach">
             <input type="hidden" name="name" value="{{.Name}}">
             <select name="vm">{{range $vms}}<option>{{.}}</option>{{end}}</select>
@@ -252,12 +256,12 @@
           <button hx-post="{{$base}}/snapshot" hx-vals='{"name":"{{.Name}}"}'>{{template "icon" "camera"}}Snapshot</button>
           {{range .Snapshots}}<button hx-post="{{$base}}/delete-snapshot" hx-vals='{"name":"{{.}}"}' hx-confirm="Delete snapshot {{.}}?">{{template "icon" "x"}}Delete {{.}}</button>{{end}}
           <hr>
-          <button class="danger" hx-post="{{$base}}/delete" hx-vals='{"name":"{{.Name}}"}' hx-confirm="Delete volume {{.Name}}?">{{template "icon" "trash-2"}}Delete</button>
+          <button class="danger" hx-post="{{$base}}/delete" hx-vals='{"name":"{{.Name}}"}' hx-confirm="Delete volume {{.Name}}?">{{template "icon" "trash-2"}}Delete</button>{{end}}
         </div>
       </div>
     {{end}}</td>
-  </tr>
-  {{else}}<tr><td colspan="8" class="muted">No volumes.</td></tr>{{end}}</tbody>
+  </tr>{{end}}
+  {{else}}<tr><td colspan="10" class="muted">No volumes.</td></tr>{{end}}</tbody>
 </table>
 </div>
 {{end}}

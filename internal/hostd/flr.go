@@ -128,7 +128,22 @@ func FLRLoad(ctx context.Context, id, disk string, r io.Reader) error {
 		os.Remove(img)
 		return err
 	}
-	dev, err := run(ctx, "losetup", "--find", "--show", "--read-only", "--partscan", img)
+	return flrAttach(ctx, id, disk, img)
+}
+
+func FLRAttachVolume(ctx context.Context, id, disk, dataset string) error {
+	if !validFLR.MatchString(id) || !validFLRDisk.MatchString(disk) || !validDataset.MatchString(dataset) {
+		return errors.New("invalid session")
+	}
+	if err := os.MkdirAll(filepath.Join(flrRun, id), 0o700); err != nil {
+		return err
+	}
+	return flrAttach(ctx, id, disk, "/dev/zvol/"+dataset)
+}
+
+func flrAttach(ctx context.Context, id, disk, source string) error {
+	dir := filepath.Join(flrRun, id)
+	dev, err := run(ctx, "losetup", "--find", "--show", "--read-only", "--partscan", source)
 	if err != nil {
 		return err
 	}
