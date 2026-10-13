@@ -45,7 +45,7 @@ h2 { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
 .user-menu > button { display: flex; align-items: center; gap: 8px; background: none; border: 0; color: var(--fg); font: inherit; cursor: pointer; padding: 4px; }
 
 .shell { display: flex; padding-top: 56px; min-height: 100vh; }
-.sidebar { position: fixed; top: 56px; bottom: 0; width: 260px; overflow-y: auto; background: var(--bg-2); border-right: 1px solid var(--line); padding: 12px 10px; }
+.sidebar { position: fixed; top: 56px; bottom: 0; width: 260px; z-index: 15; overflow-y: auto; background: var(--bg-2); border-right: 1px solid var(--line); padding: 12px 10px; }
 .content { margin-left: 260px; flex: 1; min-width: 0; padding: 24px 28px; }
 .content.with-drawer { margin-right: var(--drawer-w); }
 
@@ -220,7 +220,7 @@ progress { width: 160px; accent-color: var(--accent); }
 .nav-toggle { display: none; }
 @media (max-width: 900px) {
   .nav-toggle { display: inline-flex; }
-  .sidebar { display: none; z-index: 15; }
+  .sidebar { display: none; }
   body.nav-open .sidebar { display: block; box-shadow: 8px 0 24px rgba(0, 0, 0, .4); }
   .content { margin-left: 0; }
   .content.with-drawer { margin-right: 0; }
