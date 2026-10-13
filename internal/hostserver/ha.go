@@ -199,6 +199,8 @@ func (s *Server) apiReplica(w http.ResponseWriter, r *http.Request) {
 		err = s.kube.SwapReplica(r.Context(), ns, name, req.Export.Spec, req.Mapping)
 	case "abort":
 		s.kube.AbortReplicaRefresh(r.Context(), ns, name, req.Mapping)
+	case "claim":
+		err = s.kube.ClearHAStop(r.Context(), ns, name)
 	default:
 		err = errors.New("unknown replica operation")
 	}

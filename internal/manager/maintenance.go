@@ -297,6 +297,9 @@ func (c *Manager) plannedFailover(ctx context.Context, owner Node, p Protected) 
 	if err != nil {
 		return err
 	}
+	if err := replica.do(ctx, http.MethodPost, vmPath(p.VM, "replica/claim"), wire.ReplicaRequest{}, nil); err != nil {
+		log.Printf("ha: clear the stop flag of %s on %s: %v", p.VM, replica.Name, err)
+	}
 	return waitFor(ctx, 10*time.Minute, func() (bool, error) {
 		v, err := vmState(ctx, replica, kube.Namespace, p.VM)
 		return err == nil && v.Running, nil

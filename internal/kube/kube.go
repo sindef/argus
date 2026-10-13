@@ -286,6 +286,12 @@ func (c *Client) Action(ctx context.Context, ns, name, action string) error {
 	return err
 }
 
+func (c *Client) ClearHAStop(ctx context.Context, ns, name string) error {
+	patch := []byte(`{"metadata":{"annotations":{"` + haStoppedAnnotation + `":null}}}`)
+	_, err := c.dyn.Resource(vmGVR).Namespace(ns).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	return err
+}
+
 func (c *Client) Power(ctx context.Context, ns, name, action string) error {
 	if !ValidAction(action) {
 		return fmt.Errorf("unknown action %q", action)
