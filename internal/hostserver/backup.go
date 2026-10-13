@@ -130,6 +130,7 @@ func (s *Server) backupLoop(ctx context.Context) {
 	}
 	cancel()
 	s.resumeRestores()
+	s.resumeDiskMoves(ctx)
 	lifecycle.Every(ctx, time.Minute, false, "backups", s.backupTick)
 }
 

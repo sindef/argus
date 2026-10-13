@@ -263,6 +263,8 @@ func (c *Client) Action(ctx context.Context, ns, name, action string) error {
 	if action == "start" || action == "restart" {
 		if vm, err := c.dyn.Resource(vmGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err == nil && vm.GetLabels()[TemplateLabel] == "true" {
 			return fmt.Errorf("%s is a template; convert it to a VM first", name)
+		} else if err == nil && vm.GetAnnotations()[diskMoveAnnotation] != "" {
+			return fmt.Errorf("a disk of %s is being moved; start it when the move finishes", name)
 		}
 	}
 	if err := c.Power(ctx, ns, name, action); err != nil {

@@ -12,6 +12,7 @@ import (
 	"argus/internal/auth"
 	"argus/internal/hostui"
 	"argus/internal/kube"
+	"argus/internal/lifecycle"
 	"argus/internal/netguard"
 	"argus/internal/ui"
 	"argus/internal/wire"
@@ -122,28 +123,36 @@ func (s *Server) moveDisk(ctx context.Context, ns, name, disk, pool string) erro
 	if err != nil {
 		return err
 	}
-	old, moved, err := s.kube.MoveDisk(ctx, ns, name, disk, class)
+	m, err := s.kube.MoveDisk(ctx, ns, name, disk, class, pool)
 	if err != nil {
 		return err
 	}
-	t := s.tasks.begin(ctx, "Move disk "+disk+" to "+pool, name, "")
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
-		defer cancel()
-		failed, err := kube.WaitDisks(ctx, 10*time.Second, s.kube.DataVolumes(ns, moved), func(ds []kube.DiskStatus) { s.tasks.set(t, diskProgress(ds)) })
-		switch {
-		case failed != "":
-			log.Printf("move disk %s/%s to %s: copy failed, %s kept", name, disk, pool, old)
-			err = fmt.Errorf("copy failed, %s kept", old)
-		case err == nil:
-			if err = s.kube.DeleteDataVolume(ctx, ns, old); err != nil {
-				log.Printf("move disk %s/%s: delete %s: %v", name, disk, old, err)
-			}
-			log.Printf("move disk %s/%s to %s: done", name, disk, pool)
-		}
-		s.tasks.end(t, err)
-	}()
+	go s.finishMove(m, s.tasks.begin(ctx, "Move disk "+disk+" to "+pool, name, ""))
 	return nil
+}
+
+func (s *Server) finishMove(m kube.DiskMove, t *wire.Task) {
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
+	defer cancel()
+	failed, err := kube.WaitDisks(ctx, 10*time.Second, s.kube.DataVolumes(m.Namespace, m.Moved), func(ds []kube.DiskStatus) { s.tasks.set(t, diskProgress(ds)) })
+	if failed != "" {
+		err = fmt.Errorf("copy failed, %s kept", m.Old)
+	}
+	fctx, fcancel := lifecycle.CleanupContext()
+	err = errors.Join(err, s.kube.FinishDiskMove(fctx, m, failed == "" && err == nil))
+	fcancel()
+	log.Printf("move disk %s/%s to %s: %v", m.VM, m.Disk, m.Pool, err)
+	s.tasks.end(t, err)
+}
+
+func (s *Server) resumeDiskMoves(ctx context.Context) {
+	ms, err := s.kube.PendingDiskMoves(ctx)
+	if err != nil {
+		log.Printf("resume disk moves: %v", err)
+	}
+	for _, m := range ms {
+		go s.finishMove(m, s.tasks.begin(context.Background(), "Move disk "+m.Disk+" to "+m.Pool, m.VM, ""))
+	}
 }
 
 func poolNames(pools []kube.Pool) map[string]string {

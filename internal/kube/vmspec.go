@@ -403,42 +403,140 @@ func (c *Client) Templates(ctx context.Context) ([]Template, error) {
 	return out, nil
 }
 
-func (c *Client) MoveDisk(ctx context.Context, ns, name, disk, class string) (string, string, error) {
-	var old, moved string
-	err := c.editStoppedVM(ctx, ns, name, func(o obj) error {
-		volumes, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")
-		templates, _, _ := unstructured.NestedSlice(o, "spec", "dataVolumeTemplates")
-		vi := slices.IndexFunc(volumes, func(v any) bool { return asObj(v)["name"] == disk })
-		if vi < 0 {
-			return fmt.Errorf("disk %s not found", disk)
-		}
-		old, _, _ = unstructured.NestedString(volumes[vi].(obj), "dataVolume", "name")
-		ti := slices.IndexFunc(templates, func(t any) bool {
-			n, _, _ := unstructured.NestedString(asObj(t), "metadata", "name")
-			return old != "" && n == old
-		})
-		if ti < 0 {
-			return fmt.Errorf("disk %s is not a managed disk and cannot be moved", disk)
-		}
-		storage, _, _ := unstructured.NestedMap(templates[ti].(obj), "spec", "storage")
-		if storage["storageClassName"] == class {
-			return fmt.Errorf("disk %s is already on that pool", disk)
-		}
-		storage["storageClassName"] = class
-		if class == "" {
-			delete(storage, "storageClassName")
-		}
-		b := make([]byte, 2)
-		rand.Read(b)
-		moved = fmt.Sprintf("%s-%s-%x", name, disk, b)
-		templates[ti] = obj{"metadata": obj{"name": moved}, "spec": obj{"source": obj{"pvc": obj{"namespace": ns, "name": old}}, "storage": storage}}
-		unstructured.SetNestedField(asObj(volumes[vi]), moved, "dataVolume", "name")
-		if err := unstructured.SetNestedSlice(o, templates, "spec", "dataVolumeTemplates"); err != nil {
-			return err
-		}
-		return unstructured.SetNestedSlice(o, volumes, "spec", "template", "spec", "volumes")
+const diskMoveAnnotation = "argus.io/disk-move"
+
+type DiskMove struct {
+	Namespace string `json:"-"`
+	VM        string `json:"-"`
+	Disk      string `json:"disk"`
+	Old       string `json:"old"`
+	Moved     string `json:"moved"`
+	Pool      string `json:"pool"`
+	Class     string `json:"class"`
+}
+
+func (c *Client) MoveDisk(ctx context.Context, ns, name, disk, class, pool string) (DiskMove, error) {
+	m := DiskMove{Namespace: ns, VM: name, Disk: disk, Pool: pool, Class: class}
+	if _, err := c.dyn.Resource(vmiGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		return m, fmt.Errorf("power off %s first", name)
+	}
+	vm, err := c.dyn.Resource(vmGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return m, err
+	}
+	if vm.GetAnnotations()[diskMoveAnnotation] != "" {
+		return m, fmt.Errorf("a disk of %s is already being moved", name)
+	}
+	storage, err := diskTemplate(vm.Object, disk, &m.Old)
+	if err != nil {
+		return m, err
+	}
+	if storage["storageClassName"] == class {
+		return m, fmt.Errorf("disk %s is already on that pool", disk)
+	}
+	storage["storageClassName"] = class
+	if class == "" {
+		delete(storage, "storageClassName")
+	}
+	b := make([]byte, 2)
+	rand.Read(b)
+	m.Moved = fmt.Sprintf("%s-%s-%x", name, disk, b)
+	ann, _ := json.Marshal(m)
+	patch, _ := json.Marshal(obj{"metadata": obj{"annotations": obj{diskMoveAnnotation: string(ann)}}})
+	if _, err := c.dyn.Resource(vmGVR).Namespace(ns).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
+		return m, err
+	}
+	dv := &unstructured.Unstructured{Object: obj{
+		"apiVersion": "cdi.kubevirt.io/v1beta1",
+		"kind":       "DataVolume",
+		"metadata": obj{"name": m.Moved, "ownerReferences": []any{obj{"apiVersion": "kubevirt.io/v1", "kind": "VirtualMachine", "name": name,
+			"uid": string(vm.GetUID()), "controller": true, "blockOwnerDeletion": true}}},
+		"spec": obj{"source": obj{"pvc": obj{"namespace": ns, "name": m.Old}}, "storage": storage},
+	}}
+	if _, err := c.dyn.Resource(dvGVR).Namespace(ns).Create(ctx, dv, metav1.CreateOptions{}); err != nil {
+		return m, errors.Join(err, c.clearDiskMove(ctx, ns, name))
+	}
+	return m, nil
+}
+
+func diskTemplate(o obj, disk string, dv *string) (obj, error) {
+	volumes, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")
+	templates, _, _ := unstructured.NestedSlice(o, "spec", "dataVolumeTemplates")
+	vi := slices.IndexFunc(volumes, func(v any) bool { return asObj(v)["name"] == disk })
+	if vi < 0 {
+		return nil, fmt.Errorf("disk %s not found", disk)
+	}
+	*dv, _, _ = unstructured.NestedString(volumes[vi].(obj), "dataVolume", "name")
+	ti := slices.IndexFunc(templates, func(t any) bool {
+		n, _, _ := unstructured.NestedString(asObj(t), "metadata", "name")
+		return *dv != "" && n == *dv
 	})
-	return old, moved, err
+	if ti < 0 {
+		return nil, fmt.Errorf("disk %s is not a managed disk and cannot be moved", disk)
+	}
+	storage, _, _ := unstructured.NestedMap(templates[ti].(obj), "spec", "storage")
+	return storage, nil
+}
+
+func (c *Client) FinishDiskMove(ctx context.Context, m DiskMove, copied bool) error {
+	if copied {
+		err := c.editStoppedVM(ctx, m.Namespace, m.VM, func(o obj) error {
+			volumes, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")
+			templates, _, _ := unstructured.NestedSlice(o, "spec", "dataVolumeTemplates")
+			vi := slices.IndexFunc(volumes, func(v any) bool { return asObj(v)["name"] == m.Disk })
+			ti := slices.IndexFunc(templates, func(t any) bool {
+				n, _, _ := unstructured.NestedString(asObj(t), "metadata", "name")
+				return n == m.Old
+			})
+			if vi < 0 || ti < 0 {
+				return fmt.Errorf("disk %s changed during the move", m.Disk)
+			}
+			storage, _, _ := unstructured.NestedMap(templates[ti].(obj), "spec", "storage")
+			storage["storageClassName"] = m.Class
+			if m.Class == "" {
+				delete(storage, "storageClassName")
+			}
+			templates[ti] = obj{"metadata": obj{"name": m.Moved}, "spec": obj{"source": obj{"pvc": obj{"namespace": m.Namespace, "name": m.Old}}, "storage": storage}}
+			unstructured.SetNestedField(asObj(volumes[vi]), m.Moved, "dataVolume", "name")
+			unstructured.RemoveNestedField(o, "metadata", "annotations", diskMoveAnnotation)
+			if err := unstructured.SetNestedSlice(o, templates, "spec", "dataVolumeTemplates"); err != nil {
+				return err
+			}
+			return unstructured.SetNestedSlice(o, volumes, "spec", "template", "spec", "volumes")
+		})
+		if err == nil {
+			return c.DeleteDataVolume(ctx, m.Namespace, m.Old)
+		}
+		cleanup := c.DeleteDataVolume(ctx, m.Namespace, m.Moved)
+		return errors.Join(fmt.Errorf("move cancelled, %s kept: %w", m.Old, err), cleanup, c.clearDiskMove(ctx, m.Namespace, m.VM))
+	}
+	err := c.DeleteDataVolume(ctx, m.Namespace, m.Moved)
+	if apierrors.IsNotFound(err) {
+		err = nil
+	}
+	return errors.Join(err, c.clearDiskMove(ctx, m.Namespace, m.VM))
+}
+
+func (c *Client) clearDiskMove(ctx context.Context, ns, name string) error {
+	patch, _ := json.Marshal(obj{"metadata": obj{"annotations": obj{diskMoveAnnotation: nil}}})
+	_, err := c.dyn.Resource(vmGVR).Namespace(ns).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	return err
+}
+
+func (c *Client) PendingDiskMoves(ctx context.Context) ([]DiskMove, error) {
+	list, err := c.dyn.Resource(vmGVR).Namespace(Namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	var out []DiskMove
+	for _, vm := range list.Items {
+		var m DiskMove
+		if a := vm.GetAnnotations()[diskMoveAnnotation]; a != "" && json.Unmarshal([]byte(a), &m) == nil {
+			m.Namespace, m.VM = vm.GetNamespace(), vm.GetName()
+			out = append(out, m)
+		}
+	}
+	return out, nil
 }
 
 func (c *Client) DataVolumePhase(ctx context.Context, ns, name string) (string, error) {
