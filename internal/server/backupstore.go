@@ -9,11 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/url"
 	"regexp"
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"argus/internal/hostd"
 	"argus/internal/s3"
@@ -29,10 +31,20 @@ type nfsSettings struct {
 	Passphrase string `json:"passphrase"`
 }
 
-func (s *Server) nfsPassphrase(ctx context.Context) string {
+func (s *Server) nfsPassphrase(ctx context.Context) (string, error) {
 	var n nfsSettings
-	s.loadJSON(ctx, nfsKey, &n)
-	return n.Passphrase
+	_, err := s.loadJSON(ctx, nfsKey, &n)
+	return n.Passphrase, err
+}
+
+func cleanupCtx() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), 2*time.Minute)
+}
+
+func logCleanup(what string, err error) {
+	if err != nil {
+		log.Printf("cleanup %s: %v", what, err)
+	}
 }
 
 func (s *Server) setNFSPassphrase(ctx context.Context, pass string) error {
@@ -81,7 +93,11 @@ func (s *Server) backupTargets(ctx context.Context) ([]BackupTarget, error) {
 			return nil, err
 		}
 		if st.Backup != "" {
-			out = append(out, BackupTarget{Name: "nfs", Kind: "nfs", Endpoint: st.Backup, Passphrase: s.nfsPassphrase(ctx)})
+			pass, err := s.nfsPassphrase(ctx)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, BackupTarget{Name: "nfs", Kind: "nfs", Endpoint: st.Backup, Passphrase: pass})
 		}
 	}
 	var extra []BackupTarget

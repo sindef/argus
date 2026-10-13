@@ -127,7 +127,11 @@ func (s *Server) vcenterCopy(ctx context.Context, c *vsphere.Client, tc *tls.Con
 		if snap, err = c.Snapshot(ctx, vm, "argus-import"); err != nil {
 			return err
 		}
-		defer c.RemoveSnapshot(context.Background(), snap)
+		defer func() {
+			cctx, cancel := cleanupCtx()
+			defer cancel()
+			logCleanup("vCenter snapshot of "+vm, c.RemoveSnapshot(cctx, snap))
+		}()
 	}
 	lease, err := c.Export(ctx, vm, snap)
 	if err != nil {
@@ -136,7 +140,9 @@ func (s *Server) vcenterCopy(ctx context.Context, c *vsphere.Client, tc *tls.Con
 	ok := false
 	defer func() {
 		if !ok {
-			lease.Abort(context.Background())
+			cctx, cancel := cleanupCtx()
+			defer cancel()
+			logCleanup("vCenter export of "+vm, lease.Abort(cctx))
 		}
 	}()
 	if len(lease.Disks) != len(dvs) {
@@ -151,7 +157,9 @@ func (s *Server) vcenterCopy(ctx context.Context, c *vsphere.Client, tc *tls.Con
 			case <-done:
 				return
 			case <-time.After(30 * time.Second):
-				lease.Progress(ctx, int(100*copied.Load()/max(total, 1)))
+				if err := lease.Progress(ctx, int(100*copied.Load()/max(total, 1))); err != nil {
+					log.Printf("vCenter export of %s: %v", vm, err)
+				}
 			}
 		}
 	}()

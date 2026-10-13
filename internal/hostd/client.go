@@ -49,8 +49,7 @@ func (c *Client) stream(ctx context.Context, method, path string, body io.Reader
 	if resp.StatusCode >= 300 {
 		defer resp.Body.Close()
 		var e struct{ Error string }
-		json.NewDecoder(resp.Body).Decode(&e)
-		if e.Error == "" {
+		if json.NewDecoder(resp.Body).Decode(&e) != nil || e.Error == "" {
 			e.Error = resp.Status
 		}
 		return nil, errors.New(e.Error)
@@ -85,7 +84,9 @@ func (c *Client) ZFSRead(ctx context.Context, ds, snap string, h http.Header) (*
 	if resp.StatusCode >= 300 && resp.StatusCode != http.StatusRequestedRangeNotSatisfiable {
 		defer resp.Body.Close()
 		var e struct{ Error string }
-		json.NewDecoder(resp.Body).Decode(&e)
+		if json.NewDecoder(resp.Body).Decode(&e) != nil || e.Error == "" {
+			e.Error = resp.Status
+		}
 		return nil, errors.New(e.Error)
 	}
 	return resp, nil
@@ -217,8 +218,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		var e struct{ Error string }
-		json.NewDecoder(resp.Body).Decode(&e)
-		if e.Error == "" {
+		if json.NewDecoder(resp.Body).Decode(&e) != nil || e.Error == "" {
 			e.Error = resp.Status
 		}
 		return errors.New(e.Error)

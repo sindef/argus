@@ -144,9 +144,9 @@ func zfsChanges(ctx context.Context, ds, snap, from string) (Changes, error) {
 		return Changes{}, err
 	}
 	ch, perr := parseStream(bufio.NewReaderSize(out, 1<<20), size)
-	io.Copy(io.Discard, out)
+	_, _ = io.Copy(io.Discard, out)
 	if err := cmd.Wait(); err != nil {
-		return Changes{}, fmt.Errorf("zfs send %s@%s: %v: %s", ds, snap, err, strings.TrimSpace(stderr.String()))
+		return Changes{}, fmt.Errorf("zfs send %s@%s: %w: %s", ds, snap, err, strings.TrimSpace(stderr.String()))
 	}
 	return ch, perr
 }

@@ -238,15 +238,15 @@ func (c *Manager) liveMigrate(ctx context.Context, j *Job, src, dst Node, ns, vm
 	}
 	op := map[string]string{"operation": j.ID}
 	cleanup := func(cctx context.Context) {
-		src.do(cctx, http.MethodPost, vmPathIn(ns, vm, "migration-cleanup"), op, nil)
-		dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, vm, "migration-cleanup"), op, nil)
+		logCleanup("migration of "+vm+" on "+src.Name, src.do(cctx, http.MethodPost, vmPathIn(ns, vm, "migration-cleanup"), op, nil))
+		logCleanup("migration of "+vm+" on "+dst.Name, dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, vm, "migration-cleanup"), op, nil))
 	}
 	abort := func(cause error) error {
 		cctx, cancel := cleanupCtx()
 		defer cancel()
 		cleanup(cctx)
 		if err := dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, vm, "abort"), op, nil); err != nil {
-			return fmt.Errorf("%w; target cleanup failed: %v", cause, err)
+			return fmt.Errorf("%w; target cleanup failed: %w", cause, err)
 		}
 		return cause
 	}
@@ -278,7 +278,7 @@ func (c *Manager) liveMigrate(ctx context.Context, j *Job, src, dst Node, ns, vm
 				cause = sendErr
 			}
 			if !sourceRunning(ctx) {
-				return fmt.Errorf("%v: %w", cause, errUnknown)
+				return fmt.Errorf("%w: %w", cause, errUnknown)
 			}
 			return abort(cause)
 		default:
@@ -297,8 +297,8 @@ func (c *Manager) liveMigrate(ctx context.Context, j *Job, src, dst Node, ns, vm
 				lastPhase, since = st.Phase, time.Now()
 			} else if (st.Phase == "Pending" || st.Phase == "Scheduling") && time.Since(since) > 90*time.Second {
 				c.update(j, "Migrating (stalled in "+st.Phase+", checking sync controllers)", false, false)
-				src.do(ctx, http.MethodPost, "/api/sync-controller", nil, nil)
-				dst.do(ctx, http.MethodPost, "/api/sync-controller", nil, nil)
+				logCleanup("sync controller on "+src.Name, src.do(ctx, http.MethodPost, "/api/sync-controller", nil, nil))
+				logCleanup("sync controller on "+dst.Name, dst.do(ctx, http.MethodPost, "/api/sync-controller", nil, nil))
 				since = time.Now()
 			}
 			c.update(j, "Migrating ("+st.Phase+")", false, false)
@@ -333,7 +333,7 @@ func (c *Manager) cancelLive(j *Job, src, dst Node, ns, vm string, op map[string
 	cctx, cancel := cleanupCtx()
 	defer cancel()
 	if err := src.do(cctx, http.MethodPost, vmPathIn(ns, vm, "migration-cleanup"), op, nil); err != nil {
-		return fmt.Errorf("cancel failed: %v: %w", err, errUnknown)
+		return fmt.Errorf("cancel failed: %w: %w", err, errUnknown)
 	}
 	time.Sleep(10 * time.Second)
 	target, err := vmState(cctx, dst, kube.Namespace, vm)

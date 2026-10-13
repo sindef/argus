@@ -275,7 +275,9 @@ func (c *Manager) plannedFailover(ctx context.Context, owner Node, p Protected) 
 		return fmt.Errorf("did not stop: %w", err)
 	}
 	if err := c.sync(ctx, p); err != nil {
-		owner.Action(ctx, kube.Namespace, p.VM, "start")
+		if serr := owner.Action(ctx, kube.Namespace, p.VM, "start"); serr != nil {
+			return fmt.Errorf("final sync failed and restarting on %s failed: %w", owner.Name, errors.Join(err, serr))
+		}
 		return fmt.Errorf("final sync failed, left on %s: %w", owner.Name, err)
 	}
 	if err := c.updateHA(ctx, func(ps []Protected) ([]Protected, error) {
@@ -353,7 +355,7 @@ func (c *Manager) RollingUpdate(org, dc, cluster, image string, shutdown bool) e
 			prefix := fmt.Sprintf("%s (%d/%d): ", n.Name, i+1, len(members))
 			step := func(s string) { c.update(j, prefix+s, false, false) }
 			if err := c.cycleHost(ctx, n, image, shutdown, step); err != nil {
-				return fmt.Errorf("%s%v; %s left in maintenance", prefix, err, n.Name)
+				return fmt.Errorf("%s%w; %s left in maintenance", prefix, err, n.Name)
 			}
 		}
 		return nil
@@ -390,7 +392,7 @@ func (c *Manager) cycleHost(ctx context.Context, n Node, image string, shutdown 
 	}
 	if err := waitFor(ctx, 30*time.Minute, func() (bool, error) {
 		var st hostStatus
-		if err := n.do(ctx, http.MethodGet, "/api/host/status", nil, &st); err != nil {
+		if reachable := n.do(ctx, http.MethodGet, "/api/host/status", nil, &st) == nil; !reachable {
 			return true, nil
 		}
 		if strings.HasPrefix(st.Status, "Update failed") || strings.HasPrefix(st.Status, "Cancelled") {
@@ -404,7 +406,7 @@ func (c *Manager) cycleHost(ctx context.Context, n Node, image string, shutdown 
 	step("waiting for the host to return")
 	var after hostStatus
 	if err := waitFor(ctx, 30*time.Minute, func() (bool, error) {
-		if n.do(ctx, http.MethodGet, "/api/host/status", nil, &after) != nil {
+		if reachable := n.do(ctx, http.MethodGet, "/api/host/status", nil, &after) == nil; !reachable {
 			return false, nil
 		}
 		if !after.Ready {

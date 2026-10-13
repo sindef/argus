@@ -82,7 +82,10 @@ func (s *Server) hostRequest(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiHostRequest(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Image string }
-	json.NewDecoder(r.Body).Decode(&req)
+	if err := decodeJSON(r.Body, &req); err != nil {
+		apiError(w, r, http.StatusBadRequest, err)
+		return
+	}
 	if err := s.requestHost(r, r.PathValue("action"), strings.TrimSpace(req.Image)); err != nil {
 		apiError(w, r, http.StatusConflict, err)
 		return
@@ -235,7 +238,8 @@ func (s *Server) hostSettings(ctx context.Context) (HostSettings, error) {
 		return HostSettings{}, errors.New("host helper not available")
 	}
 	st, err := s.hostd.Settings(ctx)
-	return HostSettings{Settings: st, MigrationBridge: s.kube.MigrationBridge(ctx), Bridges: s.bridges(ctx), BackupEncrypted: s.nfsPassphrase(ctx) != ""}, err
+	pass, perr := s.nfsPassphrase(ctx)
+	return HostSettings{Settings: st, MigrationBridge: s.kube.MigrationBridge(ctx), Bridges: s.bridges(ctx), BackupEncrypted: pass != ""}, errors.Join(err, perr)
 }
 
 func (s *Server) applyHostSettings(ctx context.Context, u HostSettingsUpdate) error {
@@ -333,11 +337,12 @@ func (s *Server) setCertificate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var err error
-	if s.certs == nil {
+	switch {
+	case s.certs == nil:
 		err = errors.New("certificates are not managed by this server")
-	} else if r.FormValue("revert") != "" {
+	case r.FormValue("revert") != "":
 		err = s.certs.Set(r.Context(), s.auth.Secrets(), nil, nil)
-	} else {
+	default:
 		var cert, key []byte
 		if cert, err = formFile(r, "cert"); err == nil {
 			key, err = formFile(r, "key")

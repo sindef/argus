@@ -60,7 +60,6 @@ func main() {
 		}()
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 	if n, err := fs.ImportFiles(ctx, data); err != nil {
 		log.Fatal(err)
 	} else if n > 0 {
@@ -89,6 +88,7 @@ func main() {
 	mgr.Start()
 	certs := tlscert.NewHolder(pki.Cert)
 	certs.Load(ctx, fs)
+	cancel()
 	srv, err := server.New(nil, store, server.Options{Banner: func(string) {}, Manager: mgr, Certs: certs, DataDir: data})
 	if err != nil {
 		log.Fatal(err)
@@ -107,7 +107,9 @@ func main() {
 		<-ctx.Done()
 		sctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-		hs.Shutdown(sctx)
+		if err := hs.Shutdown(sctx); err != nil {
+			log.Printf("shutdown: %v", err)
+		}
 	}()
 	if err := hs.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
 		log.Fatal(err)

@@ -93,9 +93,9 @@ func (s *Server) saveToLibrary(org string, src manager.Node, ns, vm, name string
 			return err
 		}
 		defer func() {
-			cctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			cctx, cancel := cleanupCtx()
 			defer cancel()
-			src.Call(cctx, http.MethodPost, manager.APIPath("/api/vms/%s/%s/unexport", ns, vm), nil, nil)
+			logCleanup("export of "+vm, src.Call(cctx, http.MethodPost, manager.APIPath("/api/vms/%s/%s/unexport", ns, vm), nil, nil))
 		}()
 		t := libTemplate{Name: name, SourceVM: vm, SourceHost: src.Name, Arch: st.Arch(), Created: time.Now(), Spec: ex.Spec}
 		for _, d := range ex.Disks {
@@ -147,7 +147,9 @@ func (s *Server) deployFromLibrary(r *http.Request, name string, dst manager.Nod
 	}
 	var spec map[string]any
 	b, _ := json.Marshal(t.Spec)
-	json.Unmarshal(b, &spec)
+	if err := json.Unmarshal(b, &spec); err != nil {
+		return err
+	}
 	_, token := s.newPull("template:" + org + "/" + name)
 	ex := kube.Export{Spec: spec, Token: token, CA: string(s.caPEM)}
 	for _, d := range t.Disks {

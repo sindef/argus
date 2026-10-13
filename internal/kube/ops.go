@@ -96,7 +96,9 @@ func (c *Client) finishClone(ns, clone, target string, template bool) {
 					log.Printf("clone %s: mark as template: %v", target, err)
 				}
 			}
-			c.dyn.Resource(cloneGVR).Namespace(ns).Delete(ctx, clone, metav1.DeleteOptions{})
+			if err := c.dyn.Resource(cloneGVR).Namespace(ns).Delete(ctx, clone, metav1.DeleteOptions{}); err != nil {
+				log.Printf("clone %s: %v", target, err)
+			}
 			return
 		case "Failed":
 			log.Printf("clone %s failed", target)
@@ -115,7 +117,8 @@ func (c *Client) Events(ctx context.Context, ns, name string, limit int) ([]Even
 	for _, e := range list.Items {
 		obj, _, _ := unstructured.NestedString(e.Object, "involvedObject", "name")
 		kind, _, _ := unstructured.NestedString(e.Object, "involvedObject", "kind")
-		if name != "" && obj != name && !(kind == "Pod" && len(obj) > len("virt-launcher-"+name) && obj[:len("virt-launcher-"+name)] == "virt-launcher-"+name) {
+		launcher := "virt-launcher-" + name
+		if name != "" && obj != name && (kind != "Pod" || obj == launcher || !strings.HasPrefix(obj, launcher)) {
 			continue
 		}
 		ev := Event{Object: kind + "/" + obj}

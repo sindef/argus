@@ -109,7 +109,7 @@ func zfsSend(w http.ResponseWriter, r *http.Request) {
 	cmd.Stdout, cmd.Stderr = cw, &stderr
 	w.Header().Set("Content-Type", "application/octet-stream")
 	if err := cmd.Run(); err != nil {
-		err = fmt.Errorf("zfs send %s@%s: %v: %s", ds, snap, err, strings.TrimSpace(stderr.String()))
+		err = fmt.Errorf("zfs send %s@%s: %w: %s", ds, snap, err, strings.TrimSpace(stderr.String()))
 		if cw.n == 0 {
 			w.Header().Del("Content-Type")
 			reply(w, nil, err)
@@ -138,7 +138,7 @@ func zfsRecv(w http.ResponseWriter, r *http.Request) {
 	cmd.Stdin, cmd.Stderr = r.Body, &stderr
 	err := cmd.Run()
 	if err != nil {
-		err = fmt.Errorf("zfs recv %s: %v: %s", ds, err, strings.TrimSpace(stderr.String()))
+		err = fmt.Errorf("zfs recv %s: %w: %s", ds, err, strings.TrimSpace(stderr.String()))
 	}
 	log.Printf("zfs recv %s full=%v: %v", ds, full, err)
 	reply(w, nil, err)

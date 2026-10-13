@@ -181,7 +181,7 @@ func wipe(ctx context.Context, disk string) error {
 	out, _ := run(ctx, "lsblk", "-ln", "-o", "PATH", disk)
 	parts := strings.Fields(out)
 	for i := len(parts) - 1; i >= 0; i-- {
-		run(ctx, "zpool", "labelclear", "-f", parts[i])
+		_, _ = run(ctx, "zpool", "labelclear", "-f", parts[i])
 		if _, err := run(ctx, "wipefs", "-a", parts[i]); err != nil {
 			return err
 		}
@@ -242,8 +242,8 @@ func importPool(ctx context.Context, name string, force bool) error {
 	if force {
 		args = []string{"import", "-f", "-N", name}
 	}
-	if out, err := run(ctx, "zpool", args...); err != nil {
-		if strings.Contains(out, "in use from another system") {
+	if _, err := run(ctx, "zpool", args...); err != nil {
+		if strings.Contains(err.Error(), "in use from another system") {
 			return fmt.Errorf("pool %s was last used by another host; use Force import only if no other host is using these disks", name)
 		}
 		return err

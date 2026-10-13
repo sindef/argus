@@ -172,7 +172,9 @@ func (c *Client) waitMigrationAddress(ctx context.Context, m MigrationNetwork) (
 					Name string   `json:"name"`
 					IPs  []string `json:"ips"`
 				}
-				json.Unmarshal([]byte(p.GetAnnotations()["k8s.v1.cni.cncf.io/network-status"]), &status)
+				if json.Unmarshal([]byte(p.GetAnnotations()["k8s.v1.cni.cncf.io/network-status"]), &status) != nil {
+					continue
+				}
 				for _, st := range status {
 					if st.Name != kubevirtNS+"/"+migrationNetwork {
 						continue

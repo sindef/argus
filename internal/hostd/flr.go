@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -210,7 +211,11 @@ func withMount(ctx context.Context, id string, part FLRPart, fn func(*os.Root) e
 	if _, err := run(ctx, "mount", "-t", part.FS, "-o", part.Opts, part.Dev, mp); err != nil {
 		return err
 	}
-	defer run(context.Background(), "umount", mp)
+	defer func() {
+		if _, err := run(context.Background(), "umount", mp); err != nil {
+			log.Printf("file browse: %v", err)
+		}
+	}()
 	root, err := os.OpenRoot(mp)
 	if err != nil {
 		return err
@@ -296,7 +301,9 @@ func FLRClose(ctx context.Context, id string) error {
 	loops, _ := filepath.Glob(filepath.Join(dir, "*.loop"))
 	for _, l := range loops {
 		if dev, err := os.ReadFile(l); err == nil {
-			run(ctx, "losetup", "-d", strings.TrimSpace(string(dev)))
+			if _, err := run(ctx, "losetup", "-d", strings.TrimSpace(string(dev))); err != nil {
+				log.Printf("file browse: %v", err)
+			}
 		}
 	}
 	imgs, _ := filepath.Glob(filepath.Join(flrData, id+"-*.img"))

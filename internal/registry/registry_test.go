@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -162,7 +163,7 @@ func TestPutDisk(t *testing.T) {
 	if strings.Join(names, ",") != "disk/,disk/cirros.qcow2" {
 		t.Fatalf("layer entries: %v", names)
 	}
-	if _, err := g.PutDisk("org/text", "x", "a.raw", "amd64", 3, bytes.NewReader([]byte("abc"))); err != ErrNotDisk {
+	if _, err := g.PutDisk("org/text", "x", "a.raw", "amd64", 3, bytes.NewReader([]byte("abc"))); !errors.Is(err, ErrNotDisk) {
 		t.Fatalf("non-disk upload: %v", err)
 	}
 }

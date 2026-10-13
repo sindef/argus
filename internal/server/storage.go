@@ -85,7 +85,7 @@ func (s *Server) volumeOp(ctx context.Context, op string, q volumeReq) error {
 
 func formVolume(r *http.Request) volumeReq {
 	var size int
-	intField(r, "size", 1, 4096, &size)
+	_ = intField(r, "size", 1, 4096, &size)
 	return volumeReq{Name: r.FormValue("name"), Size: size, URL: r.FormValue("url"), VM: r.FormValue("vm"), Pool: r.FormValue("pool")}
 }
 
@@ -272,7 +272,10 @@ func (s *Server) moveDiskForm(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiMoveDisk(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Disk, Pool string }
-	json.NewDecoder(r.Body).Decode(&req)
+	if err := decodeJSON(r.Body, &req); err != nil {
+		apiError(w, r, http.StatusBadRequest, err)
+		return
+	}
 	if err := s.moveDisk(r.Context(), r.PathValue("ns"), r.PathValue("name"), req.Disk, req.Pool); err != nil {
 		apiError(w, r, http.StatusConflict, err)
 		return

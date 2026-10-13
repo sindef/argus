@@ -110,7 +110,9 @@ func (s *Server) startRegistry(ctx context.Context) error {
 
 func (s *Server) registryAddress(ctx context.Context) string {
 	var st struct{ Address string }
-	s.loadJSON(ctx, registryKey, &st)
+	if _, err := s.loadJSON(ctx, registryKey, &st); err != nil {
+		log.Printf("registry address: %v", err)
+	}
 	return st.Address
 }
 
@@ -232,7 +234,7 @@ func freeSpace(dir string, need int64) error {
 		return err
 	}
 	if free := int64(st.Bavail) * int64(st.Bsize); need > 0 && free < 2*need+gib {
-		return fmt.Errorf("Argus Manager has %.1f GiB free; this image needs about %.1f GiB while it is stored", float64(free)/gib, float64(2*need)/gib)
+		return fmt.Errorf("only %.1f GiB free on Argus Manager; this image needs about %.1f GiB while it is stored", float64(free)/gib, float64(2*need)/gib)
 	}
 	return nil
 }

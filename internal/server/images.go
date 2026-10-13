@@ -3,7 +3,6 @@ package server
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -76,7 +75,7 @@ func (s *Server) streamUpload(r *http.Request) error {
 	fields := map[string]string{}
 	for {
 		part, err := mr.NextPart()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return errors.New("no file")
 		}
 		if err != nil {
@@ -105,8 +104,9 @@ func (s *Server) streamUpload(r *http.Request) error {
 		}
 		log.Printf("%s: upload image %s", session(r).User, name)
 		if err := s.kube.Upload(r.Context(), name, body); err != nil {
-			s.kube.DeleteImage(context.Background(), name)
-			return err
+			cctx, cancel := cleanupCtx()
+			defer cancel()
+			return errors.Join(err, s.kube.DeleteImage(cctx, name))
 		}
 		return nil
 	}
@@ -178,8 +178,9 @@ func (s *Server) apiImageOp(w http.ResponseWriter, r *http.Request) {
 	switch r.PathValue("op") {
 	case "export":
 		var req struct{ BaseURL string }
-		json.NewDecoder(r.Body).Decode(&req)
-		out, err = s.kube.ExportImage(r.Context(), name, req.BaseURL, string(s.caPEM))
+		if err = decodeJSON(r.Body, &req); err == nil {
+			out, err = s.kube.ExportImage(r.Context(), name, req.BaseURL, string(s.caPEM))
+		}
 	case "unexport":
 		err = s.kube.DeleteImageExport(r.Context(), name)
 	case "imported":

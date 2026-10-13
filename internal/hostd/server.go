@@ -3,6 +3,7 @@ package hostd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -292,8 +293,8 @@ func (s *Server) locked(h http.HandlerFunc) http.HandlerFunc {
 }
 
 func decode(r *http.Request, v any) error {
-	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		return fmt.Errorf("invalid request: %v", err)
+	if err := json.NewDecoder(r.Body).Decode(v); err != nil && !errors.Is(err, io.EOF) {
+		return fmt.Errorf("invalid request: %w", err)
 	}
 	return nil
 }
@@ -336,8 +337,10 @@ func (s *Server) release(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct{ Confirm string }
-	decode(r, &req)
-	err := releasePool(r.Context(), r.PathValue("name"), action, req.Confirm)
+	err := decode(r, &req)
+	if err == nil {
+		err = releasePool(r.Context(), r.PathValue("name"), action, req.Confirm)
+	}
 	log.Printf("%s pool %s: %v", action, r.PathValue("name"), err)
 	reply(w, nil, err)
 }
@@ -393,13 +396,13 @@ func (s *Server) management(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) diskAction(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Confirm, Test string }
-	decode(r, &req)
+	err := decode(r, &req)
 	name, action := r.PathValue("name"), r.PathValue("action")
-	var err error
-	switch action {
-	case "wipe":
+	switch {
+	case err != nil:
+	case action == "wipe":
 		err = wipeDisk(r.Context(), name, req.Confirm)
-	case "smart-test":
+	case action == "smart-test":
 		err = smartTest(r.Context(), name, req.Test)
 	default:
 		err = fmt.Errorf("unknown action %q", action)

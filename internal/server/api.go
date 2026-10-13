@@ -1,10 +1,8 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -51,8 +49,11 @@ func bootTime() time.Time {
 	if err != nil {
 		return time.Time{}
 	}
-	var up float64
-	fmt.Sscanf(string(b), "%f", &up)
+	f := strings.Fields(string(b))
+	if len(f) == 0 {
+		return time.Time{}
+	}
+	up, _ := strconv.ParseFloat(f[0], 64)
 	return time.Now().Add(-time.Duration(up * float64(time.Second))).Truncate(time.Second)
 }
 
@@ -118,8 +119,9 @@ func (s *Server) apiExport(w http.ResponseWriter, r *http.Request) {
 	}
 	ex, err := s.kube.ExportVM(r.Context(), ns, name, req.BaseURL, string(s.caPEM))
 	if err != nil {
-		s.kube.DeleteExport(context.Background(), ns, name)
-		apiError(w, r, http.StatusConflict, err)
+		cctx, cancel := cleanupCtx()
+		defer cancel()
+		apiError(w, r, http.StatusConflict, errors.Join(err, s.kube.DeleteExport(cctx, ns, name)))
 		return
 	}
 	log.Printf("%s: export %s/%s", session(r).User, ns, name)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"regexp"
 	"strconv"
 	"time"
@@ -252,13 +253,17 @@ func (c *Client) RefreshReplicaDisks(ctx context.Context, ns, vm string, ex Expo
 
 func (c *Client) deleteReplGenSource(ctx context.Context, ns, src string) {
 	for _, gvr := range []schema.GroupVersionResource{cmGVR, secGVR} {
-		c.dyn.Resource(gvr).Namespace(ns).Delete(ctx, src, metav1.DeleteOptions{})
+		if err := c.dyn.Resource(gvr).Namespace(ns).Delete(ctx, src, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			log.Printf("delete %s %s: %v", gvr.Resource, src, err)
+		}
 	}
 }
 
 func (c *Client) AbortReplicaRefresh(ctx context.Context, ns, vm string, mapping map[string]string) {
 	for _, n := range mapping {
-		c.DeleteDataVolume(ctx, ns, n)
+		if err := c.DeleteDataVolume(ctx, ns, n); err != nil {
+			log.Printf("abort replica refresh of %s: %v", vm, err)
+		}
 	}
 	c.deleteReplGenSource(ctx, ns, replGenName(vm))
 }
@@ -315,7 +320,9 @@ func (c *Client) SwapReplica(ctx context.Context, ns, vm string, spec obj, mappi
 	}
 	for _, n := range old {
 		if !keep[n] {
-			c.DeleteDataVolume(ctx, ns, n)
+			if err := c.DeleteDataVolume(ctx, ns, n); err != nil {
+				log.Printf("delete replica disk %s: %v", n, err)
+			}
 		}
 	}
 	c.deleteReplGenSource(ctx, ns, replGenName(vm))

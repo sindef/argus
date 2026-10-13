@@ -3,7 +3,6 @@ package server
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -541,7 +540,10 @@ func (s *Server) setTags(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiSetTags(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Tags, Folder, Attributes string }
-	json.NewDecoder(r.Body).Decode(&req)
+	if err := decodeJSON(r.Body, &req); err != nil {
+		apiError(w, r, http.StatusBadRequest, err)
+		return
+	}
 	err := s.organize(r.Context(), r.PathValue("ns"), r.PathValue("name"), req.Tags, req.Folder, req.Attributes)
 	if err != nil {
 		apiError(w, r, http.StatusConflict, err)

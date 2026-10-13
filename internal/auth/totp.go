@@ -31,7 +31,7 @@ func TOTPURI(issuer, account, secret string) string {
 
 func totpCode(key []byte, counter int64) string {
 	m := hmac.New(sha1.New, key)
-	binary.Write(m, binary.BigEndian, counter)
+	m.Write(binary.BigEndian.AppendUint64(nil, uint64(counter)))
 	sum := m.Sum(nil)
 	o := sum[len(sum)-1] & 0x0f
 	v := binary.BigEndian.Uint32(sum[o:o+4]) & 0x7fffffff

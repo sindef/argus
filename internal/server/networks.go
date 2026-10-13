@@ -115,13 +115,14 @@ func (s *Server) apiNetworkOp(w http.ResponseWriter, r *http.Request) {
 		apiError(w, r, http.StatusBadRequest, err)
 		return
 	}
-	if r.PathValue("op") == "delete" {
+	switch {
+	case r.PathValue("op") == "delete":
 		err = s.kube.DeleteNetwork(r.Context(), n.Name)
-	} else if n.Bridge != "" && !slices.Contains(s.bridges(r.Context()), n.Bridge) {
+	case n.Bridge != "" && !slices.Contains(s.bridges(r.Context()), n.Bridge):
 		err = fmt.Errorf("bridge %s not found on %s", n.Bridge, s.nodeName)
-	} else if r.PathValue("op") == "update" {
+	case r.PathValue("op") == "update":
 		err = s.kube.UpdateNetwork(r.Context(), n.kube())
-	} else {
+	default:
 		err = s.kube.CreateNetwork(r.Context(), n.kube())
 	}
 	if apierrors.IsAlreadyExists(err) || apierrors.IsNotFound(err) {

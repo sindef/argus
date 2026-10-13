@@ -316,8 +316,7 @@ func (c *Client) subresource(ctx context.Context, ns, resource, name, sub, body 
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		var st struct{ Message string }
-		json.NewDecoder(resp.Body).Decode(&st)
-		if st.Message == "" {
+		if json.NewDecoder(resp.Body).Decode(&st) != nil || st.Message == "" {
 			st.Message = resp.Status
 		}
 		return fmt.Errorf("%s %s: %s", sub, name, st.Message)
@@ -342,6 +341,9 @@ func (c *Client) DialConsole(ctx context.Context, ns, name, kind string) (*webso
 	}
 	d := websocket.Dialer{TLSClientConfig: c.tls, Subprotocols: []string{"plain.kubevirt.io"}}
 	conn, resp, err := d.DialContext(ctx, u.String(), h)
+	if resp != nil {
+		resp.Body.Close()
+	}
 	if err != nil && resp != nil {
 		return nil, fmt.Errorf("%s %s/%s: %s", kind, ns, name, resp.Status)
 	}
@@ -367,7 +369,9 @@ func toVM(v, vmi *unstructured.Unstructured) VM {
 		vm.Tags = strings.Split(t, ",")
 	}
 	vm.Folder = v.GetAnnotations()[FolderAnnotation]
-	json.Unmarshal([]byte(v.GetAnnotations()[AttributesAnnotation]), &vm.Attributes)
+	if a := v.GetAnnotations()[AttributesAnnotation]; a != "" && json.Unmarshal([]byte(a), &vm.Attributes) != nil {
+		vm.Attributes = nil
+	}
 	vm.Status, _, _ = unstructured.NestedString(o, "status", "printableStatus")
 	templates, _, _ := unstructured.NestedSlice(o, "spec", "dataVolumeTemplates")
 	for _, t := range templates {

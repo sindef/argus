@@ -57,7 +57,7 @@ func zsync(ctx context.Context, vm string, owner, replica Node) error {
 		return err
 	}
 	done := map[string]any{"keep": []string{snap.Snap}}
-	owner.do(ctx, http.MethodPost, vmPath(vm, "zfs/prune"), done, nil)
+	logCleanup("snapshots of "+vm+" on "+owner.Name, owner.do(ctx, http.MethodPost, vmPath(vm, "zfs/prune"), done, nil))
 	return replica.do(ctx, http.MethodPost, vmPath(vm, "zfs/prune"), done, nil)
 }
 
@@ -75,6 +75,6 @@ func zpipe(ctx context.Context, vm, volume, snap, base string, owner, replica No
 	if err != nil {
 		return err
 	}
-	io.Copy(io.Discard, dst.Body)
-	return dst.Body.Close()
+	_, err = io.Copy(io.Discard, dst.Body)
+	return errors.Join(err, dst.Body.Close())
 }

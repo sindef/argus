@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"regexp"
 	"slices"
@@ -55,7 +56,9 @@ func (s *Server) cbtCreate(w http.ResponseWriter, r *http.Request) {
 	frozen := s.kube.Freeze(r.Context(), ns, name) == nil
 	err = s.hostd.ZFSSnapshot(r.Context(), ds, id)
 	if frozen {
-		s.kube.Unfreeze(r.Context(), ns, name)
+		if uerr := s.kube.Unfreeze(r.Context(), ns, name); uerr != nil {
+			log.Printf("unfreeze %s/%s: %v", ns, name, uerr)
+		}
 	}
 	if err != nil {
 		apiError(w, r, http.StatusConflict, err)
@@ -156,5 +159,7 @@ func copyStream(w http.ResponseWriter, resp *http.Response) {
 		}
 	}
 	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		log.Printf("stream %s: %v", resp.Request.URL.Path, err)
+	}
 }

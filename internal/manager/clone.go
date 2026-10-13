@@ -55,7 +55,7 @@ func (c *Manager) CopyVM(src, dst Node, ns, vm, name, pool string, template bool
 		defer func() {
 			cctx, cancel := cleanupCtx()
 			defer cancel()
-			src.do(cctx, http.MethodPost, vmPathIn(ns, vm, "unexport"), nil, nil)
+			logCleanup("export of "+vm, src.do(cctx, http.MethodPost, vmPathIn(ns, vm, "unexport"), nil, nil))
 		}()
 		RenameExport(&ex, vm, name)
 		return c.importAndWait(ctx, j, dst, name, pool, template, ex)

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"path"
@@ -180,11 +181,17 @@ func (g *Registry) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (g *Registry) repos(withLayers bool) []string {
+func (g *Registry) repos(withLayers bool) ([]string, error) {
 	var out []string
 	base := filepath.Join(g.root, "repos")
-	filepath.WalkDir(base, func(p string, d fs.DirEntry, err error) error {
-		if err != nil || !d.IsDir() {
+	err := filepath.WalkDir(base, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if p == base && errors.Is(err, fs.ErrNotExist) {
+				return filepath.SkipDir
+			}
+			return err
+		}
+		if !d.IsDir() {
 			return nil
 		}
 		if strings.HasPrefix(d.Name(), "_") {
@@ -197,12 +204,17 @@ func (g *Registry) repos(withLayers bool) []string {
 		return nil
 	})
 	slices.Sort(out)
-	return out
+	return out, err
 }
 
 func (g *Registry) serveCatalog(w http.ResponseWriter, r *http.Request) {
+	all, err := g.repos(false)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, "UNKNOWN", err.Error())
+		return
+	}
 	repos := []string{}
-	for _, repo := range g.repos(false) {
+	for _, repo := range all {
 		if g.Authorize != nil && g.Authorize(r, repo, Pull) {
 			repos = append(repos, repo)
 		}
@@ -368,7 +380,11 @@ func (g *Registry) drop(repo string, refs []descriptor, reject bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	used := map[string]bool{}
-	repos := g.repos(true)
+	repos, err := g.repos(true)
+	if err != nil {
+		log.Printf("registry: keeping blobs of %s: %v", repo, err)
+		return
+	}
 	for _, r := range repos {
 		ents, _ := os.ReadDir(filepath.Join(g.repo(r), "_manifests"))
 		for _, e := range ents {
@@ -666,7 +682,9 @@ func (g *Registry) commit(repo, path, d string) error {
 		return err
 	}
 	now := time.Now()
-	os.Chtimes(g.blob(d), now, now)
+	if err := os.Chtimes(g.blob(d), now, now); err != nil {
+		return err
+	}
 	return touch(g.layerLink(repo, d))
 }
 
@@ -736,7 +754,11 @@ func (g *Registry) PutDisk(repo, tag, file, arch string, size int64, src io.Read
 
 func (g *Registry) List(prefix string) []Image {
 	var out []Image
-	for _, repo := range g.repos(false) {
+	repos, err := g.repos(false)
+	if err != nil {
+		log.Printf("registry: %v", err)
+	}
+	for _, repo := range repos {
 		if !strings.HasPrefix(repo, prefix) {
 			continue
 		}
@@ -803,7 +825,11 @@ func (g *Registry) GC() error {
 		return err == nil && time.Since(st.ModTime()) > age
 	}
 	used := map[string]bool{}
-	for _, repo := range g.repos(true) {
+	repos, err := g.repos(true)
+	if err != nil {
+		return err
+	}
+	for _, repo := range repos {
 		keep := map[string]bool{}
 		ents, _ := os.ReadDir(filepath.Join(g.repo(repo), "_manifests"))
 		for _, e := range ents {

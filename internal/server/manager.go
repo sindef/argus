@@ -1062,11 +1062,19 @@ func (s *Server) managerBackup(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		b, _ := json.Marshal(recs[name])
-		tw.WriteHeader(&tar.Header{Name: name + ".json", Mode: 0o600, Size: int64(len(b)), ModTime: time.Now()})
-		tw.Write(b)
+		if err := tw.WriteHeader(&tar.Header{Name: name + ".json", Mode: 0o600, Size: int64(len(b)), ModTime: time.Now()}); err != nil {
+			s.renderSettings(w, r, "", err)
+			return
+		}
+		if _, err := tw.Write(b); err != nil {
+			s.renderSettings(w, r, "", err)
+			return
+		}
 	}
-	tw.Close()
-	gz.Close()
+	if err := errors.Join(tw.Close(), gz.Close()); err != nil {
+		s.renderSettings(w, r, "", err)
+		return
+	}
 	out, err := sealed.Seal(pass, buf.Bytes())
 	if err != nil {
 		s.renderSettings(w, r, "", err)

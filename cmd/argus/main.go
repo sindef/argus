@@ -75,7 +75,9 @@ func main() {
 		<-ctx.Done()
 		sctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-		hs.Shutdown(sctx)
+		if err := hs.Shutdown(sctx); err != nil {
+			log.Printf("shutdown: %v", err)
+		}
 	}()
 	if err := hs.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
 		log.Fatal(err)

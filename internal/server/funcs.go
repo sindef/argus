@@ -82,7 +82,7 @@ var funcs = template.FuncMap{
 		}
 		return t.Local().Format("2006-01-02 15:04")
 	},
-	"has":   func(l []string, v string) bool { return slices.Contains(l, v) },
+	"has":   slices.Contains[[]string],
 	"add":   func(a, b int) int { return a + b },
 	"sub":   func(a, b int) int { return a - b },
 	"add64": func(a, b int64) int64 { return a + b },

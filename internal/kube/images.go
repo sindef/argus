@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"sort"
 	"strings"
@@ -292,8 +293,7 @@ func (c *Client) ImportImage(ctx context.Context, name, size string, ex Export) 
 		},
 	}}
 	if _, err := c.dyn.Resource(dvGVR).Namespace(Namespace).Create(ctx, dv, metav1.CreateOptions{}); err != nil {
-		c.FinishImageImport(context.Background(), name)
-		return err
+		return errors.Join(err, c.FinishImageImport(context.Background(), name))
 	}
 	return nil
 }
@@ -320,8 +320,7 @@ func (c *Client) ImportRegistryImage(ctx context.Context, name, size string, src
 	}
 	if src.User != "" {
 		if err := c.Secrets(Namespace).Create(ctx, ref, "Opaque", map[string][]byte{"accessKeyId": []byte(src.User), "secretKey": []byte(src.Pass)}); err != nil {
-			c.FinishImageImport(context.Background(), name)
-			return err
+			return errors.Join(err, c.FinishImageImport(context.Background(), name))
 		}
 		reg["secretRef"] = ref
 	}
@@ -335,8 +334,7 @@ func (c *Client) ImportRegistryImage(ctx context.Context, name, size string, src
 		},
 	}}
 	if _, err := c.dyn.Resource(dvGVR).Namespace(Namespace).Create(ctx, dv, metav1.CreateOptions{}); err != nil {
-		c.FinishImageImport(context.Background(), name)
-		return err
+		return errors.Join(err, c.FinishImageImport(context.Background(), name))
 	}
 	return nil
 }
@@ -364,7 +362,9 @@ func (c *Client) CreateTokenSource(ctx context.Context, name, ca, token string) 
 
 func (c *Client) DeleteTokenSource(ctx context.Context, name string) {
 	for _, gvr := range []schema.GroupVersionResource{secGVR, cmGVR} {
-		c.dyn.Resource(gvr).Namespace(Namespace).Delete(ctx, name, metav1.DeleteOptions{})
+		if err := c.dyn.Resource(gvr).Namespace(Namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			log.Printf("delete %s %s: %v", gvr.Resource, name, err)
+		}
 	}
 }
 
@@ -373,7 +373,10 @@ func (c *Client) CleanupInterrupted(ctx context.Context) []string {
 	if list, err := c.dyn.Resource(vmExportGVR).Namespace(Namespace).List(ctx, metav1.ListOptions{}); err == nil {
 		for _, e := range list.Items {
 			if vm, ok := strings.CutPrefix(e.GetName(), "argus-backup-"); ok {
-				c.DeleteBackupExport(ctx, Namespace, vm)
+				if err := c.DeleteBackupExport(ctx, Namespace, vm); err != nil {
+					log.Printf("cleanup %s: %v", e.GetName(), err)
+					continue
+				}
 				out = append(out, e.GetName())
 			}
 		}

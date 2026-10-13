@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -557,7 +558,9 @@ func (o remoteOps) DownloadDisk(w http.ResponseWriter, r *http.Request, ns, name
 			w.Header().Set(k, v)
 		}
 	}
-	io.Copy(w, resp.Body)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		log.Printf("stream %s: %v", r.URL.Path, err)
+	}
 }
 
 func (s *Server) apiOp(w http.ResponseWriter, r *http.Request, in any, fn func() (any, error)) {
@@ -690,7 +693,10 @@ func (s *Server) hostAPIRoutes() {
 }
 
 func decodeJSON(r io.Reader, v any) error {
-	return json.NewDecoder(r).Decode(v)
+	if err := json.NewDecoder(r).Decode(v); err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	return nil
 }
 
 func accessCtx(r *http.Request) context.Context {

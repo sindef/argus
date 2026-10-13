@@ -120,14 +120,14 @@ func (c *Client) CreateVM(ctx context.Context, s VMSpec) error {
 	if userData == "" {
 		userData = s.Guest.userData()
 	}
-	bus, model := "virtio", "virtio"
+	model := "virtio"
 	if s.Windows != nil {
 		if err := s.Windows.Validate(); err != nil {
 			return err
 		}
 		if !s.Windows.VirtIO {
-			bus, model = "sata", "e1000e"
-			disks[0].(obj)["disk"] = obj{"bus": bus}
+			model = "e1000e"
+			disks[0].(obj)["disk"] = obj{"bus": "sata"}
 		}
 		userData, networkData = "", ""
 		if err := c.Secrets(Namespace).Create(ctx, s.Name+"-sysprep", "Opaque", map[string][]byte{"unattend.xml": []byte(s.Windows.Unattend())}); err != nil {
@@ -187,8 +187,7 @@ func (c *Client) CreateVM(ctx context.Context, s VMSpec) error {
 		return err
 	}
 	if err != nil {
-		c.dyn.Resource(secGVR).Namespace(Namespace).Delete(ctx, s.Name+"-sysprep", metav1.DeleteOptions{})
-		return err
+		return errors.Join(err, c.dyn.Resource(secGVR).Namespace(Namespace).Delete(ctx, s.Name+"-sysprep", metav1.DeleteOptions{}))
 	}
 	owner, _ := json.Marshal(obj{"metadata": obj{"ownerReferences": []any{obj{"apiVersion": "kubevirt.io/v1", "kind": "VirtualMachine", "name": s.Name, "uid": string(created.GetUID())}}}})
 	_, err = c.dyn.Resource(secGVR).Namespace(Namespace).Patch(ctx, s.Name+"-sysprep", types.MergePatchType, owner, metav1.PatchOptions{})
@@ -579,7 +578,7 @@ func (c *Client) SetHardware(ctx context.Context, ns, name string, hw Hardware) 
 			unstructured.SetNestedField(o, obj{"secureBoot": false}, append(dom, "firmware", "bootloader", "efi")...)
 		case "uefi-secure":
 			if runtime.GOARCH == "arm64" {
-				return errors.New("Secure Boot is not available on arm64 hosts")
+				return errors.New("arm64 hosts do not support Secure Boot")
 			}
 			unstructured.SetNestedField(o, obj{"secureBoot": true}, append(dom, "firmware", "bootloader", "efi")...)
 			unstructured.SetNestedField(o, obj{"enabled": true}, append(dom, "features", "smm")...)

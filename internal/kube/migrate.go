@@ -216,11 +216,10 @@ func (c *Client) ImportVM(ctx context.Context, ns, name, operation string, ex Ex
 	if _, err := c.dyn.Resource(cmGVR).Namespace(ns).Create(ctx, cm, metav1.CreateOptions{}); err != nil {
 		return err
 	}
-	err := c.createImportVM(ctx, ns, name, operation, src, ex, opts)
-	if err != nil {
-		c.FinishImport(context.Background(), ns, name)
+	if err := c.createImportVM(ctx, ns, name, operation, src, ex, opts); err != nil {
+		return errors.Join(err, c.FinishImport(context.Background(), ns, name))
 	}
-	return err
+	return nil
 }
 
 func (c *Client) createImportVM(ctx context.Context, ns, name, operation, src string, ex Export, opts ImportOptions) error {

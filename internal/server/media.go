@@ -43,8 +43,9 @@ func (l localOps) MountMedia(ctx context.Context, ns, name, contentType string, 
 		return err
 	}
 	if err := s.kube.Upload(ctx, img, in); err != nil {
-		s.kube.DeleteImage(context.Background(), img)
-		return err
+		cctx, cancel := cleanupCtx()
+		defer cancel()
+		return errors.Join(err, s.kube.DeleteImage(cctx, img))
 	}
 	return s.kube.SetCDROM(ctx, ns, name, img)
 }

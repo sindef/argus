@@ -45,8 +45,10 @@ func (m *Manager) Org(ctx context.Context, id string) (Org, error) {
 			return o, nil
 		}
 	}
-	return Org{}, fmt.Errorf("organization %s not found", id)
+	return Org{}, fmt.Errorf("%w: %s", ErrOrgNotFound, id)
 }
+
+var ErrOrgNotFound = errors.New("organization not found")
 
 func (m *Manager) loadOrgs(ctx context.Context) ([]Org, string, error) {
 	var os []Org

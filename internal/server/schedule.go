@@ -128,7 +128,10 @@ func (s *Server) runSchedules(ctx context.Context, vms []kube.VM, from, to time.
 
 func (s *Server) apiScheduleOp(w http.ResponseWriter, r *http.Request) {
 	var req map[string]string
-	decodeJSON(r.Body, &req)
+	if err := decodeJSON(r.Body, &req); err != nil {
+		apiError(w, r, http.StatusBadRequest, err)
+		return
+	}
 	if err := s.scheduleOp(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.PathValue("op"), func(k string) string { return req[k] }); err != nil {
 		apiError(w, r, http.StatusConflict, err)
 		return

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -60,7 +61,9 @@ func (s *Server) apiZFSSnapshot(w http.ResponseWriter, r *http.Request) {
 		frozen := s.kube.Freeze(r.Context(), ns, name) == nil
 		err = s.hostd.ZFSSnapshot(r.Context(), ds, snap)
 		if frozen {
-			s.kube.Unfreeze(r.Context(), ns, name)
+			if uerr := s.kube.Unfreeze(r.Context(), ns, name); uerr != nil {
+				log.Printf("unfreeze %s/%s: %v", ns, name, uerr)
+			}
 		}
 	}
 	if err != nil {
@@ -111,7 +114,9 @@ func (s *Server) apiZFSSend(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 	w.Header().Set("Content-Type", "application/octet-stream")
-	io.Copy(w, resp.Body)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		log.Printf("stream %s: %v", r.URL.Path, err)
+	}
 }
 
 func (s *Server) apiZFSRecv(w http.ResponseWriter, r *http.Request) {

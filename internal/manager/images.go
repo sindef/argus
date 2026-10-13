@@ -24,7 +24,7 @@ func (c *Manager) CopyImage(org, image string, src Node, targets []Node) error {
 		defer func() {
 			cctx, cancel := cleanupCtx()
 			defer cancel()
-			src.do(cctx, http.MethodPost, APIPath("/api/images/%s/unexport", image), nil, nil)
+			logCleanup("export of image "+image, src.do(cctx, http.MethodPost, APIPath("/api/images/%s/unexport", image), nil, nil))
 		}()
 		size, _ := ex.Spec["size"].(string)
 		for _, t := range targets {
@@ -59,7 +59,7 @@ func (c *Manager) importTo(ctx context.Context, j *Job, t Node, image string, re
 	}
 	err := waitFor(ctx, 6*time.Hour, func() (bool, error) {
 		var imgs []kube.Image
-		if err := t.do(ctx, http.MethodGet, "/api/images", nil, &imgs); err != nil {
+		if reachable := t.do(ctx, http.MethodGet, "/api/images", nil, &imgs) == nil; !reachable {
 			return false, nil
 		}
 		i := slices.IndexFunc(imgs, func(x kube.Image) bool { return x.Name == image })
@@ -69,7 +69,7 @@ func (c *Manager) importTo(ctx context.Context, j *Job, t Node, image string, re
 		c.update(j, "Copying to "+t.Name+" "+imgs[i].Progress, false, false)
 		return imgs[i].Phase == "Succeeded", nil
 	})
-	t.do(ctx, http.MethodPost, APIPath("/api/images/%s/imported", image), nil, nil)
+	logCleanup("import of image "+image+" on "+t.Name, t.do(ctx, http.MethodPost, APIPath("/api/images/%s/imported", image), nil, nil))
 	if err != nil {
 		return fmt.Errorf("%s: %w", t.Name, err)
 	}

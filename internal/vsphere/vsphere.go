@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -74,7 +75,9 @@ func Dial(ctx context.Context, host, user, password string, tlsConfig *tls.Confi
 func (c *Client) Logout() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	c.call(ctx, `<urn:Logout>`+c.sc.SessionManager.xml("_this")+`</urn:Logout>`, nil)
+	if err := c.call(ctx, `<urn:Logout>`+c.sc.SessionManager.xml("_this")+`</urn:Logout>`, nil); err != nil {
+		log.Printf("vsphere logout: %v", err)
+	}
 }
 
 func (c *Client) call(ctx context.Context, body string, out any) error {
@@ -183,7 +186,11 @@ func (c *Client) VMs(ctx context.Context) ([]VM, error) {
 	if err := c.call(ctx, `<urn:CreateContainerView>`+c.sc.ViewManager.xml("_this")+c.sc.RootFolder.xml("container")+`<urn:type>VirtualMachine</urn:type><urn:recursive>true</urn:recursive></urn:CreateContainerView>`, &view); err != nil {
 		return nil, err
 	}
-	defer c.call(context.Background(), `<urn:DestroyView>`+view.R.xml("_this")+`</urn:DestroyView>`, nil)
+	defer func() {
+		if err := c.call(context.Background(), `<urn:DestroyView>`+view.R.xml("_this")+`</urn:DestroyView>`, nil); err != nil {
+			log.Printf("vsphere destroy view: %v", err)
+		}
+	}()
 	objs, err := c.retrieve(ctx, `<urn:objectSet>`+view.R.xml("obj")+`<urn:skip>true</urn:skip><urn:selectSet xsi:type="urn:TraversalSpec"><urn:name>view</urn:name><urn:type>ContainerView</urn:type><urn:path>view</urn:path><urn:skip>false</urn:skip></urn:selectSet></urn:objectSet>`,
 		"VirtualMachine", "name", "runtime.powerState", "config.template")
 	if err != nil {

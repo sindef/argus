@@ -159,7 +159,7 @@ func (c *Client) do(ctx context.Context, method, key string, q url.Values, body 
 func (c *Client) Put(ctx context.Context, key string, r io.Reader) error {
 	buf := make([]byte, partSize)
 	n, err := io.ReadFull(r, buf)
-	if err == io.EOF || err == io.ErrUnexpectedEOF {
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 		resp, err := c.do(ctx, http.MethodPut, key, nil, buf[:n], "")
 		if err == nil {
 			resp.Body.Close()
@@ -203,7 +203,7 @@ func (c *Client) Put(ctx context.Context, key string, r io.Reader) error {
 		resp.Body.Close()
 		parts = append(parts, part{num, resp.Header.Get("ETag")})
 		n, err = io.ReadFull(r, buf)
-		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
 			return abort(err)
 		}
 	}

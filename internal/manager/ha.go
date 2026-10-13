@@ -125,7 +125,7 @@ func (c *Manager) Unprotect(ctx context.Context, node, vm string) error {
 		return err
 	}
 	if o, err := c.Node(ctx, p.Owner); err == nil {
-		o.do(ctx, http.MethodPost, vmPath(vm, "ha"), map[string]bool{"enabled": false}, nil)
+		logCleanup("HA flag of "+vm, o.do(ctx, http.MethodPost, vmPath(vm, "ha"), map[string]bool{"enabled": false}, nil))
 	}
 	if r, err := c.Node(ctx, p.Replica); err == nil {
 		return r.do(ctx, http.MethodPost, vmPath(vm, "abort"), map[string]string{"operation": kube.HAReplicaOperation}, nil)
@@ -216,7 +216,9 @@ type HASettings struct {
 
 func (c *Manager) HASettings(ctx context.Context) HASettings {
 	var h HASettings
-	auth.LoadJSON(ctx, c.store, haSettingsKey, "ha", &h)
+	if _, err := auth.LoadJSON(ctx, c.store, haSettingsKey, "ha", &h); err != nil {
+		log.Printf("ha: settings: %v", err)
+	}
 	return h
 }
 
@@ -268,7 +270,9 @@ func (c *Manager) promote(ctx context.Context, p Protected, status string) error
 	c.promoted[p.VM] = time.Now()
 	c.jobs = append(c.jobs, &Job{Org: owner.Org, VM: p.VM, From: owner.Name, To: replica.Name, Started: time.Now(), Status: status, Done: true})
 	c.mu.Unlock()
-	c.saveJobs()
+	if err := c.saveJobs(); err != nil {
+		log.Printf("ha: %v", err)
+	}
 	return nil
 }
 
@@ -294,7 +298,9 @@ func (c *Manager) failover(ctx context.Context) {
 		if err := replica.do(ctx, http.MethodGet, "/api/probe?url="+url.QueryEscape(owner.URL), nil, &probe); err != nil || probe.Reachable {
 			continue
 		}
-		c.promote(ctx, p, "Failed over (HA)")
+		if err := c.promote(ctx, p, "Failed over (HA)"); err != nil {
+			log.Printf("ha: fail over %s: %v", p.VM, err)
+		}
 	}
 }
 
@@ -335,7 +341,7 @@ func (c *Manager) replicate() {
 				msg = err.Error()
 				log.Printf("ha: replicate %s: %v", p.VM, err)
 			}
-			c.updateHA(ctx, func(ps []Protected) ([]Protected, error) {
+			if uerr := c.updateHA(ctx, func(ps []Protected) ([]Protected, error) {
 				for i := range ps {
 					if ps[i].VM == p.VM && ps[i].Owner == p.Owner {
 						ps[i].LastError = msg
@@ -345,7 +351,9 @@ func (c *Manager) replicate() {
 					}
 				}
 				return ps, nil
-			})
+			}); uerr != nil {
+				log.Printf("ha: record sync of %s: %v", p.VM, uerr)
+			}
 		}(p)
 	}
 }
@@ -373,7 +381,11 @@ func (c *Manager) sync(ctx context.Context, p Protected) error {
 	if err := owner.do(ctx, http.MethodPost, vmPath(p.VM, "snapshot-export"), map[string]string{"baseURL": owner.URL}, &ex); err != nil {
 		return err
 	}
-	defer owner.do(context.Background(), http.MethodPost, vmPath(p.VM, "unexport"), nil, nil)
+	defer func() {
+		cctx, cancel := cleanupCtx()
+		defer cancel()
+		logCleanup("export of "+p.VM, owner.do(cctx, http.MethodPost, vmPath(p.VM, "unexport"), nil, nil))
+	}()
 	if !exists {
 		return c.firstReplica(ctx, p, replica, ex)
 	}
@@ -384,7 +396,7 @@ func (c *Manager) sync(ctx context.Context, p Protected) error {
 	abort := func(cause error) error {
 		cctx, cancel := cleanupCtx()
 		defer cancel()
-		replica.do(cctx, http.MethodPost, vmPath(p.VM, "replica/abort"), map[string]any{"mapping": mapping}, nil)
+		logCleanup("replica refresh of "+p.VM, replica.do(cctx, http.MethodPost, vmPath(p.VM, "replica/abort"), map[string]any{"mapping": mapping}, nil))
 		return cause
 	}
 	failed, err := kube.WaitDisks(ctx, 5*time.Second, nodeDisks(replica, vmPath(p.VM, "replica/status"), map[string]any{"mapping": mapping}), nil)
@@ -404,7 +416,11 @@ func (c *Manager) firstReplica(ctx context.Context, p Protected, replica Node, e
 	if err := replica.do(ctx, http.MethodPost, "/api/import", map[string]any{"name": p.VM, "operation": kube.HAReplicaOperation, "export": ex}, nil); err != nil {
 		return err
 	}
-	defer replica.do(context.Background(), http.MethodPost, vmPath(p.VM, "imported"), nil, nil)
+	defer func() {
+		cctx, cancel := cleanupCtx()
+		defer cancel()
+		logCleanup("import of "+p.VM, replica.do(cctx, http.MethodPost, vmPath(p.VM, "imported"), nil, nil))
+	}()
 	if err := replica.do(ctx, http.MethodPost, vmPath(p.VM, "ha"), map[string]bool{"enabled": true}, nil); err != nil {
 		return err
 	}

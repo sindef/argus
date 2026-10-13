@@ -304,8 +304,7 @@ func (n Node) do(ctx context.Context, method, path string, in, out any) error {
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		var e struct{ Error string }
-		json.NewDecoder(resp.Body).Decode(&e)
-		if e.Error == "" {
+		if json.NewDecoder(resp.Body).Decode(&e) != nil || e.Error == "" {
 			e.Error = resp.Status
 		}
 		return fmt.Errorf("%s: %s", n.Name, e.Error)
@@ -348,8 +347,7 @@ func (n Node) Open(ctx context.Context, method, path string, h http.Header, body
 	if resp.StatusCode >= 300 && resp.StatusCode != http.StatusRequestedRangeNotSatisfiable {
 		defer resp.Body.Close()
 		var e struct{ Error string }
-		json.NewDecoder(resp.Body).Decode(&e)
-		if e.Error == "" {
+		if json.NewDecoder(resp.Body).Decode(&e) != nil || e.Error == "" {
 			e.Error = resp.Status
 		}
 		return nil, fmt.Errorf("%s: %s", n.Name, e.Error)
@@ -492,6 +490,12 @@ func cleanupCtx() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), 2*time.Minute)
 }
 
+func logCleanup(what string, err error) {
+	if err != nil {
+		log.Printf("cleanup %s: %v", what, err)
+	}
+}
+
 func (c *Manager) importAndWait(ctx context.Context, j *Job, dst Node, name, pool string, template bool, ex kube.Export) error {
 	c.update(j, "Importing", false, false)
 	if err := dst.do(ctx, http.MethodPost, "/api/import", map[string]any{"name": name, "operation": j.ID, "export": ex, "pool": pool, "template": template}, nil); err != nil {
@@ -501,9 +505,9 @@ func (c *Manager) importAndWait(ctx context.Context, j *Job, dst Node, name, poo
 		cctx, cancel := cleanupCtx()
 		defer cancel()
 		err := dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, name, "abort"), map[string]string{"operation": j.ID}, nil)
-		dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, name, "imported"), nil, nil)
+		logCleanup("import of "+name, dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, name, "imported"), nil, nil))
 		if err != nil {
-			return fmt.Errorf("%w; target cleanup failed: %v", cause, err)
+			return fmt.Errorf("%w; target cleanup failed: %w", cause, err)
 		}
 		return cause
 	}
@@ -583,6 +587,9 @@ func (n Node) DialConsole(ctx context.Context, ns, vm, kind string) (*websocket.
 	d := websocket.Dialer{TLSClientConfig: trustPinnedOrPublic(pool, n.URL), Subprotocols: []string{"binary"}}
 	u := strings.Replace(n.URL, "https://", "wss://", 1) + APIPath("/api/vms/%s/%s/ws/%s", ns, vm, kind)
 	conn, resp, err := d.DialContext(ctx, u, http.Header{"Authorization": {"Bearer " + n.Token}})
+	if resp != nil {
+		resp.Body.Close()
+	}
 	if err != nil && resp != nil {
 		return nil, fmt.Errorf("%s: console: %s", n.Name, resp.Status)
 	}

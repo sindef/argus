@@ -191,7 +191,9 @@ func diskDetail(ctx context.Context, name string) (DiskDetail, error) {
 		var tree struct {
 			Blockdevices []lsblkDev `json:"blockdevices"`
 		}
-		json.Unmarshal([]byte(out), &tree)
+		if err := json.Unmarshal([]byte(out), &tree); err != nil {
+			return dd, fmt.Errorf("lsblk %s: %w", d.Path, err)
+		}
 		for _, b := range tree.Blockdevices {
 			for _, c := range b.Children {
 				dd.Partitions = append(dd.Partitions, Partition{Name: c.Name, Size: c.Size, FSType: c.Fstype, Label: c.Label})

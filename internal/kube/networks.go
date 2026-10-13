@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -45,7 +46,9 @@ type cniConfig struct {
 
 func parseNetwork(name, raw string) Network {
 	var cfg cniConfig
-	json.Unmarshal([]byte(raw), &cfg)
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		log.Printf("network %s: %v", name, err)
+	}
 	plugins := cfg.Plugins
 	if len(plugins) == 0 {
 		plugins = []cniPlugin{cfg.cniPlugin}

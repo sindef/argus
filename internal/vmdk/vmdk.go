@@ -57,10 +57,9 @@ func header(capacity, descSectors, gdOffset uint64) []byte {
 	return h
 }
 
-func marker(lba uint64, size uint32, typ uint32) []byte {
+func marker(lba uint64, typ uint32) []byte {
 	m := make([]byte, sector)
 	binary.LittleEndian.PutUint64(m[0:], lba)
-	binary.LittleEndian.PutUint32(m[8:], size)
 	binary.LittleEndian.PutUint32(m[12:], typ)
 	return m
 }
@@ -101,8 +100,12 @@ func Write(w io.Writer, r io.Reader, sizeBytes int64, name string) error {
 		}
 		z.Reset()
 		zw := zlib.NewWriter(&z)
-		zw.Write(buf)
-		zw.Close()
+		if _, err := zw.Write(buf); err != nil {
+			return err
+		}
+		if err := zw.Close(); err != nil {
+			return err
+		}
 		vw.gt[g] = uint32(vw.pos)
 		m := make([]byte, 12, 12+z.Len())
 		binary.LittleEndian.PutUint64(m[0:], g*grainSize)
@@ -116,7 +119,7 @@ func Write(w io.Writer, r io.Reader, sizeBytes int64, name string) error {
 	}
 	gd := make([]uint32, tables)
 	for t := uint64(0); t < tables; t++ {
-		if err := vw.write(marker(gtEntries*4/sector, 0, markerGT)); err != nil {
+		if err := vw.write(marker(gtEntries*4/sector, markerGT)); err != nil {
 			return err
 		}
 		gd[t] = uint32(vw.pos)
@@ -132,20 +135,20 @@ func Write(w io.Writer, r io.Reader, sizeBytes int64, name string) error {
 	for i, v := range gd {
 		binary.LittleEndian.PutUint32(gdBytes[i*4:], v)
 	}
-	if err := vw.write(marker((uint64(len(gdBytes))+sector-1)/sector, 0, markerGD)); err != nil {
+	if err := vw.write(marker((uint64(len(gdBytes))+sector-1)/sector, markerGD)); err != nil {
 		return err
 	}
 	gdOffset := vw.pos
 	if err := vw.write(gdBytes); err != nil {
 		return err
 	}
-	if err := vw.write(marker(1, 0, markerFoot)); err != nil {
+	if err := vw.write(marker(1, markerFoot)); err != nil {
 		return err
 	}
 	if err := vw.write(header(capacity, uint64(len(desc)/sector), gdOffset)); err != nil {
 		return err
 	}
-	return vw.write(marker(0, 0, markerEOS))
+	return vw.write(marker(0, markerEOS))
 }
 
 func allZero(b []byte) bool {

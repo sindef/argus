@@ -134,9 +134,18 @@ func (m *Manager) poll(ctx context.Context, n Node) {
 		if n.Call(ctx, "GET", "/api/metrics", nil, &sample) == nil {
 			m.tel.record(n.Name, info.CPUCores, sample)
 		}
-		n.Call(ctx, "GET", "/api/networks", nil, &st.Networks)
-		n.Call(ctx, "GET", "/api/images", nil, &st.Images)
-		n.Call(ctx, "GET", "/api/host/network", nil, &st.HostNet)
+		var nets []kube.Network
+		if n.Call(ctx, "GET", "/api/networks", nil, &nets) == nil {
+			st.Networks = nets
+		}
+		var imgs []kube.Image
+		if n.Call(ctx, "GET", "/api/images", nil, &imgs) == nil {
+			st.Images = imgs
+		}
+		var hn HostNetwork
+		if n.Call(ctx, "GET", "/api/host/network", nil, &hn) == nil {
+			st.HostNet = hn
+		}
 	}
 	m.inv.mu.Lock()
 	m.inv.nodes[n.Name] = st

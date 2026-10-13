@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -171,11 +172,14 @@ func hostNet(ctx context.Context) (HostNet, error) {
 	if err := json.Unmarshal([]byte(out), &links); err != nil {
 		return hn, err
 	}
-	routes, _ := run(ctx, "ip", "-j", "-4", "route", "show", "default")
-	var defs, defs6 []struct{ Gateway, Dev string }
-	json.Unmarshal([]byte(routes), &defs)
-	routes6, _ := run(ctx, "ip", "-j", "-6", "route", "show", "default")
-	json.Unmarshal([]byte(routes6), &defs6)
+	defs, err := defaultRoutes(ctx, "-4")
+	if err != nil {
+		return hn, err
+	}
+	defs6, err := defaultRoutes(ctx, "-6")
+	if err != nil {
+		return hn, err
+	}
 	mgmt := ""
 	if len(defs) > 0 {
 		hn.Gateway, mgmt = defs[0].Gateway, defs[0].Dev
@@ -231,7 +235,7 @@ func hostNet(ctx context.Context) (HostNet, error) {
 			}
 		}
 		if b, err := os.ReadFile(filepath.Join("/sys/class/net", l.Ifname, "speed")); err == nil {
-			fmt.Sscanf(string(b), "%d", &i.Speed)
+			i.Speed, _ = strconv.Atoi(strings.TrimSpace(string(b)))
 		}
 		for _, a := range l.AddrInfo {
 			cidr := fmt.Sprintf("%s/%d", a.Local, a.Prefixlen)
@@ -471,7 +475,9 @@ func BridgePorts(ctx context.Context, name string) ([]BridgePort, error) {
 	}
 	var fdb []struct{ MAC, Ifname, State string }
 	if out, err := run(ctx, "bridge", "-j", "fdb", "show", "br", name); err == nil {
-		json.Unmarshal([]byte(out), &fdb)
+		if err := json.Unmarshal([]byte(out), &fdb); err != nil {
+			return nil, fmt.Errorf("bridge fdb: %w", err)
+		}
 	}
 	var vlans []struct {
 		Ifname string
@@ -481,7 +487,9 @@ func BridgePorts(ctx context.Context, name string) ([]BridgePort, error) {
 		}
 	}
 	if out, err := run(ctx, "bridge", "-j", "vlan", "show"); err == nil {
-		json.Unmarshal([]byte(out), &vlans)
+		if err := json.Unmarshal([]byte(out), &vlans); err != nil {
+			return nil, fmt.Errorf("bridge vlan: %w", err)
+		}
 	}
 	netns := map[int]string{}
 	if out, err := run(ctx, "ip", "-j", "netns", "list-id"); err == nil {
@@ -489,7 +497,9 @@ func BridgePorts(ctx context.Context, name string) ([]BridgePort, error) {
 			NSID int
 			Name string
 		}
-		json.Unmarshal([]byte(out), &ids)
+		if err := json.Unmarshal([]byte(out), &ids); err != nil {
+			return nil, fmt.Errorf("netns list: %w", err)
+		}
 		for _, id := range ids {
 			netns[id.NSID] = id.Name
 		}
@@ -501,9 +511,10 @@ func BridgePorts(ctx context.Context, name string) ([]BridgePort, error) {
 		}
 		ns := netns[*l.NetnsID]
 		if _, ok := inNS[ns]; !ok {
-			out, _ := run(ctx, "ip", "-n", ns, "-j", "link", "show")
 			var ls []ipLink
-			json.Unmarshal([]byte(out), &ls)
+			if out, err := run(ctx, "ip", "-n", ns, "-j", "link", "show"); err == nil && json.Unmarshal([]byte(out), &ls) != nil {
+				ls = nil
+			}
 			inNS[ns] = ls
 		}
 		for _, peer := range inNS[ns] {
@@ -588,7 +599,9 @@ func (s *Server) deleteBridge(ctx context.Context, name string) error {
 		return err
 	}
 	for _, a := range affected {
-		run(ctx, "ip", "link", "del", a)
+		if _, err := run(ctx, "ip", "link", "del", a); err != nil {
+			log.Printf("delete bridge %s: %v", name, err)
+		}
 	}
 	return nil
 }
@@ -690,7 +703,7 @@ func readMgmt() ([]string, bool) {
 func LoadFirewall(ctx context.Context) error {
 	names, ok := readMgmt()
 	if !ok {
-		run(ctx, "nft", "delete", "table", "inet", "argus")
+		_, _ = run(ctx, "nft", "delete", "table", "inet", "argus")
 		return nil
 	}
 	allow := []string{`"lo"`, `"cni0"`}
@@ -782,28 +795,48 @@ func (s *Server) apply(ctx context.Context, desc string, write map[string]string
 	}
 	for path, body := range write {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			Rollback(ctx)
-			return err
+			return errors.Join(err, Rollback(ctx))
 		}
 		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-			Rollback(ctx)
-			return err
+			return errors.Join(err, Rollback(ctx))
 		}
 	}
 	for _, path := range remove {
 		os.Remove(path)
 	}
 	if err := LoadFirewall(ctx); err != nil {
-		Rollback(ctx)
-		return err
+		return errors.Join(err, Rollback(ctx))
 	}
 	if len(affected) == 0 {
 		return nil
 	}
 	for _, c := range created {
-		run(ctx, "ip", "link", "del", c)
+		_, _ = run(ctx, "ip", "link", "del", c)
 	}
 	return reloadNetwork(ctx, affected)
+}
+
+func defaultRoutes(ctx context.Context, family string) ([]struct{ Gateway, Dev string }, error) {
+	if family == "-6" && !ipv6Enabled() {
+		return nil, nil
+	}
+	out, err := run(ctx, "ip", "-j", family, "route", "show", "default")
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(out) == "" {
+		return nil, nil
+	}
+	var routes []struct{ Gateway, Dev string }
+	if err := json.Unmarshal([]byte(out), &routes); err != nil {
+		return nil, fmt.Errorf("default routes: %w", err)
+	}
+	return routes, nil
+}
+
+func ipv6Enabled() bool {
+	_, err := os.Stat("/proc/net/if_inet6")
+	return err == nil
 }
 
 func reloadNetwork(ctx context.Context, ifaces []string) error {
@@ -818,7 +851,9 @@ func reloadNetwork(ctx context.Context, ifaces []string) error {
 			}
 			time.Sleep(200 * time.Millisecond)
 		}
-		run(ctx, "networkctl", "reconfigure", i)
+		if _, err := run(ctx, "networkctl", "reconfigure", i); err != nil {
+			log.Printf("network: %v", err)
+		}
 	}
 	return nil
 }
@@ -827,7 +862,7 @@ func Confirm(ctx context.Context) error {
 	if readPending() == nil {
 		return errors.New("nothing to confirm")
 	}
-	if out, err := run(ctx, "systemctl", "stop", rollbackUnit+".timer"); err != nil && !strings.Contains(out, "not loaded") {
+	if _, err := run(ctx, "systemctl", "stop", rollbackUnit+".timer"); err != nil && !strings.Contains(err.Error(), "not loaded") {
 		return fmt.Errorf("could not cancel the rollback timer: %w", err)
 	}
 	os.RemoveAll(snapshotDir)
@@ -839,7 +874,7 @@ func Rollback(ctx context.Context) error {
 	if p == nil {
 		return errors.New("nothing to roll back")
 	}
-	run(ctx, "systemctl", "stop", rollbackUnit+".timer")
+	_, _ = run(ctx, "systemctl", "stop", rollbackUnit+".timer")
 	var errs []error
 	current, _ := filepath.Glob(filepath.Join(networkDir, managedGlob))
 	for _, f := range current {
@@ -868,7 +903,7 @@ func Rollback(ctx context.Context) error {
 		ifaces = append(ifaces, strings.TrimSuffix(base, filepath.Ext(base)))
 	}
 	for _, c := range p.Created {
-		run(ctx, "ip", "link", "del", c)
+		_, _ = run(ctx, "ip", "link", "del", c)
 	}
 	errs = append(errs, reloadNetwork(ctx, ifaces))
 	if err := errors.Join(errs...); err != nil {

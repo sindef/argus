@@ -102,8 +102,9 @@ func (s *Server) apiSnapshotExport(w http.ResponseWriter, r *http.Request) {
 	}
 	ex, err := s.kube.ExportVMSnapshot(r.Context(), ns, name, req.BaseURL, string(s.caPEM))
 	if err != nil {
-		s.kube.DeleteExport(context.Background(), ns, name)
-		apiError(w, r, http.StatusConflict, err)
+		cctx, cancel := cleanupCtx()
+		defer cancel()
+		apiError(w, r, http.StatusConflict, errors.Join(err, s.kube.DeleteExport(cctx, ns, name)))
 		return
 	}
 	writeJSON(w, ex)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"path"
@@ -92,7 +93,9 @@ func setBackupTarget(ctx context.Context, t string) error {
 			return err
 		}
 		err := probeWrite(probe)
-		run(ctx, "umount", probe)
+		if _, uerr := run(ctx, "umount", probe); uerr != nil {
+			log.Printf("backup target probe: %v", uerr)
+		}
 		if err != nil {
 			return fmt.Errorf("backup target is not writable: %w", err)
 		}

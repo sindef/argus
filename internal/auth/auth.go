@@ -145,7 +145,9 @@ func (s *Store) PersistSessions(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			s.flushSessions(ctx)
+			if err := s.flushSessions(ctx); err != nil {
+				log.Printf("sessions: %v", err)
+			}
 		}
 	}
 }

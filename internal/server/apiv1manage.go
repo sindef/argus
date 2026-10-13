@@ -103,7 +103,10 @@ func (s *Server) v1UpdateVM(w http.ResponseWriter, r *http.Request) {
 			apiError(w, r, http.StatusConflict, err)
 			return
 		}
-		n.Call(ctx, http.MethodGet, manager.APIPath("/api/vms/%s/%s", ns, name), nil, &vm)
+		if err := n.Call(ctx, http.MethodGet, manager.APIPath("/api/vms/%s/%s", ns, name), nil, &vm); err != nil {
+			apiError(w, r, http.StatusBadGateway, err)
+			return
+		}
 	}
 	go s.manager.Refresh(n.Name)
 	writeJSON(w, toV1VM(n.Name, vm))

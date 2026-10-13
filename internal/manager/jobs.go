@@ -105,7 +105,9 @@ func (c *Manager) update(j *Job, status string, done, failed bool) {
 	c.mu.Lock()
 	j.Status, j.Done, j.Failed = status, done, failed
 	c.mu.Unlock()
-	c.saveJobs()
+	if err := c.saveJobs(); err != nil {
+		log.Printf("jobs: %v", err)
+	}
 }
 
 func (c *Manager) saveJobs() error {
@@ -154,7 +156,9 @@ func (c *Manager) loadJobs(ctx context.Context) {
 	c.mu.Lock()
 	c.jobs = jobs
 	c.mu.Unlock()
-	c.saveJobs()
+	if err := c.saveJobs(); err != nil {
+		log.Printf("jobs: %v", err)
+	}
 }
 
 func (c *Manager) Resolve(ctx context.Context, org, id string) error {
@@ -191,7 +195,7 @@ func (c *Manager) Resolve(ctx context.Context, org, id string) error {
 	}
 	source, err := vmState(ctx, src, ns, j.VM)
 	if err != nil {
-		return fmt.Errorf("cannot confirm the source: %v", err)
+		return fmt.Errorf("cannot confirm the source: %w", err)
 	}
 	if j.Live && !source.Running {
 		return fmt.Errorf("%s is not running on %s; check both hosts manually", j.VM, j.From)
@@ -200,14 +204,14 @@ func (c *Manager) Resolve(ctx context.Context, org, id string) error {
 		return fmt.Errorf("%s is running on %s; check both hosts manually", j.VM, j.To)
 	}
 	op := map[string]string{"operation": j.ID}
-	src.do(ctx, http.MethodPost, vmPathIn(ns, j.VM, "migration-cleanup"), op, nil)
-	dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, j.VM, "migration-cleanup"), op, nil)
+	logCleanup("migration of "+j.VM+" on "+src.Name, src.do(ctx, http.MethodPost, vmPathIn(ns, j.VM, "migration-cleanup"), op, nil))
+	logCleanup("migration of "+j.VM+" on "+dst.Name, dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, j.VM, "migration-cleanup"), op, nil))
 	if err := dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, j.VM, "abort"), op, nil); err != nil {
 		return err
 	}
 	if !j.Live {
-		dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, j.VM, "imported"), nil, nil)
-		src.do(ctx, http.MethodPost, vmPathIn(ns, j.VM, "unexport"), nil, nil)
+		logCleanup("import of "+j.VM+" on "+dst.Name, dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, j.VM, "imported"), nil, nil))
+		logCleanup("export of "+j.VM+" on "+src.Name, src.do(ctx, http.MethodPost, vmPathIn(ns, j.VM, "unexport"), nil, nil))
 	}
 	c.mu.Lock()
 	j.Attention = false

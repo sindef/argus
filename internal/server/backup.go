@@ -240,7 +240,7 @@ func (s *Server) snapshotDue(ctx context.Context, ns, name string, p BackupPolic
 	}
 	for i, sn := range auto {
 		if i >= max(p.SnapKeep, 1) && sn.Name != "" {
-			s.kube.DeleteSnapshot(ctx, ns, sn.Name)
+			logCleanup("snapshot "+sn.Name, s.kube.DeleteSnapshot(ctx, ns, sn.Name))
 		}
 	}
 }
@@ -315,7 +315,7 @@ func (s *Server) backupVM(ctx context.Context, ns, name string, p BackupPolicy) 
 	}
 	for i, b := range bs {
 		if i >= max(p.BackupKeep, 1) {
-			st.Delete(ctx, b.VM+"/"+b.Stamp)
+			logCleanup("backup "+b.VM+"/"+b.Stamp, st.Delete(ctx, b.VM+"/"+b.Stamp))
 		}
 	}
 	return nil
@@ -331,7 +331,11 @@ func (s *Server) offsite(ctx context.Context, st backupStore, ns, name string) e
 		return err
 	}
 	ex, err := s.kube.BackupExport(ctx, ns, name)
-	defer s.kube.DeleteBackupExport(context.Background(), ns, name)
+	defer func() {
+		cctx, cancel := cleanupCtx()
+		defer cancel()
+		logCleanup("backup export of "+name, s.kube.DeleteBackupExport(cctx, ns, name))
+	}()
 	if err != nil {
 		return err
 	}
@@ -340,8 +344,9 @@ func (s *Server) offsite(ctx context.Context, st backupStore, ns, name string) e
 	meta := backupMeta{Namespace: ns, Spec: ex.Spec, Created: time.Now()}
 	man := hostd.Manifest{Files: map[string]hostd.ManifestFile{}}
 	fail := func(err error) error {
-		st.Delete(context.Background(), rel)
-		return err
+		cctx, cancel := cleanupCtx()
+		defer cancel()
+		return errors.Join(err, st.Delete(cctx, rel))
 	}
 	templates, _, _ := unstructured.NestedSlice(ex.Spec, "dataVolumeTemplates")
 	for _, t := range templates {
@@ -514,7 +519,9 @@ func (s *Server) watchRestore(token string, job restoreJob) {
 		disks, _ := s.kube.DiskStatus(ctx, job.Namespace, job.Target)
 		return disks, ctx.Err()
 	}, nil)
-	s.kube.FinishImport(context.Background(), job.Namespace, job.Target)
+	cctx, cancel := cleanupCtx()
+	logCleanup("restore of "+job.Target, s.kube.FinishImport(cctx, job.Namespace, job.Target))
+	cancel()
 	switch {
 	case errors.Is(err, errRestoreAborted):
 		if err := s.kube.DeleteVM(context.Background(), job.Namespace, job.Target); err != nil {
@@ -707,7 +714,10 @@ func (s *Server) apiVMBackups(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiVMBackupOp(w http.ResponseWriter, r *http.Request) {
 	var req map[string]string
-	json.NewDecoder(r.Body).Decode(&req)
+	if err := decodeJSON(r.Body, &req); err != nil {
+		apiError(w, r, http.StatusBadRequest, err)
+		return
+	}
 	if err := s.backupOp(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.PathValue("op"), func(k string) string { return req[k] }); err != nil {
 		apiError(w, r, http.StatusConflict, err)
 		return
@@ -780,7 +790,11 @@ func (s *Server) streamDisk(w http.ResponseWriter, r *http.Request, ns, name, di
 		s.backups.mu.Unlock()
 	}()
 	ex, err := s.kube.BackupExport(r.Context(), ns, name)
-	defer s.kube.DeleteBackupExport(context.Background(), ns, name)
+	defer func() {
+		cctx, cancel := cleanupCtx()
+		defer cancel()
+		logCleanup("backup export of "+name, s.kube.DeleteBackupExport(cctx, ns, name))
+	}()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return

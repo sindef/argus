@@ -219,7 +219,9 @@ func (l localOps) FLRFile(w http.ResponseWriter, r *http.Request, owner, id, par
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": path.Base(file)}))
-	io.Copy(w, resp.Body)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		log.Printf("stream %s: %v", r.URL.Path, err)
+	}
 }
 
 func (l localOps) FLRClose(ctx context.Context, owner, id string) error {
@@ -264,7 +266,9 @@ func (o remoteOps) FLRFile(w http.ResponseWriter, r *http.Request, owner, id, pa
 	for _, k := range []string{"Content-Type", "Content-Length", "Content-Disposition"} {
 		w.Header().Set(k, resp.Header.Get(k))
 	}
-	io.Copy(w, resp.Body)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		log.Printf("stream %s: %v", r.URL.Path, err)
+	}
 }
 
 func (o remoteOps) FLRClose(ctx context.Context, owner, id string) error {

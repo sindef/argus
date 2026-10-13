@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"argus/internal/auth"
+	"argus/internal/manager"
 )
 
 var validName = regexp.MustCompile(`^[a-z][a-z0-9._-]{0,31}$`)
@@ -250,7 +251,12 @@ func (s *Server) setScopes(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) directoryLogin(r *http.Request, store *auth.Store) (auth.User, bool, error) {
 	org, err := s.manager.Org(r.Context(), r.FormValue("org"))
-	if err != nil || !org.Directory() {
+	switch {
+	case errors.Is(err, manager.ErrOrgNotFound):
+		return auth.User{}, false, nil
+	case err != nil:
+		return auth.User{}, false, err
+	case !org.Directory():
 		return auth.User{}, false, nil
 	}
 	name := strings.ToLower(strings.TrimSpace(r.FormValue("username")))

@@ -86,7 +86,12 @@ type reader struct {
 func Decrypt(r io.Reader, passphrase string) (io.Reader, bool, error) {
 	br := bufio.NewReaderSize(r, chunk+tagSize)
 	hdr, err := br.Peek(headerSize)
-	if err != nil || !bytes.Equal(hdr[:8], streamMagic) {
+	switch {
+	case errors.Is(err, io.EOF):
+		return br, false, nil
+	case err != nil:
+		return nil, false, err
+	case !bytes.Equal(hdr[:8], streamMagic):
 		return br, false, nil
 	}
 	gcm, err := streamCipher(passphrase, hdr[8:24])
@@ -94,7 +99,9 @@ func Decrypt(r io.Reader, passphrase string) (io.Reader, bool, error) {
 		return nil, true, err
 	}
 	prefix := bytes.Clone(hdr[24:])
-	br.Discard(headerSize)
+	if _, err := br.Discard(headerSize); err != nil {
+		return nil, true, err
+	}
 	return &reader{r: br, gcm: gcm, prefix: prefix}, true, nil
 }
 

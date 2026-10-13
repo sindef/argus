@@ -1,0 +1,28 @@
+version: "2"
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - errorlint
+    - gocritic
+    - misspell
+    - nilerr
+    - unparam
+  settings:
+    errcheck:
+      exclude-functions:
+        - (net/http.ResponseWriter).Write
+        - (*net/http.Request).ParseForm
+        - (*encoding/json.Encoder).Encode
+        - io.WriteString
+        - encoding/xml.EscapeText
+        - k8s.io/apimachinery/pkg/apis/meta/v1/unstructured.SetNestedField
+        - k8s.io/apimachinery/pkg/apis/meta/v1/unstructured.SetNestedSlice
+        - k8s.io/apimachinery/pkg/apis/meta/v1/unstructured.SetNestedMap
+        - k8s.io/apimachinery/pkg/apis/meta/v1/unstructured.SetNestedStringSlice
+  exclusions:
+    rules:
+      - linters: [errcheck]
+        text: "Error return value of `[^`]*\\.(Close|Remove|RemoveAll|Rollback)` is not checked"
+      - path: _test\.go
+        linters: [errcheck, bodyclose]

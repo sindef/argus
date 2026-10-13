@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -54,12 +55,19 @@ type passthrough struct {
 	USB []string `json:"usb"`
 }
 
-func readPassthrough() passthrough {
+func readPassthrough() (passthrough, error) {
 	var p passthrough
-	if b, err := os.ReadFile(passthroughFile); err == nil {
-		json.Unmarshal(b, &p)
+	b, err := os.ReadFile(passthroughFile)
+	if errors.Is(err, fs.ErrNotExist) {
+		return p, nil
 	}
-	return p
+	if err == nil {
+		err = json.Unmarshal(b, &p)
+	}
+	if err != nil {
+		return p, fmt.Errorf("%s: %w", passthroughFile, err)
+	}
+	return p, nil
 }
 
 func sysfs(path string) string {
@@ -136,7 +144,10 @@ func ListDevices(ctx context.Context) (Devices, error) {
 	if err != nil {
 		return out, err
 	}
-	enabled := readPassthrough()
+	enabled, err := readPassthrough()
+	if err != nil {
+		return out, err
+	}
 	names := pciNames()
 	entries, _ := os.ReadDir(pciDir)
 	for _, e := range entries {
@@ -194,7 +205,10 @@ func bindVFIO(ctx context.Context, addr string, on bool) error {
 }
 
 func SetPassthrough(ctx context.Context, kind, id string, on bool) error {
-	p := readPassthrough()
+	p, err := readPassthrough()
+	if err != nil {
+		return err
+	}
 	switch kind {
 	case "pci":
 		if !validPCI.MatchString(id) {
@@ -239,7 +253,11 @@ func toggle(list []string, id string, on bool) []string {
 
 func ApplyPassthrough(ctx context.Context) error {
 	var errs []error
-	for _, addr := range readPassthrough().PCI {
+	p, err := readPassthrough()
+	if err != nil {
+		return err
+	}
+	for _, addr := range p.PCI {
 		errs = append(errs, bindVFIO(ctx, addr, true))
 	}
 	return errors.Join(errs...)

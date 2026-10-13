@@ -144,7 +144,7 @@ func applyFirewall(ctx context.Context, vms []FWVM) error {
 	}
 	f.Close()
 	if out, err := exec.CommandContext(ctx, "nft", "-f", f.Name()).CombinedOutput(); err != nil {
-		return fmt.Errorf("nft: %v: %s", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("nft: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
