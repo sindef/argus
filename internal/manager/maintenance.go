@@ -430,10 +430,10 @@ func (c *Manager) cycleHost(ctx context.Context, n Node, image string, shutdown 
 	return c.leave(ctx, sub, n)
 }
 
-func (c *Manager) LeastLoaded(org string) (Node, error) {
+func LeastLoaded(states []NodeState) (Node, error) {
 	var best Node
 	var bestFree int64 = -1
-	for _, st := range c.Inventory(org) {
+	for _, st := range states {
 		if !st.Reachable() || st.Node.Maintenance {
 			continue
 		}

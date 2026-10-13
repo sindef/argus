@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"argus/internal/auth"
 	"argus/internal/hostd"
 	"argus/internal/hostui"
 	"argus/internal/manager"
@@ -129,7 +130,7 @@ func (s *Server) managerNewVM(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if host == "auto" {
-		n, err := s.manager.LeastLoaded(ui.Session(r).Org)
+		n, err := manager.LeastLoaded(slices.DeleteFunc(s.inventory(r), func(st manager.NodeState) bool { return !s.can(r, auth.VMProvision, st.Node, "") }))
 		if err != nil {
 			ui.Flash(w, r, err)
 			return
