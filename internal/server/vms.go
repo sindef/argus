@@ -124,7 +124,7 @@ func (s *Server) vmDrawer(w http.ResponseWriter, r *http.Request) {
 func (s *Server) bulk(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	act, sel := r.PathValue("action"), r.Form["sel"]
-	if !granted(r, actionPrivilege(act)) {
+	if !s.permits(r, actionPrivilege(act)) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -137,10 +137,6 @@ func (s *Server) bulk(w http.ResponseWriter, r *http.Request) {
 		flash(w, r, errors.New("select exactly one VM"))
 		return
 	}
-	if !kube.ValidAction(act) && act != "snapshot" && act != "delete" && !single {
-		http.Error(w, "unknown action", http.StatusBadRequest)
-		return
-	}
 	prompt := strings.TrimSpace(r.Header.Get("HX-Prompt"))
 	var errs []string
 	for _, v := range sel {
@@ -148,23 +144,7 @@ func (s *Server) bulk(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			continue
 		}
-		var err error
-		switch act {
-		case "snapshot":
-			_, err = s.kube.CreateSnapshot(r.Context(), ns, name)
-		case "delete":
-			err = s.kube.DeleteVM(r.Context(), ns, name)
-		case "rename":
-			err = s.kube.Rename(r.Context(), ns, name, prompt)
-		case "clone", "template-copy":
-			if !validObject.MatchString(prompt) {
-				err = errors.New("invalid name")
-			} else {
-				err = s.kube.Clone(r.Context(), ns, name, prompt, act == "template-copy")
-			}
-		default:
-			err = s.kube.Action(r.Context(), ns, name, act)
-		}
+		err := vmAction(r.Context(), s.ops(r), ns, name, act, prompt)
 		if err != nil {
 			errs = append(errs, err.Error())
 			continue
@@ -175,20 +155,6 @@ func (s *Server) bulk(w http.ResponseWriter, r *http.Request) {
 		flash(w, r, errors.New(strings.Join(errs, "; ")))
 		return
 	}
-	w.Header().Set("HX-Refresh", "true")
-}
-
-func (s *Server) action(w http.ResponseWriter, r *http.Request) {
-	ns, name, act := r.PathValue("ns"), r.PathValue("name"), r.PathValue("action")
-	if !kube.ValidAction(act) {
-		http.Error(w, "unknown action", http.StatusBadRequest)
-		return
-	}
-	if err := s.kube.Action(r.Context(), ns, name, act); err != nil {
-		flash(w, r, err)
-		return
-	}
-	log.Printf("%s: %s %s/%s", session(r).User, act, ns, name)
 	w.Header().Set("HX-Refresh", "true")
 }
 
@@ -334,16 +300,6 @@ func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {
 	redirect(w, r, "/vms/"+kube.Namespace+"/"+spec.Name)
 }
 
-func (s *Server) deleteVM(w http.ResponseWriter, r *http.Request) {
-	ns, name := r.PathValue("ns"), r.PathValue("name")
-	if err := s.kube.DeleteVM(r.Context(), ns, name); err != nil {
-		flash(w, r, err)
-		return
-	}
-	log.Printf("%s: delete vm %s/%s", session(r).User, ns, name)
-	redirect(w, r, "/")
-}
-
 func intField(r *http.Request, field string, min, max int, dst *int) error {
 	n, err := strconv.Atoi(r.FormValue(field))
 	if err != nil || n < min || n > max {
@@ -387,47 +343,6 @@ func (s *Server) newDisk(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.render(w, r, "vms.html", "disk-modal", map[string]any{"VM": vm, "Volumes": free, "Pools": s.poolChoices(r.Context())})
-}
-
-func (s *Server) removeDisk(w http.ResponseWriter, r *http.Request) {
-	ns, name, disk := r.PathValue("ns"), r.PathValue("name"), r.PathValue("disk")
-	if err := s.kube.RemoveDisk(r.Context(), ns, name, disk); err != nil {
-		flash(w, r, err)
-		return
-	}
-	log.Printf("%s: remove disk %s from %s/%s", session(r).User, disk, ns, name)
-	w.Header().Set("HX-Refresh", "true")
-}
-
-func (s *Server) snapshot(w http.ResponseWriter, r *http.Request) {
-	ns, name := r.PathValue("ns"), r.PathValue("name")
-	snap, err := s.kube.CreateSnapshot(r.Context(), ns, name)
-	if err != nil {
-		flash(w, r, err)
-		return
-	}
-	log.Printf("%s: snapshot %s/%s as %s", session(r).User, ns, name, snap)
-	w.Header().Set("HX-Refresh", "true")
-}
-
-func (s *Server) restoreSnapshot(w http.ResponseWriter, r *http.Request) {
-	ns, name, snap := r.PathValue("ns"), r.PathValue("name"), r.PathValue("snap")
-	if err := s.kube.RestoreSnapshot(r.Context(), ns, name, snap); err != nil {
-		flash(w, r, err)
-		return
-	}
-	log.Printf("%s: restore %s/%s from %s", session(r).User, ns, name, snap)
-	w.Header().Set("HX-Refresh", "true")
-}
-
-func (s *Server) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
-	ns, snap := r.PathValue("ns"), r.PathValue("snap")
-	if err := s.kube.DeleteSnapshot(r.Context(), ns, snap); err != nil {
-		flash(w, r, err)
-		return
-	}
-	log.Printf("%s: delete snapshot %s/%s", session(r).User, ns, snap)
-	w.Header().Set("HX-Refresh", "true")
 }
 
 func (s *Server) eventsPage(w http.ResponseWriter, r *http.Request) {
@@ -532,28 +447,6 @@ func (s *Server) organize(ctx context.Context, ns, name, tagList, folder, attrs 
 		return errors.New("at most 32 attributes")
 	}
 	return s.kube.SetTags(ctx, ns, name, tags, folder, m)
-}
-
-func (s *Server) setTags(w http.ResponseWriter, r *http.Request) {
-	if err := s.organize(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.FormValue("tags"), r.FormValue("folder"), r.FormValue("attributes")); err != nil {
-		flash(w, r, err)
-		return
-	}
-	w.Header().Set("HX-Refresh", "true")
-}
-
-func (s *Server) apiSetTags(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Tags, Folder, Attributes string }
-	if err := decodeJSON(r.Body, &req); err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
-		return
-	}
-	err := s.organize(r.Context(), r.PathValue("ns"), r.PathValue("name"), req.Tags, req.Folder, req.Attributes)
-	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
-		return
-	}
-	writeJSON(w, map[string]string{})
 }
 
 func (s *Server) hardwareModal(w http.ResponseWriter, r *http.Request) {

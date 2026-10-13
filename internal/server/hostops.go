@@ -103,6 +103,15 @@ type hostOps interface {
 	MountMedia(ctx context.Context, ns, name, contentType string, size int64, body io.Reader) error
 	EjectMedia(ctx context.Context, ns, name string) error
 	DeviceOp(ctx context.Context, req deviceReq) error
+	Power(ctx context.Context, ns, name, act string) error
+	DeleteVM(ctx context.Context, ns, name string) error
+	SnapshotOp(ctx context.Context, ns, name, snap, op string) error
+	Meta(ctx context.Context, ns, name, op string, req wire.MetaRequest) error
+	RemoveDisk(ctx context.Context, ns, name, disk string) error
+	MoveDisk(ctx context.Context, ns, name string, req wire.MoveDiskRequest) error
+	SetTags(ctx context.Context, ns, name string, req wire.TagsRequest) error
+	BackupOp(ctx context.Context, ns, name, op string, form map[string]string) error
+	ScheduleOp(ctx context.Context, ns, name, op string, form map[string]string) error
 }
 
 type deviceReq struct {
@@ -572,6 +581,10 @@ func (s *Server) apiOp(w http.ResponseWriter, r *http.Request, in any, fn func()
 		}
 	}
 	out, err := fn()
+	if errors.Is(err, errUnknownAction) {
+		apiError(w, r, http.StatusBadRequest, err)
+		return
+	}
 	if apierrors.IsNotFound(err) {
 		apiError(w, r, http.StatusNotFound, err)
 		return

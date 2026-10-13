@@ -95,16 +95,3 @@ func (s *Server) managerVolumeOp(w http.ResponseWriter, r *http.Request) {
 	go s.manager.Refresh(n.Name)
 	w.Header().Set("HX-Refresh", "true")
 }
-
-func (s *Server) managerRemoveDisk(w http.ResponseWriter, r *http.Request) {
-	n, err := s.orgNode(r)
-	if err == nil {
-		err = n.Call(r.Context(), http.MethodPost, manager.APIPath("/api/vms/%s/%s/disks/%s/", r.PathValue("ns"), r.PathValue("name"), r.PathValue("disk"))+"delete", nil, nil)
-	}
-	if err != nil {
-		flash(w, r, err)
-		return
-	}
-	go s.manager.Refresh(n.Name)
-	w.Header().Set("HX-Refresh", "true")
-}

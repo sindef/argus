@@ -162,15 +162,6 @@ func (s *Server) apiVolumeOp(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{})
 }
 
-func (s *Server) apiRemoveDisk(w http.ResponseWriter, r *http.Request) {
-	if err := s.kube.RemoveDisk(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.PathValue("disk")); err != nil {
-		apiError(w, r, http.StatusConflict, err)
-		return
-	}
-	log.Printf("%s: remove disk %s from %s/%s", session(r).User, r.PathValue("disk"), r.PathValue("ns"), r.PathValue("name"))
-	writeJSON(w, map[string]string{})
-}
-
 func (s *Server) disksPage(w http.ResponseWriter, r *http.Request) {
 	ds, err := s.ops(r).Disks(r.Context())
 	s.render(w, r, "disks.html", "layout", map[string]any{"Nav": "disks", "Disks": ds, "Error": errText(err)})
@@ -259,26 +250,4 @@ func poolNames(pools []kube.Pool) map[string]string {
 		m[p.StorageClass] = p.Name
 	}
 	return m
-}
-
-func (s *Server) moveDiskForm(w http.ResponseWriter, r *http.Request) {
-	if err := s.moveDisk(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.FormValue("disk"), r.FormValue("pool")); err != nil {
-		flash(w, r, err)
-		return
-	}
-	log.Printf("%s: move disk %s of %s to %s", session(r).User, r.FormValue("disk"), r.PathValue("name"), r.FormValue("pool"))
-	w.Header().Set("HX-Refresh", "true")
-}
-
-func (s *Server) apiMoveDisk(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Disk, Pool string }
-	if err := decodeJSON(r.Body, &req); err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
-		return
-	}
-	if err := s.moveDisk(r.Context(), r.PathValue("ns"), r.PathValue("name"), req.Disk, req.Pool); err != nil {
-		apiError(w, r, http.StatusConflict, err)
-		return
-	}
-	writeJSON(w, map[string]string{})
 }

@@ -86,30 +86,6 @@ func (s *Server) apiDisks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, st)
 }
 
-func (s *Server) apiAction(w http.ResponseWriter, r *http.Request) {
-	ns, name, act := r.PathValue("ns"), r.PathValue("name"), r.PathValue("action")
-	if !kube.ValidAction(act) {
-		apiError(w, r, http.StatusBadRequest, errors.New("unknown action"))
-		return
-	}
-	if err := s.kube.Action(r.Context(), ns, name, act); err != nil {
-		apiError(w, r, http.StatusConflict, err)
-		return
-	}
-	log.Printf("%s: %s %s/%s", session(r).User, act, ns, name)
-	writeJSON(w, map[string]string{})
-}
-
-func (s *Server) apiDelete(w http.ResponseWriter, r *http.Request) {
-	ns, name := r.PathValue("ns"), r.PathValue("name")
-	if err := s.kube.DeleteVM(r.Context(), ns, name); err != nil {
-		apiError(w, r, http.StatusConflict, err)
-		return
-	}
-	log.Printf("%s: delete vm %s/%s", session(r).User, ns, name)
-	writeJSON(w, map[string]string{})
-}
-
 func (s *Server) apiExport(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
 	var req wire.ExportRequest
@@ -350,52 +326,6 @@ func (s *Server) apiSnapshots(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, snaps)
-}
-
-func (s *Server) apiSnapshotOp(w http.ResponseWriter, r *http.Request) {
-	ns, name, snap := r.PathValue("ns"), r.PathValue("name"), r.PathValue("snap")
-	var err error
-	switch op := r.PathValue("op"); {
-	case snap == "":
-		_, err = s.kube.CreateSnapshot(r.Context(), ns, name)
-	case op == "restore":
-		err = s.kube.RestoreSnapshot(r.Context(), ns, name, snap)
-	case op == "delete":
-		err = s.kube.DeleteSnapshot(r.Context(), ns, snap)
-	default:
-		err = errors.New("unknown snapshot operation")
-	}
-	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
-		return
-	}
-	log.Printf("%s: snapshot %s on %s/%s", session(r).User, r.PathValue("op"), ns, name)
-	writeJSON(w, map[string]string{})
-}
-
-func (s *Server) apiRenameClone(w http.ResponseWriter, r *http.Request) {
-	ns, name := r.PathValue("ns"), r.PathValue("name")
-	var req wire.MetaRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
-		return
-	}
-	var err error
-	if r.PathValue("op") == "clone" {
-		if !validObject.MatchString(req.Value) {
-			err = errors.New("invalid clone name")
-		} else {
-			err = s.kube.Clone(r.Context(), ns, name, req.Value, req.Template)
-		}
-	} else {
-		err = s.kube.Rename(r.Context(), ns, name, req.Value)
-	}
-	if err != nil {
-		apiError(w, r, http.StatusConflict, err)
-		return
-	}
-	log.Printf("%s: %s %s/%s %s", session(r).User, r.PathValue("op"), ns, name, req.Value)
-	writeJSON(w, map[string]string{})
 }
 
 func (s *Server) apiMetrics(w http.ResponseWriter, r *http.Request) {

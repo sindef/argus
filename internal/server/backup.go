@@ -698,29 +698,6 @@ func (s *Server) apiVMBackups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.vmBackupInfo(r.Context(), r.PathValue("ns"), r.PathValue("name")))
 }
 
-func (s *Server) apiVMBackupOp(w http.ResponseWriter, r *http.Request) {
-	var req map[string]string
-	if err := decodeJSON(r.Body, &req); err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
-		return
-	}
-	if err := s.backupOp(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.PathValue("op"), func(k string) string { return req[k] }); err != nil {
-		apiError(w, r, http.StatusConflict, err)
-		return
-	}
-	log.Printf("%s: backup %s %s/%s", session(r).User, r.PathValue("op"), r.PathValue("ns"), r.PathValue("name"))
-	writeJSON(w, map[string]string{})
-}
-
-func (s *Server) vmBackupForm(w http.ResponseWriter, r *http.Request) {
-	if err := s.backupOp(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.PathValue("op"), r.FormValue); err != nil {
-		flash(w, r, err)
-		return
-	}
-	log.Printf("%s: backup %s %s/%s", session(r).User, r.PathValue("op"), r.PathValue("ns"), r.PathValue("name"))
-	w.Header().Set("HX-Refresh", "true")
-}
-
 func (s *Server) downloadLink(w http.ResponseWriter, r *http.Request) {
 	tok := newToken()
 	path := strings.TrimSuffix(r.URL.Path, "/download")

@@ -106,3 +106,14 @@ func StateOf(status string) HostState {
 	}
 	return HostBusy
 }
+
+type TagsRequest struct {
+	Tags       string `json:"tags"`
+	Folder     string `json:"folder"`
+	Attributes string `json:"attributes"`
+}
+
+type MoveDiskRequest struct {
+	Disk string `json:"disk"`
+	Pool string `json:"pool"`
+}

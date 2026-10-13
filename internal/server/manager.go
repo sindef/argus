@@ -423,62 +423,6 @@ func (s *Server) managerVM(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "manager-vm.html", "layout", data)
 }
 
-func (s *Server) managerVMAction(w http.ResponseWriter, r *http.Request) {
-	n, err := s.orgNode(r)
-	if err != nil {
-		flash(w, r, err)
-		return
-	}
-	ns, name, act := r.PathValue("ns"), r.PathValue("name"), r.PathValue("action")
-	if s.manager.Busy(n.Name, name) {
-		flash(w, r, fmt.Errorf("%s has a migration in progress", name))
-		return
-	}
-	path := manager.APIPath("/api/vms/%s/%s/", ns, name)
-	if !s.can(r, actionPrivilege(act), n, name) {
-		flash(w, r, errors.New("you do not have permission for this action"))
-		return
-	}
-	var body any
-	switch {
-	case kube.ValidAction(act):
-		path += act
-	case act == "delete":
-		path += "delete"
-	case act == "snapshot":
-		path += "snapshots"
-	case act == "rename" || act == "clone":
-		path += "meta/" + act
-		body = map[string]string{"value": strings.TrimSpace(r.Header.Get("HX-Prompt"))}
-	default:
-		http.Error(w, "unknown action", http.StatusBadRequest)
-		return
-	}
-	if err := n.Call(r.Context(), http.MethodPost, path, body, nil); err != nil {
-		flash(w, r, err)
-		return
-	}
-	log.Printf("%s: %s %s/%s on %s", session(r).User, act, ns, name, n.Name)
-	go s.manager.Refresh(n.Name)
-	if act == "delete" {
-		redirect(w, r, "/")
-		return
-	}
-	w.Header().Set("HX-Refresh", "true")
-}
-
-func (s *Server) managerSnapshotOp(w http.ResponseWriter, r *http.Request) {
-	n, err := s.orgNode(r)
-	if err == nil {
-		err = n.Call(r.Context(), http.MethodPost, manager.APIPath("/api/vms/%s/%s/snapshots/%s/%s", r.PathValue("ns"), r.PathValue("name"), r.PathValue("snap"), r.PathValue("op")), nil, nil)
-	}
-	if err != nil {
-		flash(w, r, err)
-		return
-	}
-	w.Header().Set("HX-Refresh", "true")
-}
-
 func (s *Server) managerConsoleWS(w http.ResponseWriter, r *http.Request) {
 	s.record(s.auditUser(session(r).Org, session(r).User), "open console of "+r.PathValue("node")+"/"+r.PathValue("ns")+"/"+r.PathValue("name"), true, "")
 	n, err := s.orgNode(r)
@@ -984,50 +928,6 @@ func (s *Server) managerResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("%s: resolved job %s", session(r).User, r.PathValue("id"))
-	w.Header().Set("HX-Refresh", "true")
-}
-
-func (s *Server) managerBackupOp(w http.ResponseWriter, r *http.Request) {
-	n, err := s.orgNode(r)
-	if err == nil {
-		r.ParseForm()
-		req := map[string]string{}
-		for k := range r.Form {
-			req[k] = r.FormValue(k)
-		}
-		err = n.Call(r.Context(), http.MethodPost, manager.APIPath("/api/vms/%s/%s/backups/%s", r.PathValue("ns"), r.PathValue("name"), r.PathValue("op")), req, nil)
-	}
-	if err != nil {
-		flash(w, r, err)
-		return
-	}
-	log.Printf("%s: backup %s %s on %s", session(r).User, r.PathValue("op"), r.PathValue("name"), n.Name)
-	w.Header().Set("HX-Refresh", "true")
-}
-
-func (s *Server) managerMoveDisk(w http.ResponseWriter, r *http.Request) {
-	n, err := s.orgNode(r)
-	if err == nil {
-		err = n.Call(r.Context(), http.MethodPost, manager.APIPath("/api/vms/%s/%s/disks/move", r.PathValue("ns"), r.PathValue("name")), map[string]string{"disk": r.FormValue("disk"), "pool": r.FormValue("pool")}, nil)
-	}
-	if err != nil {
-		flash(w, r, err)
-		return
-	}
-	log.Printf("%s: move disk %s of %s to %s", session(r).User, r.FormValue("disk"), r.PathValue("name"), r.FormValue("pool"))
-	w.Header().Set("HX-Refresh", "true")
-}
-
-func (s *Server) managerSetTags(w http.ResponseWriter, r *http.Request) {
-	n, err := s.orgNode(r)
-	if err == nil {
-		err = n.Call(r.Context(), http.MethodPost, manager.APIPath("/api/vms/%s/%s/tags", r.PathValue("ns"), r.PathValue("name")), map[string]string{"tags": r.FormValue("tags"), "folder": r.FormValue("folder"), "attributes": r.FormValue("attributes")}, nil)
-	}
-	if err != nil {
-		flash(w, r, err)
-		return
-	}
-	go s.manager.Refresh(n.Name)
 	w.Header().Set("HX-Refresh", "true")
 }
 

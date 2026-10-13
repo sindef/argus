@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log"
-	"net/http"
 	"regexp"
 	"slices"
 	"strconv"
@@ -12,7 +11,6 @@ import (
 	"time"
 
 	"argus/internal/kube"
-	"argus/internal/manager"
 )
 
 type ScheduledTask struct {
@@ -124,44 +122,4 @@ func (s *Server) runSchedules(ctx context.Context, vms []kube.VM, from, to time.
 			s.record("scheduler", "scheduled "+t.Action+" of "+vm.Name, err == nil, errText(err))
 		}
 	}
-}
-
-func (s *Server) apiScheduleOp(w http.ResponseWriter, r *http.Request) {
-	var req map[string]string
-	if err := decodeJSON(r.Body, &req); err != nil {
-		apiError(w, r, http.StatusBadRequest, err)
-		return
-	}
-	if err := s.scheduleOp(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.PathValue("op"), func(k string) string { return req[k] }); err != nil {
-		apiError(w, r, http.StatusConflict, err)
-		return
-	}
-	writeJSON(w, map[string]string{})
-}
-
-func (s *Server) scheduleForm(w http.ResponseWriter, r *http.Request) {
-	if err := s.scheduleOp(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.PathValue("op"), r.FormValue); err != nil {
-		flash(w, r, err)
-		return
-	}
-	log.Printf("%s: schedule %s %s/%s", session(r).User, r.PathValue("op"), r.PathValue("ns"), r.PathValue("name"))
-	w.Header().Set("HX-Refresh", "true")
-}
-
-func (s *Server) managerScheduleOp(w http.ResponseWriter, r *http.Request) {
-	n, err := s.orgNode(r)
-	if err == nil {
-		r.ParseForm()
-		req := map[string]string{}
-		for k := range r.Form {
-			req[k] = r.FormValue(k)
-		}
-		err = n.Call(r.Context(), http.MethodPost, manager.APIPath("/api/vms/%s/%s/schedule/%s", r.PathValue("ns"), r.PathValue("name"), r.PathValue("op")), req, nil)
-	}
-	if err != nil {
-		flash(w, r, err)
-		return
-	}
-	log.Printf("%s: schedule %s %s on %s", session(r).User, r.PathValue("op"), r.PathValue("name"), n.Name)
-	w.Header().Set("HX-Refresh", "true")
 }
