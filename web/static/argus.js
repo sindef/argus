@@ -51,12 +51,13 @@
     if (toggle) {
       const list = toggle.parentElement.querySelector(".menu-list");
       closeMenus(list);
-      const inTable = toggle.closest(".table-wrap");
-      if (inTable) list.style.position = "fixed";
+      const floating = !toggle.closest(".topbar");
+      if (floating) list.style.position = "fixed";
       list.hidden = !list.hidden;
-      if (!list.hidden && inTable) {
+      if (!list.hidden && floating) {
         const r = toggle.getBoundingClientRect();
-        place(list, r.right, r.bottom + 4, true);
+        const right = r.left > innerWidth / 2;
+        place(list, right ? r.right : r.left, r.bottom + 4, right);
       }
       e.preventDefault();
       return;
