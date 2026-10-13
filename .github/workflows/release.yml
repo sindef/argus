@@ -67,7 +67,10 @@ jobs:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Make room for source archives
         if: runner.environment == 'github-hosted'
-        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache /usr/local/share/boost /usr/share/swift
+          docker system prune -af
+          df -h /
       - name: Stage matching third-party sources before images
         env:
           GH_TOKEN: ${{ github.token }}
