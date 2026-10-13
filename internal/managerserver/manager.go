@@ -1,15 +1,10 @@
 package managerserver
 
 import (
-	"archive/tar"
-	"bytes"
-	"compress/gzip"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
-	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -24,7 +19,6 @@ import (
 	"argus/internal/kube"
 	"argus/internal/manager"
 	"argus/internal/netguard"
-	"argus/internal/sealed"
 	"argus/internal/ui"
 	"argus/internal/wire"
 
@@ -968,29 +962,7 @@ func (s *Server) managerBackup(w http.ResponseWriter, r *http.Request) {
 		s.renderSettings(w, r, "", err)
 		return
 	}
-	var buf bytes.Buffer
-	gz := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(gz)
-	names := slices.Sorted(maps.Keys(recs))
-	for _, name := range names {
-		if name == "argus-sessions" {
-			continue
-		}
-		b, _ := json.Marshal(recs[name])
-		if err := tw.WriteHeader(&tar.Header{Name: name + ".json", Mode: 0o600, Size: int64(len(b)), ModTime: time.Now()}); err != nil {
-			s.renderSettings(w, r, "", err)
-			return
-		}
-		if _, err := tw.Write(b); err != nil {
-			s.renderSettings(w, r, "", err)
-			return
-		}
-	}
-	if err := errors.Join(tw.Close(), gz.Close()); err != nil {
-		s.renderSettings(w, r, "", err)
-		return
-	}
-	out, err := sealed.Seal(pass, buf.Bytes())
+	out, err := dbstore.Pack(recs, pass)
 	if err != nil {
 		s.renderSettings(w, r, "", err)
 		return

@@ -1,22 +1,16 @@
 package main
 
 import (
-	"archive/tar"
-	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -25,7 +19,6 @@ import (
 	"argus/internal/lifecycle"
 	"argus/internal/manager"
 	"argus/internal/managerserver"
-	"argus/internal/sealed"
 	"argus/internal/tlscert"
 	"argus/internal/ui"
 )
@@ -141,33 +134,9 @@ func restore(file, data, keyFile, passphrase string, force bool) error {
 	if err != nil {
 		return err
 	}
-	plain, err := sealed.Open(passphrase, enc)
+	recs, err := dbstore.Unpack(enc, passphrase)
 	if err != nil {
 		return err
-	}
-	gz, err := gzip.NewReader(bytes.NewReader(plain))
-	if err != nil {
-		return err
-	}
-	recs := map[string]dbstore.Record{}
-	tr := tar.NewReader(gz)
-	for {
-		h, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		name := filepath.Base(h.Name)
-		if name != h.Name || !strings.HasSuffix(name, ".json") {
-			return fmt.Errorf("unexpected entry %q in backup", h.Name)
-		}
-		var rec dbstore.Record
-		if err := json.NewDecoder(io.LimitReader(tr, 64<<20)).Decode(&rec); err != nil {
-			return fmt.Errorf("%s: %w", name, err)
-		}
-		recs[strings.TrimSuffix(name, ".json")] = rec
 	}
 	st, err := openStore(data, keyFile)
 	if err != nil {
