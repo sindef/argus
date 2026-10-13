@@ -109,6 +109,7 @@ input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); p
 .card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .card-head h2 { margin: 0; }
 .card-head .right { margin-left: auto; }
+.card-head .actions { margin-left: auto; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .grid { display: grid; gap: 16px; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 18px; }
 .stat { display: flex; gap: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }

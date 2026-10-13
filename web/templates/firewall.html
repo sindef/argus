@@ -4,11 +4,10 @@
   <div><h1>Firewall</h1><div class="crumbs">Networking / Firewall</div></div>
 </div>
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
-<div class="panes static">
-<section class="pane">
-  <header><h2>Rules</h2><div class="actions">
+<div class="card">
+  <div class="card-head">{{template "icon" "list"}}<h2>Rules</h2><div class="actions">
     <form hx-post="/firewall/default" hx-target="#flash" hx-trigger="change" class="inline"><label class="check"><input type="checkbox" name="drop"{{if .Policy.DefaultDrop}} checked{{end}}> Deny unmatched traffic <span class="help" title="Applies only to VMs that some rule targets. Other VMs are not filtered.">?</span></label></form>
-    <button class="btn primary" data-dialog="edit-rule" data-fill='{"i":"-1","name":"","source":"any","dest":"tag:","proto":"tcp","ports":"","action":"allow"}'>{{template "icon" "plus"}}Add rule</button></div></header>
+    <button class="btn primary" data-dialog="edit-rule" data-fill='{"i":"-1","name":"","source":"any","dest":"tag:","proto":"tcp","ports":"","action":"allow"}'>{{template "icon" "plus"}}Add rule</button></div></div>
   <div class="table-wrap"><table>
     <thead><tr><th>#</th><th>Name</th><th>Source</th><th>Destination</th><th>Service</th><th>Action</th><th></th></tr></thead>
     <tbody>{{range $i, $r := .Rows}}<tr class="clickable" data-dialog="edit-rule" data-fill='{{.Fill}}'>
@@ -23,7 +22,6 @@
         </div></div></td></tr>
     {{else}}<tr><td colspan="7" class="muted">No rules. VM traffic is not filtered.</td></tr>{{end}}</tbody>
   </table></div>
-</section>
 </div>
 <dialog id="edit-rule" class="card">
   <form hx-post="/firewall/save" hx-target="#rule-error" class="form">
