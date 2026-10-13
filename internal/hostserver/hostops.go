@@ -208,7 +208,7 @@ func (l localOps) CreateVM(ctx context.Context, req hostui.CreateVMReq) error {
 		if int64(spec.DiskGiB) < tpls[i].DiskGiB {
 			return fmt.Errorf("disk must be at least %d GiB for template %s", tpls[i].DiskGiB, tpl)
 		}
-		spec.Image = tpls[i].Root
+		spec.Image, spec.Boot = tpls[i].Root, tpls[i].Boot
 	}
 	if err := l.s.kube.CreateVM(ctx, spec); err != nil {
 		return err

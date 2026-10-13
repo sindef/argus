@@ -21,6 +21,7 @@ import (
 )
 
 type VMSpec struct {
+	Boot         map[string]any `json:"-"`
 	Name         string
 	Cores        int
 	MemoryMiB    int
@@ -182,6 +183,9 @@ func (c *Client) CreateVM(ctx context.Context, s VMSpec) error {
 			},
 		},
 	}}
+	for k, v := range s.Boot {
+		unstructured.SetNestedField(vm.Object, v, "spec", "template", "spec", "domain", k)
+	}
 	created, err := c.dyn.Resource(vmGVR).Namespace(Namespace).Create(ctx, vm, metav1.CreateOptions{})
 	if s.Windows == nil {
 		return err
@@ -364,6 +368,7 @@ type Template struct {
 	Cores     int64
 	MemoryMiB int64
 	DiskGiB   int64
+	Boot      map[string]any `json:"-"`
 }
 
 func (c *Client) Templates(ctx context.Context) ([]Template, error) {
@@ -373,7 +378,13 @@ func (c *Client) Templates(ctx context.Context) ([]Template, error) {
 	}
 	var out []Template
 	for _, v := range list.Items {
-		t := Template{Name: v.GetName()}
+		t := Template{Name: v.GetName(), Boot: map[string]any{}}
+		if m, ok, _ := unstructured.NestedMap(v.Object, "spec", "template", "spec", "domain", "firmware", "bootloader"); ok {
+			t.Boot["firmware"] = map[string]any{"bootloader": m}
+		}
+		if m, ok, _ := unstructured.NestedMap(v.Object, "spec", "template", "spec", "domain", "features"); ok {
+			t.Boot["features"] = m
+		}
 		t.Cores, _ = vcpus(v.Object)
 		if m, ok, _ := unstructured.NestedString(v.Object, "spec", "template", "spec", "domain", "memory", "guest"); ok {
 			if q, err := resource.ParseQuantity(m); err == nil {
