@@ -346,3 +346,6 @@ input[readonly] { color: var(--muted); }
 .chip input:checked + span { background: var(--accent-bg); border-color: var(--accent); color: var(--fg); }
 .chip input:focus-visible + span { outline: 2px solid var(--accent-2); outline-offset: 2px; }
 @media (max-width: 900px) { .form.policy { grid-template-columns: 1fr 1fr; } .form.policy .kind { grid-column: 1 / -1; padding-bottom: 0; } }
+.files .table-wrap { max-height: calc(100vh - 260px); overflow: auto; }
+.files thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.files.htmx-request table { opacity: .5; transition: opacity .15s; }

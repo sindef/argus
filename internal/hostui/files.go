@@ -32,13 +32,14 @@ func (s *UI) filesPage(w http.ResponseWriter, r *http.Request) {
 	q, owner := r.URL.Query(), OwnerOf(r)
 	data := map[string]any{"Nav": "volumes", "Files": filesBase(r), "Name": cmp.Or(r.PathValue("vol"), r.PathValue("name")), "Part": q.Get("part"), "Path": strings.Trim(q.Get("path"), "/")}
 	sess, err := s.Ops(r).FLR(r.Context(), owner, q.Get("id"))
-	if r.Header.Get("HX-Request") != "" {
+	poll := r.Header.Get("HX-Request") != "" && r.Header.Get("HX-Boosted") == "" && r.Header.Get("HX-History-Restore-Request") == ""
+	if poll {
 		if err != nil || sess.State != "Unpacking" {
 			w.Header().Set("HX-Refresh", "true")
 		}
 		return
 	}
-	data["S"] = sess
+	data["S"], data["Back"] = sess, filesBack(r)
 	if err == nil && sess.State == "Ready" && q.Get("part") != "" {
 		data["Entries"], err = s.Ops(r).FLRList(r.Context(), owner, sess.ID, q.Get("part"), q.Get("path"))
 	}
@@ -74,16 +75,18 @@ func (s *UI) filesClose(w http.ResponseWriter, r *http.Request) {
 		ui.Flash(w, r, err)
 		return
 	}
-	base := ui.Base(r)
-	host, onManager := strings.CutPrefix(base, "/hosts/")
+	w.Header().Set("HX-Redirect", filesBack(r))
+}
+
+func filesBack(r *http.Request) string {
+	host, onManager := strings.CutPrefix(ui.Base(r), "/hosts/")
 	switch {
 	case r.PathValue("vol") != "" && onManager:
-		w.Header().Set("HX-Redirect", "/storage#s-volumes")
+		return "/storage#s-volumes"
 	case r.PathValue("vol") != "":
-		w.Header().Set("HX-Redirect", "/volumes")
+		return "/volumes"
 	case onManager:
-		w.Header().Set("HX-Redirect", "/nodes/"+host+"/vms/"+r.PathValue("ns")+"/"+r.PathValue("name")+"?tab=backups")
-	default:
-		w.Header().Set("HX-Redirect", "/vms/"+r.PathValue("ns")+"/"+r.PathValue("name")+"?tab=backups")
+		return "/nodes/" + host + "/vms/" + r.PathValue("ns") + "/" + r.PathValue("name") + "?tab=backups"
 	}
+	return "/vms/" + r.PathValue("ns") + "/" + r.PathValue("name") + "?tab=backups"
 }
