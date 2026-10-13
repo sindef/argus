@@ -284,6 +284,38 @@ func sortSlots(slots []string) {
 	}
 }
 
+func vmxMACs(kv map[string]string) []string {
+	var nics []int
+	for k := range kv {
+		if nm := vmxNIC.FindStringSubmatch(k); nm != nil && strings.EqualFold(kv[k], "true") {
+			n, _ := strconv.Atoi(nm[1])
+			nics = append(nics, n)
+		}
+	}
+	slices.Sort(nics)
+	var macs []string
+	for _, n := range nics {
+		p := fmt.Sprintf("ethernet%d.", n)
+		mac := kv[p+"generatedaddress"]
+		if strings.EqualFold(kv[p+"addresstype"], "static") {
+			mac = kv[p+"address"]
+		}
+		macs = append(macs, mac)
+	}
+	return macs
+}
+
+func vmxDiskSlots(kv map[string]string) []string {
+	var slots []string
+	for k := range kv {
+		if dm := vmxDisk.FindStringSubmatch(k); dm != nil && !strings.EqualFold(kv[dm[1]+".present"], "false") && !strings.Contains(kv[dm[1]+".devicetype"], "cdrom") && strings.HasSuffix(strings.ToLower(kv[k]), ".vmdk") {
+			slots = append(slots, dm[1])
+		}
+	}
+	sortSlots(slots)
+	return slots
+}
+
 func (s *Server) importESXi(ctx context.Context, f func(string) string) (string, error) {
 	m := vmxPath.FindStringSubmatch(strings.TrimSpace(f("vmx")))
 	if m == nil {
@@ -330,32 +362,11 @@ func (s *Server) importESXi(ctx context.Context, f func(string) string) (string,
 	if n, err := strconv.ParseInt(kv["memsize"], 10, 64); err == nil {
 		v.MemoryMiB = n
 	}
-	var nics []int
-	for k := range kv {
-		if nm := vmxNIC.FindStringSubmatch(k); nm != nil && strings.EqualFold(kv[k], "true") {
-			n, _ := strconv.Atoi(nm[1])
-			nics = append(nics, n)
-		}
-	}
-	slices.Sort(nics)
-	for _, n := range nics {
-		p := fmt.Sprintf("ethernet%d.", n)
-		mac := kv[p+"generatedaddress"]
-		if strings.EqualFold(kv[p+"addresstype"], "static") {
-			mac = kv[p+"address"]
-		}
-		v.MACs = append(v.MACs, mac)
-	}
-	var slots []string
-	for k := range kv {
-		if dm := vmxDisk.FindStringSubmatch(k); dm != nil && !strings.EqualFold(kv[dm[1]+".present"], "false") && !strings.Contains(kv[dm[1]+".devicetype"], "cdrom") && strings.HasSuffix(strings.ToLower(kv[k]), ".vmdk") {
-			slots = append(slots, dm[1])
-		}
-	}
+	v.MACs = vmxMACs(kv)
+	slots := vmxDiskSlots(kv)
 	if len(slots) == 0 {
 		return "", errors.New("no disks found in the .vmx")
 	}
-	sortSlots(slots)
 	stream := esxiStream{src: e}
 	for _, slot := range slots {
 		desc, err := e.get(ctx, kv[slot+".filename"])
