@@ -156,81 +156,18 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 		memUsed += h.MemUsed
 		hosts = append(hosts, h)
 	}
-	dcs := map[string]map[string]*clusterView{}
-	for _, h := range hosts {
-		dc, cl := groupName(h.Node.Datacenter), groupName(h.Node.Cluster)
-		if dcs[dc] == nil {
-			dcs[dc] = map[string]*clusterView{}
-		}
-		c := dcs[dc][cl]
-		if c == nil {
-			c = &clusterView{Name: cl, Status: "Healthy", VMsByHost: map[string][]vmRow{}}
-			dcs[dc][cl] = c
-		}
-		c.Hosts = append(c.Hosts, h)
-		c.VMs += h.VMs
-		c.Status = worse(c.Status, h.Status)
-	}
 	groups, _ := s.manager.Groups(r.Context(), ui.Session(r).Org)
-	for _, g := range groups {
-		if len(ui.Session(r).Scopes) > 0 || dc != "" && dc != g.Datacenter {
-			continue
-		}
-		if dcs[g.Datacenter] == nil {
-			dcs[g.Datacenter] = map[string]*clusterView{}
-		}
-		for _, c := range g.Clusters {
-			if (cl == "" || cl == c) && dcs[g.Datacenter][c] == nil {
-				dcs[g.Datacenter][c] = &clusterView{Name: c, Status: "Healthy", VMsByHost: map[string][]vmRow{}}
-			}
-		}
+	if len(ui.Session(r).Scopes) > 0 {
+		groups = nil
 	}
-	for _, v := range rows {
-		c := dcs[v.Datacenter][v.Cluster]
-		c.VMsByHost[v.Host] = append(c.VMsByHost[v.Host], v)
-	}
-	var tree []datacenterView
-	var clusters []*clusterView
-	for dc, cls := range dcs {
-		d := datacenterView{Name: dc}
-		for _, c := range cls {
-			d.Clusters = append(d.Clusters, c)
-			clusters = append(clusters, c)
-		}
-		sort.Slice(d.Clusters, func(i, j int) bool { return d.Clusters[i].Name < d.Clusters[j].Name })
-		tree = append(tree, d)
-	}
-	sort.Slice(tree, func(i, j int) bool { return tree[i].Name < tree[j].Name })
-	sort.Slice(clusters, func(i, j int) bool { return clusters[i].Name < clusters[j].Name })
+	tree, clusters := buildTree(hosts, rows, groups, dc, cl)
 	clusterCount := map[string]int{}
 	for _, c := range clusters {
 		clusterCount[c.Status]++
 	}
-	q := strings.ToLower(strings.TrimSpace(r.FormValue("q")))
-	if q != "" {
-		rows = slices.DeleteFunc(rows, func(v vmRow) bool {
-			text := v.Name + " " + v.DisplayName + " " + v.Host + " " + v.Cluster + " " + strings.Join(v.IPs(), " ") + " " + strings.Join(v.Tags, " ") + " " + v.Folder
-			for k, val := range v.Attributes {
-				text += " " + k + "=" + val
-			}
-			return !strings.Contains(strings.ToLower(text), q)
-		})
-	}
+	rows = searchVMs(rows, r.FormValue("q"))
 	folder := strings.Trim(r.FormValue("folder"), "/")
-	var subfolders []string
-	for _, v := range rows {
-		rest, ok := strings.CutPrefix(v.Folder, folder)
-		if folder != "" && (!ok || rest != "" && rest[0] != '/') {
-			continue
-		}
-		if child, _, _ := strings.Cut(strings.TrimPrefix(rest, "/"), "/"); child != "" && !slices.Contains(subfolders, child) {
-			subfolders = append(subfolders, child)
-		}
-	}
-	sort.Strings(subfolders)
-	if folder != "" {
-		rows = slices.DeleteFunc(rows, func(v vmRow) bool { return v.Folder != folder && !strings.HasPrefix(v.Folder, folder+"/") })
-	}
+	rows, subfolders := inFolder(rows, folder)
 	vms := 0
 	for _, n := range vmCount {
 		vms += n
@@ -257,6 +194,87 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 		"IsAdmin":      ui.Session(r).Role.Can(auth.Admin),
 		"Super":        superAdmin(r),
 	}
+}
+
+func buildTree(hosts []hostRow, rows []vmRow, groups []manager.Group, dc, cl string) ([]datacenterView, []*clusterView) {
+	dcs := map[string]map[string]*clusterView{}
+	for _, h := range hosts {
+		dc, cl := groupName(h.Node.Datacenter), groupName(h.Node.Cluster)
+		if dcs[dc] == nil {
+			dcs[dc] = map[string]*clusterView{}
+		}
+		c := dcs[dc][cl]
+		if c == nil {
+			c = &clusterView{Name: cl, Status: "Healthy", VMsByHost: map[string][]vmRow{}}
+			dcs[dc][cl] = c
+		}
+		c.Hosts = append(c.Hosts, h)
+		c.VMs += h.VMs
+		c.Status = worse(c.Status, h.Status)
+	}
+	for _, g := range groups {
+		if dc != "" && dc != g.Datacenter {
+			continue
+		}
+		if dcs[g.Datacenter] == nil {
+			dcs[g.Datacenter] = map[string]*clusterView{}
+		}
+		for _, c := range g.Clusters {
+			if (cl == "" || cl == c) && dcs[g.Datacenter][c] == nil {
+				dcs[g.Datacenter][c] = &clusterView{Name: c, Status: "Healthy", VMsByHost: map[string][]vmRow{}}
+			}
+		}
+	}
+	for _, v := range rows {
+		c := dcs[v.Datacenter][v.Cluster]
+		c.VMsByHost[v.Host] = append(c.VMsByHost[v.Host], v)
+	}
+	var tree []datacenterView
+	var clusters []*clusterView
+	for name, cls := range dcs {
+		d := datacenterView{Name: name}
+		for _, c := range cls {
+			d.Clusters = append(d.Clusters, c)
+			clusters = append(clusters, c)
+		}
+		sort.Slice(d.Clusters, func(i, j int) bool { return d.Clusters[i].Name < d.Clusters[j].Name })
+		tree = append(tree, d)
+	}
+	sort.Slice(tree, func(i, j int) bool { return tree[i].Name < tree[j].Name })
+	sort.Slice(clusters, func(i, j int) bool { return clusters[i].Name < clusters[j].Name })
+	return tree, clusters
+}
+
+func searchVMs(rows []vmRow, q string) []vmRow {
+	q = strings.ToLower(strings.TrimSpace(q))
+	if q == "" {
+		return rows
+	}
+	return slices.DeleteFunc(rows, func(v vmRow) bool {
+		text := v.Name + " " + v.DisplayName + " " + v.Host + " " + v.Cluster + " " + strings.Join(v.IPs(), " ") + " " + strings.Join(v.Tags, " ") + " " + v.Folder
+		for k, val := range v.Attributes {
+			text += " " + k + "=" + val
+		}
+		return !strings.Contains(strings.ToLower(text), q)
+	})
+}
+
+func inFolder(rows []vmRow, folder string) ([]vmRow, []string) {
+	var subfolders []string
+	for _, v := range rows {
+		rest, ok := strings.CutPrefix(v.Folder, folder)
+		if folder != "" && (!ok || rest != "" && rest[0] != '/') {
+			continue
+		}
+		if child, _, _ := strings.Cut(strings.TrimPrefix(rest, "/"), "/"); child != "" && !slices.Contains(subfolders, child) {
+			subfolders = append(subfolders, child)
+		}
+	}
+	sort.Strings(subfolders)
+	if folder != "" {
+		rows = slices.DeleteFunc(rows, func(v vmRow) bool { return v.Folder != folder && !strings.HasPrefix(v.Folder, folder+"/") })
+	}
+	return rows, subfolders
 }
 
 var groupTabs = []string{"summary", "hosts", "vms", "networks", "drs"}
