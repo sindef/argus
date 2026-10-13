@@ -156,7 +156,7 @@ func (c *Manager) loadJobs(ctx context.Context) {
 		}
 		if !j.Done && j.Kind != "" {
 			j.Done, j.Failed = true, true
-			j.Status = fmt.Sprintf("Interrupted by Manager restart during %q; check %s", j.Status, j.From)
+			j.Status = fmt.Sprintf("Interrupted by Manager restart during %q; check %s", j.Status, cmp.Or(j.From, j.To))
 			continue
 		}
 		if j.Attention || !j.Done {

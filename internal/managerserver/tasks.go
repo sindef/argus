@@ -1,6 +1,7 @@
 package managerserver
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"net/http"
@@ -44,7 +45,7 @@ func (s *Server) Tasks(r *http.Request) []wire.Task {
 	}
 	var out []wire.Task
 	for _, j := range s.jobs(r) {
-		if !j.Dismissed && (j.VM == "" || seeVM(j.From, j.VM)) {
+		if !j.Dismissed && (j.VM == "" || seeVM(cmp.Or(j.From, j.To), j.VM)) {
 			out = append(out, s.jobTask(j))
 		}
 	}
