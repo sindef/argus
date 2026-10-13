@@ -80,36 +80,12 @@ func writeConf(path, body string) error {
 
 func applySettings(ctx context.Context, u SettingsUpdate) error {
 	if u.DNS != nil {
-		for _, d := range *u.DNS {
-			if net.ParseIP(d) == nil {
-				return fmt.Errorf("invalid DNS server %q", d)
-			}
-		}
-		body := ""
-		if len(*u.DNS) > 0 {
-			body = "[Resolve]\nDNS=" + strings.Join(*u.DNS, " ") + "\n"
-		}
-		if err := writeConf(resolvedConf, body); err != nil {
-			return err
-		}
-		if _, err := run(ctx, "systemctl", "restart", "systemd-resolved"); err != nil {
+		if err := setServers(ctx, *u.DNS, "DNS", resolvedConf, "[Resolve]\nDNS=", "systemd-resolved", func(v string) bool { return net.ParseIP(v) != nil }); err != nil {
 			return err
 		}
 	}
 	if u.NTP != nil {
-		for _, n := range *u.NTP {
-			if net.ParseIP(n) == nil && !validHost.MatchString(n) {
-				return fmt.Errorf("invalid NTP server %q", n)
-			}
-		}
-		body := ""
-		if len(*u.NTP) > 0 {
-			body = "[Time]\nNTP=" + strings.Join(*u.NTP, " ") + "\n"
-		}
-		if err := writeConf(timesyncdConf, body); err != nil {
-			return err
-		}
-		if _, err := run(ctx, "systemctl", "restart", "systemd-timesyncd"); err != nil {
+		if err := setServers(ctx, *u.NTP, "NTP", timesyncdConf, "[Time]\nNTP=", "systemd-timesyncd", func(v string) bool { return net.ParseIP(v) != nil || validHost.MatchString(v) }); err != nil {
 			return err
 		}
 	}
@@ -128,33 +104,54 @@ func applySettings(ctx context.Context, u SettingsUpdate) error {
 		}
 	}
 	if u.Syslog != nil {
-		body := ""
-		if *u.Syslog != "" {
-			m := syslogValue.FindStringSubmatch(*u.Syslog)
-			if m == nil {
-				return errors.New("syslog target must look like udp://host:514 or tcp://host:514")
-			}
-			if port, _ := strconv.Atoi(m[3]); port < 1 || port > 65535 || (net.ParseIP(strings.Trim(m[2], "[]")) == nil && !validHost.MatchString(m[2])) {
-				return errors.New("syslog target must look like udp://host:514 or tcp://host:514")
-			}
-			at := "@"
-			if m[1] == "tcp" {
-				at = "@@"
-			}
-			body = "*.* " + at + m[2] + ":" + m[3] + "\n"
+		return setSyslog(ctx, *u.Syslog)
+	}
+	return nil
+}
+
+func setServers(ctx context.Context, servers []string, kind, file, prefix, unit string, valid func(string) bool) error {
+	for _, v := range servers {
+		if !valid(v) {
+			return fmt.Errorf("invalid %s server %q", kind, v)
 		}
-		_, missing := os.Stat("/usr/sbin/rsyslogd")
-		if missing != nil && body != "" {
-			return errors.New("rsyslog is not installed on this host")
+	}
+	body := ""
+	if len(servers) > 0 {
+		body = prefix + strings.Join(servers, " ") + "\n"
+	}
+	if err := writeConf(file, body); err != nil {
+		return err
+	}
+	_, err := run(ctx, "systemctl", "restart", unit)
+	return err
+}
+
+func setSyslog(ctx context.Context, target string) error {
+	body := ""
+	if target != "" {
+		m := syslogValue.FindStringSubmatch(target)
+		if m == nil {
+			return errors.New("syslog target must look like udp://host:514 or tcp://host:514")
 		}
-		if err := writeConf(syslogConf, body); err != nil {
-			return err
+		if port, _ := strconv.Atoi(m[3]); port < 1 || port > 65535 || (net.ParseIP(strings.Trim(m[2], "[]")) == nil && !validHost.MatchString(m[2])) {
+			return errors.New("syslog target must look like udp://host:514 or tcp://host:514")
 		}
-		if missing == nil {
-			if _, err := run(ctx, "systemctl", "restart", "rsyslog"); err != nil {
-				return err
-			}
+		at := "@"
+		if m[1] == "tcp" {
+			at = "@@"
 		}
+		body = "*.* " + at + m[2] + ":" + m[3] + "\n"
+	}
+	_, missing := os.Stat("/usr/sbin/rsyslogd")
+	if missing != nil && body != "" {
+		return errors.New("rsyslog is not installed on this host")
+	}
+	if err := writeConf(syslogConf, body); err != nil {
+		return err
+	}
+	if missing == nil {
+		_, err := run(ctx, "systemctl", "restart", "rsyslog")
+		return err
 	}
 	return nil
 }
