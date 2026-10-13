@@ -316,6 +316,28 @@ func mtuLink(mtu int) string {
 	return fmt.Sprintf("\n[Link]\nMTUBytes=%d\n", mtu)
 }
 
+func withMTU(body string, mtu int) string {
+	if i := strings.Index(body, "\n[Link]\n"); i >= 0 {
+		rest := body[i+len("\n[Link]\n"):]
+		tail := ""
+		if j := strings.Index(rest, "\n["); j >= 0 {
+			tail = rest[j:]
+		}
+		body = body[:i+1] + strings.TrimPrefix(tail, "\n")
+	}
+	return strings.TrimRight(body, "\n") + "\n" + mtuLink(mtu)
+}
+
+func linkMTU(body string) int {
+	for _, l := range strings.Split(body, "\n") {
+		if v, ok := strings.CutPrefix(l, "MTUBytes="); ok {
+			n, _ := strconv.Atoi(v)
+			return n
+		}
+	}
+	return 0
+}
+
 func portNetwork(port, master, kind string, mtu int, primary bool) (string, string) {
 	body := fmt.Sprintf("[Match]\nName=%s\n\n[Network]\n%s=%s\n", port, kind, master)
 	if primary {
@@ -456,7 +478,12 @@ func (s *Server) setTeaming(ctx context.Context, ips []string, name string, t Te
 	}
 	files := map[string]string{}
 	add := func(path, body string) { files[path] = body }
-	add(bridgeNetwork(name, t.MTU))
+	path, _ := unit(name, "network", "")
+	if b, err := os.ReadFile(path); err == nil {
+		add(path, withMTU(string(b), t.MTU))
+	} else {
+		add(bridgeNetwork(name, t.MTU))
+	}
 	affected := slices.Concat([]string{name}, uplinks)
 	var recreate []string
 	if bond != nil {
@@ -647,6 +674,9 @@ func (s *Server) setAddress(ctx context.Context, ips []string, a AddressSpec) er
 		return err
 	}
 	path, _ := unit(a.Iface, "network", "")
+	if b, err := os.ReadFile(path); err == nil {
+		body = withMTU(body, linkMTU(string(b)))
+	}
 	return s.apply(ctx, "set address of "+a.Iface, map[string]string{path: body}, nil, nil, []string{a.Iface})
 }
 
