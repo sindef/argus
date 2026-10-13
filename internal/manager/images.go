@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -76,6 +77,8 @@ func (c *Manager) importTo(ctx context.Context, j *Job, t Node, image string, re
 	return c.Pull(ctx, func(s string) { c.progress(j, s) }, t, image, req, false)
 }
 
+const maxPullRestarts = 3
+
 func (c *Manager) Pull(ctx context.Context, progress func(string), t Node, image string, req any, reuse bool) error {
 	post := true
 	if reuse {
@@ -106,11 +109,19 @@ func (c *Manager) Pull(ctx context.Context, progress func(string), t Node, image
 				pct = fmt.Sprintf("%.0f%%", p)
 			}
 		}
+		if img := imgs[i]; img.Error != "" && img.Restarts >= maxPullRestarts {
+			return false, errors.New(img.Error)
+		} else if img.Error != "" && img.Restarts > 0 {
+			pct = fmt.Sprintf("(retry %d of %d)", img.Restarts, maxPullRestarts-1)
+		}
 		progress(strings.TrimSpace("Copying " + image + " to " + t.Name + " " + pct))
 		return imgs[i].Phase == "Succeeded", nil
 	})
 	if post {
 		lifecycle.LogCleanup("import of image "+image+" on "+t.Name, t.do(ctx, http.MethodPost, APIPath("/api/images/%s/imported", image), nil, nil))
+	}
+	if post && err != nil {
+		lifecycle.LogCleanup("failed copy of "+image+" on "+t.Name, t.do(context.WithoutCancel(ctx), http.MethodPost, APIPath("/api/images/%s/delete", image), nil, nil))
 	}
 	if err != nil {
 		return fmt.Errorf("%s: %w", t.Name, err)

@@ -41,6 +41,8 @@ type Image struct {
 	Phase    string
 	Progress string
 	Source   string
+	Error    string
+	Restarts int64
 }
 
 func (c *Client) ListImages(ctx context.Context) ([]Image, error) {
@@ -55,6 +57,8 @@ func (c *Client) ListImages(ctx context.Context) ([]Image, error) {
 		img.Size, _, _ = unstructured.NestedString(o, "spec", "storage", "resources", "requests", "storage")
 		img.Phase, _, _ = unstructured.NestedString(o, "status", "phase")
 		img.Progress, _, _ = unstructured.NestedString(o, "status", "progress")
+		img.Restarts, _, _ = unstructured.NestedInt64(o, "status", "restartCount")
+		img.Error = dvError(o)
 		if u, ok, _ := unstructured.NestedString(o, "spec", "source", "http", "url"); ok {
 			img.Source = u
 		} else if u, ok, _ := unstructured.NestedString(o, "spec", "source", "registry", "url"); ok {
@@ -407,4 +411,15 @@ func (c *Client) CleanupInterrupted(ctx context.Context) []string {
 		}
 	}
 	return out
+}
+
+func dvError(o map[string]any) string {
+	conds, _, _ := unstructured.NestedSlice(o, "status", "conditions")
+	for _, c := range conds {
+		msg, _, _ := unstructured.NestedString(c.(map[string]any), "message")
+		if i := strings.Index(msg, "Unable to"); i >= 0 {
+			return msg[i:]
+		}
+	}
+	return ""
 }
