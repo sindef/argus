@@ -2,6 +2,8 @@ module argus
 
 go 1.26.0
 
+toolchain go1.27.2
+
 require (
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/go-ldap/ldap/v3 v3.4.15
