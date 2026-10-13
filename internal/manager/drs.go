@@ -308,7 +308,7 @@ func (c *Manager) drsMigrate(ctx context.Context, r Recommendation) error {
 		return err
 	}
 	log.Printf("drs: %s/%s: move %s from %s to %s (%s)", r.DC, r.Cluster, r.VM, r.From, r.To, r.Reason)
-	return c.LiveMigrate(src, dst, kube.Namespace, r.VM)
+	return c.LiveMigrate(ctx, src, dst, kube.Namespace, r.VM)
 }
 
 func (c *Manager) clusterBusy(org, dc, cl string) bool {

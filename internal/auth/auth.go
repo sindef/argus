@@ -90,6 +90,19 @@ type Session struct {
 	Seen       time.Time
 }
 
+const ActorHeader = "X-Argus-Actor"
+
+type actorKey struct{}
+
+func WithActor(ctx context.Context, name string) context.Context {
+	return context.WithValue(ctx, actorKey{}, name)
+}
+
+func Actor(ctx context.Context) string {
+	a, _ := ctx.Value(actorKey{}).(string)
+	return a
+}
+
 type Sessions struct {
 	mu      sync.Mutex
 	flushMu sync.Mutex

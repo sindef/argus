@@ -73,7 +73,7 @@ func (s *Server) managerImageOp(w http.ResponseWriter, r *http.Request) {
 			err = errors.New("pick at least one other host")
 		}
 		if err == nil {
-			err = s.manager.CopyImage(org, r.FormValue("image"), src, targets)
+			err = s.manager.CopyImage(r.Context(), org, r.FormValue("image"), src, targets)
 		}
 	case "import":
 		err = s.importFromSource(r)

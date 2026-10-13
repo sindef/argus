@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -125,19 +126,22 @@ func (s *Server) moveDisk(ctx context.Context, ns, name, disk, pool string) erro
 	if err != nil {
 		return err
 	}
+	t := s.tasks.begin(ctx, "Move disk "+disk+" to "+pool, name, "")
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
 		defer cancel()
-		failed, err := kube.WaitDisks(ctx, 10*time.Second, s.kube.DataVolumes(ns, moved), nil)
+		failed, err := kube.WaitDisks(ctx, 10*time.Second, s.kube.DataVolumes(ns, moved), func(ds []kube.DiskStatus) { s.tasks.set(t, diskProgress(ds)) })
 		switch {
 		case failed != "":
 			log.Printf("move disk %s/%s to %s: copy failed, %s kept", name, disk, pool, old)
+			err = fmt.Errorf("copy failed, %s kept", old)
 		case err == nil:
-			if err := s.kube.DeleteDataVolume(ctx, ns, old); err != nil {
+			if err = s.kube.DeleteDataVolume(ctx, ns, old); err != nil {
 				log.Printf("move disk %s/%s: delete %s: %v", name, disk, old, err)
 			}
 			log.Printf("move disk %s/%s to %s: done", name, disk, pool)
 		}
+		s.tasks.end(t, err)
 	}()
 	return nil
 }

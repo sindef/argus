@@ -111,12 +111,14 @@ func (s *Server) importVCenter(ctx context.Context, f func(string) string) (stri
 		c.Logout()
 		return "", err
 	}
+	t := s.tasks.begin(ctx, "Import from vCenter", v.Name, "")
 	go func() {
 		defer c.Logout()
 		ctx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
 		defer cancel()
 		err := s.vcenterCopy(ctx, c, tc, f("vm"), cfg.Power == "poweredOn", dvs, total)
 		log.Printf("import of %s from vCenter: %v", v.Name, err)
+		s.tasks.end(t, err)
 	}()
 	return v.Name, nil
 }

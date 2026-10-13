@@ -11,6 +11,7 @@ import (
 	"argus/internal/auth"
 	"argus/internal/lifecycle"
 	"argus/internal/tlscert"
+	"argus/internal/wire"
 	"argus/web"
 )
 
@@ -24,6 +25,8 @@ type Mode interface {
 	ScopeNames(r *http.Request) []string
 	Super(r *http.Request) bool
 	AlarmVisible(r *http.Request, a Alarm) bool
+	Tasks(r *http.Request) []wire.Task
+	DismissTask(r *http.Request, host, id string) error
 }
 
 type Config struct {

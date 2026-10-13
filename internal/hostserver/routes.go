@@ -38,6 +38,8 @@ func (s *Server) routes() []ui.Route {
 		{Pattern: "GET /api/host/status", Priv: auth.Administer, H: s.apiHostStatus},
 		{Pattern: "GET /api/images", Priv: auth.Administer, H: s.apiImages},
 		{Pattern: "GET /api/alarms", Priv: auth.Administer, H: s.apiAlarms},
+		{Pattern: "GET /api/tasks", Priv: auth.Administer, H: s.apiTasks},
+		{Pattern: "POST /api/tasks/{id}/dismiss", Priv: auth.Administer, H: s.apiDismissTask},
 		{Pattern: "GET /api/prometheus", Priv: auth.Administer, H: s.apiPrometheus},
 		{Pattern: "POST /api/images/import", Priv: auth.Administer, H: s.apiImportImage},
 		{Pattern: "POST /api/images/{name}/{op}", Priv: auth.Administer, H: s.apiImageOp},

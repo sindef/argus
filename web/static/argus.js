@@ -318,7 +318,21 @@
     });
     syncSelection();
   };
+  let tasksAt = Date.now();
+  window.tasksDue = () => {
+    const bar = document.getElementById("taskbar");
+    if (!bar || !bar.open && Date.now() - tasksAt < 30000) return false;
+    tasksAt = Date.now();
+    return true;
+  };
+  document.addEventListener("toggle", (e) => {
+    if (e.target.id !== "taskbar") return;
+    store.set("tasksOpen", e.target.open ? "1" : "");
+    if (e.target.open) htmx.trigger(e.target, "refresh");
+  }, true);
   document.addEventListener("DOMContentLoaded", () => {
+    const bar = document.getElementById("taskbar");
+    if (bar && store.get("tasksOpen")) bar.open = true;
     restore();
     syncSSO();
     const d = location.hash && document.querySelector("dialog" + location.hash);

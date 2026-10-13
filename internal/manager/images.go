@@ -13,12 +13,12 @@ import (
 	"argus/internal/wire"
 )
 
-func (c *Manager) CopyImage(org, image string, src Node, targets []Node) error {
+func (c *Manager) CopyImage(ctx context.Context, org, image string, src Node, targets []Node) error {
 	names := make([]string, len(targets))
 	for i, t := range targets {
 		names[i] = t.Name
 	}
-	return c.startTask(&Job{Org: org, Kind: "Copy image " + image, From: src.Name, To: strings.Join(names, ", ")}, "image:"+image, 12*time.Hour, func(ctx context.Context, j *Job) error {
+	return c.startTask(ctx, &Job{Org: org, Kind: "Copy image " + image, From: src.Name, To: strings.Join(names, ", ")}, "image:"+image, 12*time.Hour, func(ctx context.Context, j *Job) error {
 		var ex kube.Export
 		if err := src.do(ctx, http.MethodPost, APIPath("/api/images/%s/export", image), wire.ExportRequest{BaseURL: src.URL}, &ex); err != nil {
 			return err
@@ -38,12 +38,12 @@ func (c *Manager) CopyImage(org, image string, src Node, targets []Node) error {
 	})
 }
 
-func (c *Manager) SendImage(org, image, size string, src kube.RegistrySource, targets []Node, creds func() (string, string)) error {
+func (c *Manager) SendImage(ctx context.Context, org, image, size string, src kube.RegistrySource, targets []Node, creds func() (string, string)) error {
 	names := make([]string, len(targets))
 	for i, t := range targets {
 		names[i] = t.Name
 	}
-	return c.startTask(&Job{Org: org, Kind: "Send image " + image, From: "Image library", To: strings.Join(names, ", ")}, "image:"+image, 12*time.Hour, func(ctx context.Context, j *Job) error {
+	return c.startTask(ctx, &Job{Org: org, Kind: "Send image " + image, From: "Image library", To: strings.Join(names, ", ")}, "image:"+image, 12*time.Hour, func(ctx context.Context, j *Job) error {
 		for _, t := range targets {
 			src.User, src.Pass = creds()
 			if err := c.importTo(ctx, j, t, image, map[string]any{"name": image, "size": size, "registry": src}); err != nil {
@@ -54,7 +54,22 @@ func (c *Manager) SendImage(org, image, size string, src kube.RegistrySource, ta
 	})
 }
 
-func (c *Manager) importTo(ctx context.Context, j *Job, t Node, image string, req map[string]any) error {
+func (c *Manager) ImportImage(ctx context.Context, org, from string, req wire.ImageImportRequest, targets []Node) error {
+	names := make([]string, len(targets))
+	for i, t := range targets {
+		names[i] = t.Name
+	}
+	return c.startTask(ctx, &Job{Org: org, Kind: "Import image " + req.Name, From: from, To: strings.Join(names, ", ")}, "image:"+req.Name, 12*time.Hour, func(ctx context.Context, j *Job) error {
+		for _, t := range targets {
+			if err := c.importTo(ctx, j, t, req.Name, req); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (c *Manager) importTo(ctx context.Context, j *Job, t Node, image string, req any) error {
 	c.update(j, "Copying to "+t.Name, false, false)
 	if err := t.do(ctx, http.MethodPost, "/api/images/import", req, nil); err != nil {
 		return err
@@ -68,7 +83,7 @@ func (c *Manager) importTo(ctx context.Context, j *Job, t Node, image string, re
 		if i < 0 {
 			return false, fmt.Errorf("%s disappeared on %s", image, t.Name)
 		}
-		c.update(j, "Copying to "+t.Name+" "+imgs[i].Progress, false, false)
+		c.update(j, strings.TrimSpace("Copying to "+t.Name+" "+strings.TrimSuffix(imgs[i].Progress, "N/A")), false, false)
 		return imgs[i].Phase == "Succeeded", nil
 	})
 	lifecycle.LogCleanup("import of image "+image+" on "+t.Name, t.do(ctx, http.MethodPost, APIPath("/api/images/%s/imported", image), nil, nil))
@@ -78,8 +93,8 @@ func (c *Manager) importTo(ctx context.Context, j *Job, t Node, image string, re
 	return nil
 }
 
-func (c *Manager) Task(org, kind, lock string, run func(ctx context.Context, progress func(string)) error) error {
-	return c.startTask(&Job{Org: org, Kind: kind}, lock, 12*time.Hour, func(ctx context.Context, j *Job) error {
+func (c *Manager) Task(ctx context.Context, org, kind, lock string, run func(ctx context.Context, progress func(string)) error) error {
+	return c.startTask(ctx, &Job{Org: org, Kind: kind}, lock, 12*time.Hour, func(ctx context.Context, j *Job) error {
 		return run(ctx, func(status string) { c.update(j, status, false, false) })
 	})
 }

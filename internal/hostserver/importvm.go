@@ -400,12 +400,14 @@ func (s *Server) importESXi(ctx context.Context, f func(string) string) (string,
 		cleanup()
 		return "", err
 	}
+	t := s.tasks.begin(ctx, "Import from ESXi", v.Name, "")
 	go func() {
 		defer cleanup()
 		ctx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
 		defer cancel()
-		failed, err := kube.WaitDisks(ctx, 15*time.Second, s.kube.DataVolumes(kube.Namespace, dvs...), nil)
-		log.Printf("import of %s from ESXi %s finished (failed disk %q): %v", v.Name, e.Host, failed, err)
+		err := s.watchDisks(ctx, t, s.kube.DataVolumes(kube.Namespace, dvs...))
+		log.Printf("import of %s from ESXi %s finished: %v", v.Name, e.Host, err)
+		s.tasks.end(t, err)
 	}()
 	return v.Name, nil
 }

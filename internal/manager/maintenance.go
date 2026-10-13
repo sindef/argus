@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"argus/internal/auth"
 	"argus/internal/kube"
 	"argus/internal/wire"
 
@@ -33,7 +35,7 @@ func (c *Manager) setNode(ctx context.Context, name string, fn func(*Node)) (Nod
 	return Node{}, fmt.Errorf("node %s not found", name)
 }
 
-func (c *Manager) startTask(j *Job, lock string, timeout time.Duration, run func(context.Context, *Job) error) error {
+func (c *Manager) startTask(ctx context.Context, j *Job, lock string, timeout time.Duration, run func(context.Context, *Job) error) error {
 	key := "task:" + lock
 	c.mu.Lock()
 	if c.busy[key] {
@@ -43,7 +45,7 @@ func (c *Manager) startTask(j *Job, lock string, timeout time.Duration, run func
 	c.busy[key] = true
 	id := make([]byte, 8)
 	rand.Read(id)
-	j.ID, j.Started, j.Status = hex.EncodeToString(id), time.Now(), "Starting"
+	j.ID, j.Started, j.Status, j.User = hex.EncodeToString(id), time.Now(), "Starting", cmp.Or(j.User, auth.Actor(ctx))
 	c.jobs = append(c.jobs, j)
 	if len(c.jobs) > keepJobs {
 		c.jobs = c.jobs[len(c.jobs)-keepJobs:]
@@ -91,22 +93,22 @@ func (c *Manager) waitJob(ctx context.Context, j *Job) error {
 	}
 }
 
-func (c *Manager) EnterMaintenance(org, host string, shutdown bool) error {
+func (c *Manager) EnterMaintenance(ctx context.Context, org, host string, shutdown bool) error {
 	n, err := c.NodeIn(context.Background(), org, host)
 	if err != nil {
 		return err
 	}
-	return c.startTask(&Job{Org: org, Kind: "Enter maintenance", From: host}, host, 12*time.Hour, func(ctx context.Context, j *Job) error {
+	return c.startTask(ctx, &Job{Org: org, Kind: "Enter maintenance", From: host}, host, 12*time.Hour, func(ctx context.Context, j *Job) error {
 		return c.evacuate(ctx, j, n, shutdown)
 	})
 }
 
-func (c *Manager) ExitMaintenance(org, host string) error {
+func (c *Manager) ExitMaintenance(ctx context.Context, org, host string) error {
 	n, err := c.NodeIn(context.Background(), org, host)
 	if err != nil {
 		return err
 	}
-	return c.startTask(&Job{Org: org, Kind: "Exit maintenance", From: host}, host, time.Hour, func(ctx context.Context, j *Job) error {
+	return c.startTask(ctx, &Job{Org: org, Kind: "Exit maintenance", From: host}, host, time.Hour, func(ctx context.Context, j *Job) error {
 		return c.leave(ctx, j, n)
 	})
 }
@@ -197,8 +199,8 @@ func (c *Manager) evacuate(ctx context.Context, j *Job, n Node, shutdown bool) e
 				status += " (warning: " + b + " host, VM came from " + a + ")"
 			}
 			c.update(j, status, false, false)
-			mj := &Job{Org: n.Org, Namespace: v.Namespace, VM: v.Name, From: n.Name, To: dst.Name, Live: true}
-			if err := c.startJob(mj, 6*time.Hour, func(ctx context.Context, mj *Job) error {
+			mj := &Job{Org: n.Org, Namespace: v.Namespace, VM: v.Name, From: n.Name, To: dst.Name, Live: true, User: j.User}
+			if err := c.startJob(ctx, mj, 6*time.Hour, func(ctx context.Context, mj *Job) error {
 				return c.liveMigrate(ctx, mj, n, dst, v.Namespace, v.Name)
 			}); err != nil {
 				return fmt.Errorf("%s: %w", v.Name, err)
@@ -324,7 +326,7 @@ func (c *Manager) leave(ctx context.Context, j *Job, n Node) error {
 	return nil
 }
 
-func (c *Manager) RollingUpdate(org, dc, cluster, image string, shutdown bool) error {
+func (c *Manager) RollingUpdate(ctx context.Context, org, dc, cluster, image string, shutdown bool) error {
 	nodes, err := c.NodesFor(context.Background(), org)
 	if err != nil {
 		return err
@@ -343,7 +345,7 @@ func (c *Manager) RollingUpdate(org, dc, cluster, image string, shutdown bool) e
 	if image != "" {
 		kind = "Rolling update to " + image
 	}
-	return c.startTask(&Job{Org: org, Kind: kind, From: groupLabel(dc, cluster)}, "cluster:"+dc+"/"+cluster, 24*time.Hour, func(ctx context.Context, j *Job) error {
+	return c.startTask(ctx, &Job{Org: org, Kind: kind, From: groupLabel(dc, cluster)}, "cluster:"+dc+"/"+cluster, 24*time.Hour, func(ctx context.Context, j *Job) error {
 		for i, n := range members {
 			prefix := fmt.Sprintf("%s (%d/%d): ", n.Name, i+1, len(members))
 			step := func(s string) { c.update(j, prefix+s, false, false) }

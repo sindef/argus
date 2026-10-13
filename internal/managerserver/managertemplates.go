@@ -70,7 +70,7 @@ func (s *Server) libraryTemplate(org, name string) (libTemplate, error) {
 	return s.libraryTemplates(org)[i], nil
 }
 
-func (s *Server) saveToLibrary(org string, src manager.Node, ns, vm, name string) error {
+func (s *Server) saveToLibrary(ctx context.Context, org string, src manager.Node, ns, vm, name string) error {
 	if !ui.ValidObject.MatchString(name) {
 		return errors.New("invalid template name")
 	}
@@ -79,7 +79,7 @@ func (s *Server) saveToLibrary(org string, src manager.Node, ns, vm, name string
 		return fmt.Errorf("template %s already exists", name)
 	}
 	st, _ := s.manager.NodeState(src.Name)
-	return s.manager.Task(org, "Save template "+name+" to Argus Manager", "library-template:"+org+"/"+name, func(ctx context.Context, progress func(string)) error {
+	return s.manager.Task(ctx, org, "Save template "+name+" to Argus Manager", "library-template:"+org+"/"+name, func(ctx context.Context, progress func(string)) error {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return err
 		}
@@ -158,7 +158,7 @@ func (s *Server) deployFromLibrary(r *http.Request, name string, dst manager.Nod
 		ex.Disks = append(ex.Disks, kube.ExportDisk{DataVolume: d.DataVolume, URL: fmt.Sprintf("https://%s/template-data/%s/%s/%s.img.gz", addr, org, name, d.DataVolume)})
 	}
 	manager.RenameExport(&ex, t.SourceVM, vm)
-	return s.manager.Deploy(org, dst, vm, pool, name, ex)
+	return s.manager.Deploy(r.Context(), org, dst, vm, pool, name, ex)
 }
 
 func (s *Server) serveTemplateData(w http.ResponseWriter, r *http.Request) {
@@ -235,9 +235,9 @@ func (s *Server) vmCopy(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case err != nil:
 			case target == "manager":
-				err = s.saveToLibrary(org, src, r.FormValue("ns"), r.FormValue("vm"), name)
+				err = s.saveToLibrary(r.Context(), org, src, r.FormValue("ns"), r.FormValue("vm"), name)
 			default:
-				err = s.manager.CopyVM(src, dst, r.FormValue("ns"), r.FormValue("vm"), name, pool, mode == "template")
+				err = s.manager.CopyVM(r.Context(), src, dst, r.FormValue("ns"), r.FormValue("vm"), name, pool, mode == "template")
 			}
 		}
 	}

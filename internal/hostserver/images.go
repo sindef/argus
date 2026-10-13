@@ -44,6 +44,7 @@ func (s *Server) importImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("%s: import image %s from %s", ui.Session(r).User, name, src)
+	s.trackImage(r.Context(), "Import image", name)
 	w.Header().Set("HX-Refresh", "true")
 }
 
@@ -149,6 +150,7 @@ func (s *Server) apiImportImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("%s: import image %s", ui.Session(r).User, req.Name)
+	s.trackImage(r.Context(), "Import image", req.Name)
 	ui.WriteJSON(w, map[string]string{})
 }
 

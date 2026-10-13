@@ -313,7 +313,7 @@ func (s *Server) libraryAdd(r *http.Request) error {
 	case !ui.ValidObject.MatchString(name) || !tagRE.MatchString(tag):
 		return errors.New("invalid name or tag")
 	}
-	return s.manager.Task(org, "Import "+name+":"+tag+" to library", "library:"+org+"/"+name, func(ctx context.Context, progress func(string)) error {
+	return s.manager.Task(r.Context(), org, "Import "+name+":"+tag+" to library", "library:"+org+"/"+name, func(ctx context.Context, progress func(string)) error {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, src, nil)
 		if err != nil {
 			return err
@@ -378,7 +378,7 @@ func (s *Server) librarySend(r *http.Request) error {
 	}
 	repo := org + "/" + name
 	src := kube.RegistrySource{Image: addr + "/" + repo + ":" + tag, CA: string(s.caPEM)}
-	return s.manager.SendImage(org, hostName, size, src, targets, func() (string, string) { return s.newPull(repo) })
+	return s.manager.SendImage(r.Context(), org, hostName, size, src, targets, func() (string, string) { return s.newPull(repo) })
 }
 
 func (s *Server) importFromSource(r *http.Request) error {
@@ -392,6 +392,7 @@ func (s *Server) importFromSource(r *http.Request) error {
 		return errors.New("invalid name")
 	}
 	req := wire.ImageImportRequest{Name: name, Size: size}
+	from := "URL"
 	switch src := r.FormValue("source"); src {
 	case "":
 		req.URL = path
@@ -404,6 +405,7 @@ func (s *Server) importFromSource(r *http.Request) error {
 		if i < 0 {
 			return fmt.Errorf("source %s not found", src)
 		}
+		from = src
 		base := strings.TrimRight(sources[i].URL, "/") + "/" + strings.TrimLeft(path, "/")
 		if sources[i].Kind == "registry" {
 			req.Registry = &kube.RegistrySource{Image: base, CA: sources[i].CA}
@@ -414,21 +416,11 @@ func (s *Server) importFromSource(r *http.Request) error {
 	if req.Registry == nil && !strings.HasPrefix(req.URL, "https://") && !strings.HasPrefix(req.URL, "http://") {
 		return errors.New("enter an http or https URL")
 	}
-	var members []manager.NodeState
-	for _, st := range s.inventory(r) {
-		if slices.Contains(r.Form["hosts"], st.Node.Name) {
-			members = append(members, st)
-		}
+	targets, err := s.nodesNamed(r, r.Form["hosts"])
+	if err != nil {
+		return err
 	}
-	if len(members) == 0 {
-		return errors.New("pick at least one host")
-	}
-	if e := fanOut(r.Context(), members, func(ctx context.Context, n manager.Node) error {
-		return n.Call(ctx, http.MethodPost, "/api/images/import", req, nil)
-	}); e != "" {
-		return errors.New(e)
-	}
-	return nil
+	return s.manager.ImportImage(r.Context(), org, from, req, targets)
 }
 
 func (s *Server) changeSources(r *http.Request, add bool) error {

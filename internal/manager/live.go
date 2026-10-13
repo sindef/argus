@@ -215,8 +215,8 @@ func (c *Manager) syncCAs(ctx context.Context, src, dst Node) error {
 	return nil
 }
 
-func (c *Manager) LiveMigrate(src, dst Node, ns, vm string) error {
-	return c.startJob(&Job{Org: src.Org, Namespace: ns, VM: vm, From: src.Name, To: dst.Name, Live: true}, 6*time.Hour, func(ctx context.Context, j *Job) error {
+func (c *Manager) LiveMigrate(ctx context.Context, src, dst Node, ns, vm string) error {
+	return c.startJob(ctx, &Job{Org: src.Org, Namespace: ns, VM: vm, From: src.Name, To: dst.Name, Live: true}, 6*time.Hour, func(ctx context.Context, j *Job) error {
 		return c.liveMigrate(ctx, j, src, dst, ns, vm)
 	})
 }

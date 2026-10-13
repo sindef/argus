@@ -210,7 +210,11 @@ func (l localOps) CreateVM(ctx context.Context, req hostui.CreateVMReq) error {
 		}
 		spec.Image = tpls[i].Root
 	}
-	return l.s.kube.CreateVM(ctx, spec)
+	if err := l.s.kube.CreateVM(ctx, spec); err != nil {
+		return err
+	}
+	l.s.trackCreate(ctx, spec.Name)
+	return nil
 }
 
 func (l localOps) Hardware(ctx context.Context, ns, name string) (kube.Hardware, error) {

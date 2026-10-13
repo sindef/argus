@@ -454,9 +454,9 @@ func (s *Server) migrate(r *http.Request, src, dst manager.Node, name string) er
 		return err
 	}
 	if vm.Running {
-		return s.manager.LiveMigrate(src, dst, kube.Namespace, name)
+		return s.manager.LiveMigrate(r.Context(), src, dst, kube.Namespace, name)
 	}
-	return s.manager.Migrate(src, dst, kube.Namespace, name)
+	return s.manager.Migrate(r.Context(), src, dst, kube.Namespace, name)
 }
 
 func (s *Server) managerProtect(w http.ResponseWriter, r *http.Request) {

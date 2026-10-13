@@ -21,12 +21,12 @@ func RenameExport(ex *kube.Export, from, to string) {
 	}
 }
 
-func (c *Manager) CopyVM(src, dst Node, ns, vm, name, pool string, template bool) error {
+func (c *Manager) CopyVM(ctx context.Context, src, dst Node, ns, vm, name, pool string, template bool) error {
 	kind := "Clone " + vm + " as " + name
 	if template {
 		kind = "Create template " + name + " from " + vm
 	}
-	return c.startJob(&Job{Org: src.Org, Kind: kind, Namespace: ns, VM: vm, From: src.Name, To: dst.Name}, 12*time.Hour, func(ctx context.Context, j *Job) error {
+	return c.startJob(ctx, &Job{Org: src.Org, Kind: kind, Namespace: ns, VM: vm, From: src.Name, To: dst.Name}, 12*time.Hour, func(ctx context.Context, j *Job) error {
 		if src.Name == dst.Name && pool == "" {
 			c.update(j, "Cloning", false, false)
 			if err := src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "meta/clone"), wire.MetaRequest{Value: name, Template: template}, nil); err != nil {
@@ -64,8 +64,8 @@ func (c *Manager) CopyVM(src, dst Node, ns, vm, name, pool string, template bool
 	})
 }
 
-func (c *Manager) Deploy(org string, dst Node, name, pool, from string, ex kube.Export) error {
-	return c.startTask(&Job{Org: org, Kind: "Deploy " + name + " from template " + from, To: dst.Name}, "deploy:"+dst.Name+"/"+name, 12*time.Hour, func(ctx context.Context, j *Job) error {
+func (c *Manager) Deploy(ctx context.Context, org string, dst Node, name, pool, from string, ex kube.Export) error {
+	return c.startTask(ctx, &Job{Org: org, Kind: "Deploy " + name + " from template " + from, To: dst.Name}, "deploy:"+dst.Name+"/"+name, 12*time.Hour, func(ctx context.Context, j *Job) error {
 		return c.importAndWait(ctx, j, dst, name, pool, false, ex)
 	})
 }

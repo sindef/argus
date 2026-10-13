@@ -29,6 +29,7 @@ type Server struct {
 	schedSeen   time.Time
 	flr         flrState
 	esxi        esxiStreams
+	tasks       taskList
 	smart       smartCache
 }
 

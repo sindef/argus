@@ -178,7 +178,7 @@ func (s *Server) backupTick(ctx context.Context) {
 			s.snapshotDue(ctx, vm.Namespace, vm.Name, p)
 		}
 		if p.BackupEvery > 0 && time.Since(s.lastCopy(ctx, vm.Namespace, vm.Name, p.Target)) >= time.Duration(p.BackupEvery)*time.Hour {
-			s.startBackup(vm.Namespace, vm.Name, p)
+			s.startBackup(ctx, vm.Namespace, vm.Name, p)
 		}
 	}
 }
@@ -241,17 +241,21 @@ func (s *Server) setLastCopy(key string, t time.Time) {
 
 var transfers = make(chan struct{}, config.Int("ARGUS_TRANSFERS", 2))
 
-func (s *Server) startBackup(ns, name string, p wire.BackupPolicy) bool {
+func (s *Server) startBackup(ctx context.Context, ns, name string, p wire.BackupPolicy) bool {
 	key := ns + "/" + name
 	if !s.backups.start(key) {
 		return false
 	}
+	t := s.tasks.begin(ctx, "Back up to "+p.Target, name, "")
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
 		defer cancel()
+		s.tasks.set(t, "Waiting for a transfer slot")
 		transfers <- struct{}{}
 		defer func() { <-transfers }()
+		s.tasks.set(t, "Running")
 		err := s.backupVM(ctx, ns, name, p)
+		s.tasks.end(t, err)
 		if err != nil {
 			log.Printf("backup %s: %v", key, err)
 		}
@@ -422,7 +426,7 @@ func (s *Server) restoreBackup(ctx context.Context, store, vm, stamp, target str
 		return err
 	}
 	s.backups.note(job.Key, "Restoring "+stamp+" as "+target)
-	go s.watchRestore(token, job)
+	go s.watchRestore(token, job, s.tasks.begin(ctx, "Restore "+stamp, target, ""))
 	return nil
 }
 
@@ -463,13 +467,13 @@ func (s *Server) resumeRestores() {
 	s.backups.restores = m
 	s.backups.mu.Unlock()
 	for token, job := range m {
-		go s.watchRestore(token, job)
+		go s.watchRestore(token, job, s.tasks.begin(context.Background(), "Resume restore", job.Target, ""))
 	}
 }
 
 var errRestoreAborted = errors.New("restore aborted")
 
-func (s *Server) watchRestore(token string, job restoreJob) {
+func (s *Server) watchRestore(token string, job restoreJob, t *wire.Task) {
 	defer s.untrackRestore(token)
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
 	defer cancel()
@@ -482,7 +486,7 @@ func (s *Server) watchRestore(token string, job restoreJob) {
 		}
 		disks, _ := s.kube.DiskStatus(ctx, job.Namespace, job.Target)
 		return disks, ctx.Err()
-	}, nil)
+	}, func(ds []kube.DiskStatus) { s.tasks.set(t, diskProgress(ds)) })
 	cctx, cancel := lifecycle.CleanupContext()
 	lifecycle.LogCleanup("restore of "+job.Target, s.kube.FinishImport(cctx, job.Namespace, job.Target))
 	cancel()
@@ -491,12 +495,16 @@ func (s *Server) watchRestore(token string, job restoreJob) {
 		if err := s.kube.DeleteVM(context.Background(), job.Namespace, job.Target); err != nil {
 			log.Printf("restore of %s: remove %s: %v", job.Rel, job.Target, err)
 		}
+		s.tasks.end(t, errRestoreAborted)
 	case failed != "":
 		s.backups.note(job.Key, "Failed restore as "+job.Target+": disk "+failed+" did not copy")
+		s.tasks.end(t, fmt.Errorf("disk %s did not copy", failed))
 	case ctx.Err() != nil:
 		s.backups.note(job.Key, "Failed restore as "+job.Target+": timed out")
+		s.tasks.end(t, errors.New("timed out"))
 	default:
 		s.backups.note(job.Key, "Restored as "+job.Target)
+		s.tasks.end(t, nil)
 	}
 	log.Printf("restore of %s as %s finished (failed disk: %q)", job.Rel, job.Target, failed)
 }
@@ -641,7 +649,7 @@ func (s *Server) backupOp(ctx context.Context, ns, name, op string, f func(strin
 				keep = p.BackupKeep
 			}
 		}
-		if !s.startBackup(ns, name, wire.BackupPolicy{BackupKeep: keep, Target: target}) {
+		if !s.startBackup(ctx, ns, name, wire.BackupPolicy{BackupKeep: keep, Target: target}) {
 			return errors.New("a backup of this VM is already running")
 		}
 		return nil

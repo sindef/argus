@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"context"
 	"html/template"
 	"log"
@@ -121,7 +122,12 @@ func (s *Core) Authenticate(h http.HandlerFunc) http.HandlerFunc {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
-			r2 := r.WithContext(context.WithValue(r.Context(), ctxKey{}, ReqAuth{Session: sess}))
+			actor := r.Header.Get(auth.ActorHeader)
+			if actor != "" {
+				who += " for " + actor
+			}
+			ctx := auth.WithActor(context.WithValue(r.Context(), ctxKey{}, ReqAuth{Session: sess}), cmp.Or(actor, sess.User))
+			r2 := r.WithContext(ctx)
 			s.audited(w, r2, who, func(w http.ResponseWriter) { h(w, r2) })
 			return
 		}
@@ -143,7 +149,7 @@ func (s *Core) Authenticate(h http.HandlerFunc) http.HandlerFunc {
 			Redirect(w, r, "/password")
 			return
 		}
-		r2 := r.WithContext(context.WithValue(r.Context(), ctxKey{}, ReqAuth{Session: sess, Token: c.Value}))
+		r2 := r.WithContext(auth.WithActor(context.WithValue(r.Context(), ctxKey{}, ReqAuth{Session: sess, Token: c.Value}), sess.User))
 		s.audited(w, r2, s.AuditUser(sess.Org, sess.User), func(w http.ResponseWriter) { h(w, r2) })
 	}
 }

@@ -3,6 +3,7 @@ package wire
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"argus/internal/hostd"
 	"argus/internal/kube"
@@ -217,4 +218,20 @@ type VolumeRequest struct {
 	URL  string `json:"url"`
 	VM   string `json:"vm"`
 	Pool string `json:"pool"`
+}
+
+type Task struct {
+	ID      string    `json:"id"`
+	Kind    string    `json:"kind"`
+	VM      string    `json:"vm,omitempty"`
+	Object  string    `json:"object,omitempty"`
+	Host    string    `json:"host,omitempty"`
+	Node    string    `json:"node,omitempty"`
+	User    string    `json:"user,omitempty"`
+	Status  string    `json:"status"`
+	Started time.Time `json:"started"`
+	Ended   time.Time `json:"ended,omitzero"`
+	Done    bool      `json:"done"`
+	Failed  bool      `json:"failed"`
+	Hold    bool      `json:"hold,omitempty"`
 }

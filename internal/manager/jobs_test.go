@@ -18,7 +18,7 @@ func TestInterruptedJobKeepsLocks(t *testing.T) {
 	if !c.Busy("a1", "web") || !c.Busy("a2", "web") {
 		t.Fatal("interrupted migration released its locks")
 	}
-	err := c.startJob(&Job{VM: "web", From: "a2", To: "a1"}, time.Minute, func(context.Context, *Job) error { return nil })
+	err := c.startJob(context.Background(), &Job{VM: "web", From: "a2", To: "a1"}, time.Minute, func(context.Context, *Job) error { return nil })
 	if err == nil {
 		t.Fatal("new operation accepted on a VM with an unresolved migration")
 	}

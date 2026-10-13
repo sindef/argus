@@ -87,9 +87,9 @@ func (s *Server) groupAction(w http.ResponseWriter, r *http.Request) {
 	case "apply-networks":
 		err = s.applyClusterNetworks(r, dc, cl)
 	case "enter-maintenance":
-		err = s.manager.EnterMaintenance(org, r.FormValue("host"), r.FormValue("shutdown") != "")
+		err = s.manager.EnterMaintenance(r.Context(), org, r.FormValue("host"), r.FormValue("shutdown") != "")
 	case "exit-maintenance":
-		err = s.manager.ExitMaintenance(org, r.FormValue("host"))
+		err = s.manager.ExitMaintenance(r.Context(), org, r.FormValue("host"))
 	case "cluster-settings":
 		err = s.saveClusterSettings(r, dc, cl)
 	case "rolling-update":
@@ -98,7 +98,7 @@ func (s *Server) groupAction(w http.ResponseWriter, r *http.Request) {
 			err = errors.New("invalid image reference")
 			break
 		}
-		err = s.manager.RollingUpdate(org, ungroup(dc), ungroup(cl), img, r.FormValue("shutdown") != "")
+		err = s.manager.RollingUpdate(r.Context(), org, ungroup(dc), ungroup(cl), img, r.FormValue("shutdown") != "")
 	default:
 		err = errors.New("unknown operation")
 	}

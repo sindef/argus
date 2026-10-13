@@ -39,6 +39,8 @@ func (c *Core) Routes() []Route {
 		{"POST /certificate", OrgAdmin, c.setCertificate},
 		{"POST /notify", OrgAdmin, c.notifyForm},
 		{"POST /alarms/ack", auth.Administer, c.ackAlarm},
+		{"GET /tasks", SignedIn, c.tasksBar},
+		{"POST /tasks/dismiss", SignedIn, c.dismissTask},
 		{"GET /login", Public, c.loginPage},
 		{"POST /login", Public, c.login},
 		{"POST /login/totp", Public, c.loginTOTP},

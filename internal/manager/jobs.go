@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -28,16 +29,19 @@ var errUnknown = errors.New("outcome unknown; source and target left in place, c
 type Job struct {
 	ID        string
 	Kind      string
+	User      string
 	Org       string
 	Namespace string
 	VM        string
 	From, To  string
 	Started   time.Time
+	Ended     time.Time
 	Status    string
 	Done      bool
 	Failed    bool
 	Live      bool
 	Attention bool
+	Dismissed bool
 }
 
 func busyKey(node, vm string) string { return node + "/" + vm }
@@ -48,7 +52,7 @@ func (c *Manager) Busy(node, vm string) bool {
 	return c.busy[busyKey(node, vm)]
 }
 
-func (c *Manager) startJob(j *Job, timeout time.Duration, run func(context.Context, *Job) error) error {
+func (c *Manager) startJob(ctx context.Context, j *Job, timeout time.Duration, run func(context.Context, *Job) error) error {
 	keys := []string{busyKey(j.From, j.VM), busyKey(j.To, j.VM)}
 	c.mu.Lock()
 	if c.syncing[j.VM] {
@@ -66,7 +70,7 @@ func (c *Manager) startJob(j *Job, timeout time.Duration, run func(context.Conte
 	}
 	id := make([]byte, 8)
 	rand.Read(id)
-	j.ID, j.Started, j.Status = hex.EncodeToString(id), time.Now(), "Starting"
+	j.ID, j.Started, j.Status, j.User = hex.EncodeToString(id), time.Now(), "Starting", cmp.Or(j.User, auth.Actor(ctx))
 	c.jobs = append(c.jobs, j)
 	if len(c.jobs) > keepJobs {
 		c.jobs = c.jobs[len(c.jobs)-keepJobs:]
@@ -106,6 +110,9 @@ func (c *Manager) startJob(j *Job, timeout time.Duration, run func(context.Conte
 func (c *Manager) update(j *Job, status string, done, failed bool) {
 	c.mu.Lock()
 	j.Status, j.Done, j.Failed = status, done, failed
+	if done {
+		j.Ended = time.Now()
+	}
 	c.mu.Unlock()
 	if err := c.saveJobs(); err != nil {
 		log.Printf("jobs: %v", err)
@@ -141,6 +148,12 @@ func (c *Manager) loadJobs(ctx context.Context) {
 		return
 	}
 	for _, j := range jobs {
+		if j.Done && j.Ended.IsZero() {
+			j.Dismissed = true
+		}
+		if !j.Done {
+			j.Ended = time.Now()
+		}
 		if !j.Done && j.Kind != "" {
 			j.Done, j.Failed = true, true
 			j.Status = fmt.Sprintf("Interrupted by Manager restart during %q; check %s", j.Status, j.From)
@@ -161,6 +174,19 @@ func (c *Manager) loadJobs(ctx context.Context) {
 	if err := c.saveJobs(); err != nil {
 		log.Printf("jobs: %v", err)
 	}
+}
+
+func (c *Manager) Dismiss(org, id string) error {
+	c.mu.Lock()
+	i := slices.IndexFunc(c.jobs, func(j *Job) bool { return j.ID == id && j.Org == org && j.Done && !j.Attention })
+	if i >= 0 {
+		c.jobs[i].Dismissed = true
+	}
+	c.mu.Unlock()
+	if i < 0 {
+		return errors.New("no finished task with that ID")
+	}
+	return c.saveJobs()
 }
 
 func (c *Manager) Resolve(ctx context.Context, org, id string) error {

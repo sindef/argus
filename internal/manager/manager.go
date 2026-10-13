@@ -297,7 +297,7 @@ func (n Node) do(ctx context.Context, method, path string, in, out any) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+n.Token)
+	n.authorize(req)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := n.client().Do(req)
 	if err != nil {
@@ -317,6 +317,14 @@ func (n Node) do(ctx context.Context, method, path string, in, out any) error {
 	return nil
 }
 
+func (n Node) authorize(req *http.Request) {
+	req.Header.Set("Authorization", "Bearer "+n.Token)
+	req.Header.Del(auth.ActorHeader)
+	if a := auth.Actor(req.Context()); a != "" {
+		req.Header.Set(auth.ActorHeader, a)
+	}
+}
+
 func (n Node) Proxy(ctx context.Context, method, path string, body io.Reader, h http.Header) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, n.URL+path, body)
 	if err != nil {
@@ -325,7 +333,7 @@ func (n Node) Proxy(ctx context.Context, method, path string, body io.Reader, h 
 	for k, v := range h {
 		req.Header[k] = v
 	}
-	req.Header.Set("Authorization", "Bearer "+n.Token)
+	n.authorize(req)
 	return n.client().Do(req)
 }
 
@@ -341,7 +349,7 @@ func (n Node) Open(ctx context.Context, method, path string, h http.Header, body
 	for k, v := range h {
 		req.Header[k] = v
 	}
-	req.Header.Set("Authorization", "Bearer "+n.Token)
+	n.authorize(req)
 	resp, err := n.streaming().Do(req)
 	if err != nil {
 		return nil, err
@@ -467,8 +475,8 @@ func (c *Manager) Jobs(org string) []Job {
 	return out
 }
 
-func (c *Manager) Migrate(src, dst Node, ns, vm string) error {
-	return c.startJob(&Job{Org: src.Org, Namespace: ns, VM: vm, From: src.Name, To: dst.Name}, 12*time.Hour, func(ctx context.Context, j *Job) error {
+func (c *Manager) Migrate(ctx context.Context, src, dst Node, ns, vm string) error {
+	return c.startJob(ctx, &Job{Org: src.Org, Namespace: ns, VM: vm, From: src.Name, To: dst.Name}, 12*time.Hour, func(ctx context.Context, j *Job) error {
 		return c.migrate(ctx, j, src, dst, ns, vm)
 	})
 }
