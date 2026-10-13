@@ -20,6 +20,7 @@ import (
 	"argus/internal/kube"
 	"argus/internal/manager"
 	"argus/internal/vsphere"
+	"argus/internal/wire"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
@@ -643,9 +644,7 @@ func (s *Server) hostAPIRoutes() {
 			})
 		},
 		"POST /api/host/cpu-baseline": func(w http.ResponseWriter, r *http.Request) {
-			var req struct {
-				Model string `json:"model"`
-			}
+			var req wire.CPUBaselineRequest
 			s.apiOp(w, r, &req, func() (any, error) { return nil, s.kube.SetCPUBaseline(r.Context(), req.Model) })
 		},
 		"GET /api/host/vm-form": func(w http.ResponseWriter, r *http.Request) {

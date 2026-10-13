@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"argus/internal/kube"
+	"argus/internal/wire"
 )
 
 func (c *Manager) CopyImage(org, image string, src Node, targets []Node) error {
@@ -18,7 +19,7 @@ func (c *Manager) CopyImage(org, image string, src Node, targets []Node) error {
 	}
 	return c.startTask(&Job{Org: org, Kind: "Copy image " + image, From: src.Name, To: strings.Join(names, ", ")}, "image:"+image, 12*time.Hour, func(ctx context.Context, j *Job) error {
 		var ex kube.Export
-		if err := src.do(ctx, http.MethodPost, APIPath("/api/images/%s/export", image), map[string]string{"baseURL": src.URL}, &ex); err != nil {
+		if err := src.do(ctx, http.MethodPost, APIPath("/api/images/%s/export", image), wire.ExportRequest{BaseURL: src.URL}, &ex); err != nil {
 			return err
 		}
 		defer func() {

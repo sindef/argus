@@ -14,6 +14,7 @@ import (
 
 	"argus/internal/kube"
 	"argus/internal/tlscert"
+	"argus/internal/wire"
 )
 
 func writeJSON(w http.ResponseWriter, v any) {
@@ -110,9 +111,7 @@ func (s *Server) apiDelete(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiExport(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
-	var req struct {
-		BaseURL string `json:"baseURL"`
-	}
+	var req wire.ExportRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.BaseURL == "" {
 		apiError(w, r, http.StatusBadRequest, errors.New("baseURL required"))
 		return
@@ -137,13 +136,7 @@ func (s *Server) apiUnexport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiImport(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Name      string      `json:"name"`
-		Operation string      `json:"operation"`
-		Export    kube.Export `json:"export"`
-		Pool      string      `json:"pool"`
-		Template  bool        `json:"template"`
-	}
+	var req wire.ImportRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || !validObject.MatchString(req.Name) || req.Operation == "" {
 		apiError(w, r, http.StatusBadRequest, errors.New("invalid import request"))
 		return
@@ -210,9 +203,7 @@ func (s *Server) apiKubeVirtCA(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiExternalCA(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Bundle string `json:"bundle"`
-	}
+	var req wire.ExternalCARequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		apiError(w, r, http.StatusBadRequest, err)
 		return
@@ -258,11 +249,7 @@ func (s *Server) apiVMSpec(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiReceive(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Name        string         `json:"name"`
-		MigrationID string         `json:"migrationID"`
-		Spec        map[string]any `json:"spec"`
-	}
+	var req wire.ReceiveRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || !validObject.MatchString(req.Name) || req.MigrationID == "" {
 		apiError(w, r, http.StatusBadRequest, errors.New("invalid receive request"))
 		return
@@ -273,15 +260,12 @@ func (s *Server) apiReceive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("%s: receiving %s at %s", session(r).User, req.Name, addr)
-	writeJSON(w, map[string]string{"syncAddress": addr})
+	writeJSON(w, wire.ReceiveResponse{SyncAddress: addr})
 }
 
 func (s *Server) apiSend(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
-	var req struct {
-		MigrationID string `json:"migrationID"`
-		ConnectURL  string `json:"connectURL"`
-	}
+	var req wire.SendRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.MigrationID == "" || req.ConnectURL == "" {
 		apiError(w, r, http.StatusBadRequest, errors.New("invalid send request"))
 		return
@@ -308,12 +292,8 @@ func (s *Server) apiMigrationPhase(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"phase": phase})
 }
 
-type operationReq struct {
-	Operation string `json:"operation"`
-}
-
 func (s *Server) apiMigrationCleanup(w http.ResponseWriter, r *http.Request) {
-	var req operationReq
+	var req wire.OperationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Operation == "" {
 		apiError(w, r, http.StatusBadRequest, errors.New("operation required"))
 		return
@@ -326,7 +306,7 @@ func (s *Server) apiMigrationCleanup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiAbort(w http.ResponseWriter, r *http.Request) {
-	var req operationReq
+	var req wire.OperationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Operation == "" {
 		apiError(w, r, http.StatusBadRequest, errors.New("operation required"))
 		return
@@ -394,10 +374,7 @@ func (s *Server) apiSnapshotOp(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiRenameClone(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
-	var req struct {
-		Value    string `json:"value"`
-		Template bool   `json:"template"`
-	}
+	var req wire.MetaRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		apiError(w, r, http.StatusBadRequest, err)
 		return

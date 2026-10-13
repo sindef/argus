@@ -17,6 +17,7 @@ import (
 	"argus/internal/kube"
 	"argus/internal/netguard"
 	"argus/internal/registry"
+	"argus/internal/wire"
 )
 
 var validObject = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
@@ -177,7 +178,7 @@ func (s *Server) apiImageOp(w http.ResponseWriter, r *http.Request) {
 	var out any = map[string]string{}
 	switch r.PathValue("op") {
 	case "export":
-		var req struct{ BaseURL string }
+		var req wire.ExportRequest
 		if err = decodeJSON(r.Body, &req); err == nil {
 			out, err = s.kube.ExportImage(r.Context(), name, req.BaseURL, string(s.caPEM))
 		}

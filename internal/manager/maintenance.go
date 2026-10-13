@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"argus/internal/kube"
+	"argus/internal/wire"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -228,7 +229,7 @@ func (c *Manager) evacuate(ctx context.Context, j *Job, n Node, shutdown bool) e
 	}
 	c.update(j, "Waiting for VMs to stop", false, false)
 	return waitFor(ctx, 10*time.Minute, func() (bool, error) {
-		var st hostStatus
+		var st wire.HostStatus
 		return n.do(ctx, http.MethodGet, "/api/host/status", nil, &st) == nil && st.Running == 0, nil
 	})
 }
@@ -323,14 +324,6 @@ func (c *Manager) leave(ctx context.Context, j *Job, n Node) error {
 	return nil
 }
 
-type hostStatus struct {
-	Status  string `json:"status"`
-	Version string `json:"version"`
-	Running int    `json:"running"`
-	Ready   bool   `json:"ready"`
-	Reason  string `json:"reason"`
-}
-
 func (c *Manager) RollingUpdate(org, dc, cluster, image string, shutdown bool) error {
 	nodes, err := c.NodesFor(context.Background(), org)
 	if err != nil {
@@ -378,7 +371,7 @@ func (c *Manager) cycleHost(ctx context.Context, n Node, image string, shutdown 
 	if err := c.evacuate(ctx, sub, n, shutdown); err != nil {
 		return err
 	}
-	var before hostStatus
+	var before wire.HostStatus
 	if err := n.do(ctx, http.MethodGet, "/api/host/status", nil, &before); err != nil {
 		return err
 	}
@@ -391,11 +384,11 @@ func (c *Manager) cycleHost(ctx context.Context, n Node, image string, shutdown 
 		return err
 	}
 	if err := waitFor(ctx, 30*time.Minute, func() (bool, error) {
-		var st hostStatus
+		var st wire.HostStatus
 		if reachable := n.do(ctx, http.MethodGet, "/api/host/status", nil, &st) == nil; !reachable {
 			return true, nil
 		}
-		if strings.HasPrefix(st.Status, "Update failed") || strings.HasPrefix(st.Status, "Cancelled") {
+		if st.State == wire.HostFailed || st.State == wire.HostCancelled {
 			return false, errors.New(st.Status)
 		}
 		step(strings.ToLower(st.Status))
@@ -404,7 +397,7 @@ func (c *Manager) cycleHost(ctx context.Context, n Node, image string, shutdown 
 		return err
 	}
 	step("waiting for the host to return")
-	var after hostStatus
+	var after wire.HostStatus
 	if err := waitFor(ctx, 30*time.Minute, func() (bool, error) {
 		if reachable := n.do(ctx, http.MethodGet, "/api/host/status", nil, &after) == nil; !reachable {
 			return false, nil

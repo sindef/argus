@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"argus/internal/kube"
+	"argus/internal/wire"
 )
 
 func RenameExport(ex *kube.Export, from, to string) {
@@ -27,7 +28,7 @@ func (c *Manager) CopyVM(src, dst Node, ns, vm, name, pool string, template bool
 	return c.startJob(&Job{Org: src.Org, Kind: kind, Namespace: ns, VM: vm, From: src.Name, To: dst.Name}, 12*time.Hour, func(ctx context.Context, j *Job) error {
 		if src.Name == dst.Name && pool == "" {
 			c.update(j, "Cloning", false, false)
-			if err := src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "meta/clone"), map[string]any{"value": name, "template": template}, nil); err != nil {
+			if err := src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "meta/clone"), wire.MetaRequest{Value: name, Template: template}, nil); err != nil {
 				return err
 			}
 			err := waitFor(ctx, 10*time.Minute, func() (bool, error) {
@@ -49,7 +50,7 @@ func (c *Manager) CopyVM(src, dst Node, ns, vm, name, pool string, template bool
 			base = "self"
 		}
 		var ex kube.Export
-		if err := src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "snapshot-export"), map[string]string{"baseURL": base}, &ex); err != nil {
+		if err := src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "snapshot-export"), wire.ExportRequest{BaseURL: base}, &ex); err != nil {
 			return err
 		}
 		defer func() {

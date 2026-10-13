@@ -10,6 +10,7 @@ import (
 	"slices"
 
 	"argus/internal/kube"
+	"argus/internal/wire"
 )
 
 var errNoZFS = errors.New("not on ZFS")
@@ -41,11 +42,8 @@ func zsync(ctx context.Context, vm string, owner, replica Node) error {
 			keep = append(keep, bases[v])
 		}
 	}
-	var snap struct {
-		Snap string         `json:"snap"`
-		Spec map[string]any `json:"spec"`
-	}
-	if err := owner.do(ctx, http.MethodPost, vmPath(vm, "zfs/snapshot"), map[string]any{"keep": keep}, &snap); err != nil {
+	var snap wire.ZFSSnapshot
+	if err := owner.do(ctx, http.MethodPost, vmPath(vm, "zfs/snapshot"), wire.ZFSSnapshotRequest{Keep: keep}, &snap); err != nil {
 		return err
 	}
 	for v := range od {
@@ -53,7 +51,7 @@ func zsync(ctx context.Context, vm string, owner, replica Node) error {
 			return fmt.Errorf("disk %s: %w", v, err)
 		}
 	}
-	if err := replica.do(ctx, http.MethodPost, vmPath(vm, "replica/swap"), map[string]any{"export": kube.Export{Spec: snap.Spec}, "mapping": mapping}, nil); err != nil {
+	if err := replica.do(ctx, http.MethodPost, vmPath(vm, "replica/swap"), wire.ReplicaRequest{Export: kube.Export{Spec: snap.Spec}, Mapping: mapping}, nil); err != nil {
 		return err
 	}
 	done := map[string]any{"keep": []string{snap.Snap}}

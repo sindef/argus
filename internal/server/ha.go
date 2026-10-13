@@ -18,6 +18,7 @@ import (
 
 	"argus/internal/kube"
 	"argus/internal/netguard"
+	"argus/internal/wire"
 )
 
 const (
@@ -49,10 +50,7 @@ func (s *Server) writeFence() {
 }
 
 func (s *Server) apiHeartbeat(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Owned    []string          `json:"owned"`
-		Replicas map[string]string `json:"replicas"`
-	}
+	var req wire.Heartbeat
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		apiError(w, r, http.StatusBadRequest, err)
 		return
@@ -73,9 +71,7 @@ func (s *Server) apiProbe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiSetHA(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Enabled bool `json:"enabled"`
-	}
+	var req wire.HARequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		apiError(w, r, http.StatusBadRequest, err)
 		return
@@ -90,9 +86,7 @@ func (s *Server) apiSetHA(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiSnapshotExport(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
-	var req struct {
-		BaseURL string `json:"baseURL"`
-	}
+	var req wire.ExportRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.BaseURL == "" {
 		apiError(w, r, http.StatusBadRequest, errors.New("baseURL required"))
 		return
@@ -179,14 +173,9 @@ func (s *Server) haTick() {
 	}
 }
 
-type replicaReq struct {
-	Export  kube.Export       `json:"export"`
-	Mapping map[string]string `json:"mapping"`
-}
-
 func (s *Server) apiReplica(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
-	var req replicaReq
+	var req wire.ReplicaRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		apiError(w, r, http.StatusBadRequest, err)
 		return

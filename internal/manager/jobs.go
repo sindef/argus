@@ -14,6 +14,7 @@ import (
 
 	"argus/internal/auth"
 	"argus/internal/kube"
+	"argus/internal/wire"
 )
 
 const (
@@ -203,7 +204,7 @@ func (c *Manager) Resolve(ctx context.Context, org, id string) error {
 	if target, err := vmState(ctx, dst, kube.Namespace, j.VM); err == nil && target.Running {
 		return fmt.Errorf("%s is running on %s; check both hosts manually", j.VM, j.To)
 	}
-	op := map[string]string{"operation": j.ID}
+	op := wire.OperationRequest{Operation: j.ID}
 	logCleanup("migration of "+j.VM+" on "+src.Name, src.do(ctx, http.MethodPost, vmPathIn(ns, j.VM, "migration-cleanup"), op, nil))
 	logCleanup("migration of "+j.VM+" on "+dst.Name, dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, j.VM, "migration-cleanup"), op, nil))
 	if err := dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, j.VM, "abort"), op, nil); err != nil {

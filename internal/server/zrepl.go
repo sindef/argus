@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"argus/internal/kube"
+	"argus/internal/wire"
 )
 
 func (s *Server) vmDatasets(r *http.Request) (map[string]kube.ZDisk, []string, error) {
@@ -43,7 +44,7 @@ func (s *Server) apiZFSDisks(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiZFSSnapshot(w http.ResponseWriter, r *http.Request) {
 	ns, name := r.PathValue("ns"), r.PathValue("name")
-	var req struct{ Keep []string }
+	var req wire.ZFSSnapshotRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		apiError(w, r, http.StatusBadRequest, err)
 		return
@@ -70,7 +71,7 @@ func (s *Server) apiZFSSnapshot(w http.ResponseWriter, r *http.Request) {
 		apiError(w, r, http.StatusConflict, err)
 		return
 	}
-	writeJSON(w, map[string]any{"snap": snap, "spec": spec})
+	writeJSON(w, wire.ZFSSnapshot{Snap: snap, Spec: spec})
 }
 
 func (s *Server) apiZFSPrune(w http.ResponseWriter, r *http.Request) {

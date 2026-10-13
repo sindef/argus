@@ -16,6 +16,7 @@ import (
 	"argus/internal/auth"
 	"argus/internal/config"
 	"argus/internal/kube"
+	"argus/internal/wire"
 )
 
 const (
@@ -102,7 +103,7 @@ func (c *Manager) Protect(ctx context.Context, owner, vm, replica string, interv
 		return err
 	}
 	c.heartbeat(ctx)
-	return o.do(ctx, http.MethodPost, vmPath(vm, "ha"), map[string]bool{"enabled": true}, nil)
+	return o.do(ctx, http.MethodPost, vmPath(vm, "ha"), wire.HARequest{Enabled: true}, nil)
 }
 
 func (c *Manager) Unprotect(ctx context.Context, node, vm string) error {
@@ -125,10 +126,10 @@ func (c *Manager) Unprotect(ctx context.Context, node, vm string) error {
 		return err
 	}
 	if o, err := c.Node(ctx, p.Owner); err == nil {
-		logCleanup("HA flag of "+vm, o.do(ctx, http.MethodPost, vmPath(vm, "ha"), map[string]bool{"enabled": false}, nil))
+		logCleanup("HA flag of "+vm, o.do(ctx, http.MethodPost, vmPath(vm, "ha"), wire.HARequest{Enabled: false}, nil))
 	}
 	if r, err := c.Node(ctx, p.Replica); err == nil {
-		return r.do(ctx, http.MethodPost, vmPath(vm, "abort"), map[string]string{"operation": kube.HAReplicaOperation}, nil)
+		return r.do(ctx, http.MethodPost, vmPath(vm, "abort"), wire.OperationRequest{Operation: kube.HAReplicaOperation}, nil)
 	}
 	return nil
 }
@@ -190,7 +191,7 @@ func (c *Manager) heartbeat(ctx context.Context) {
 		wg.Add(1)
 		go func(n Node) {
 			defer wg.Done()
-			if err := n.do(ctx, http.MethodPost, "/api/heartbeat", map[string]any{"owned": owned, "replicas": replicas}, nil); err == nil {
+			if err := n.do(ctx, http.MethodPost, "/api/heartbeat", wire.Heartbeat{Owned: owned, Replicas: replicas}, nil); err == nil {
 				c.mu.Lock()
 				c.lastSeen[n.Name] = time.Now()
 				c.mu.Unlock()
@@ -378,7 +379,7 @@ func (c *Manager) sync(ctx context.Context, p Protected) error {
 		}
 	}
 	var ex kube.Export
-	if err := owner.do(ctx, http.MethodPost, vmPath(p.VM, "snapshot-export"), map[string]string{"baseURL": owner.URL}, &ex); err != nil {
+	if err := owner.do(ctx, http.MethodPost, vmPath(p.VM, "snapshot-export"), wire.ExportRequest{BaseURL: owner.URL}, &ex); err != nil {
 		return err
 	}
 	defer func() {
@@ -390,30 +391,30 @@ func (c *Manager) sync(ctx context.Context, p Protected) error {
 		return c.firstReplica(ctx, p, replica, ex)
 	}
 	var mapping map[string]string
-	if err := replica.do(ctx, http.MethodPost, vmPath(p.VM, "replica/refresh"), map[string]any{"export": ex}, &mapping); err != nil {
+	if err := replica.do(ctx, http.MethodPost, vmPath(p.VM, "replica/refresh"), wire.ReplicaRequest{Export: ex}, &mapping); err != nil {
 		return err
 	}
 	abort := func(cause error) error {
 		cctx, cancel := cleanupCtx()
 		defer cancel()
-		logCleanup("replica refresh of "+p.VM, replica.do(cctx, http.MethodPost, vmPath(p.VM, "replica/abort"), map[string]any{"mapping": mapping}, nil))
+		logCleanup("replica refresh of "+p.VM, replica.do(cctx, http.MethodPost, vmPath(p.VM, "replica/abort"), wire.ReplicaRequest{Mapping: mapping}, nil))
 		return cause
 	}
-	failed, err := kube.WaitDisks(ctx, 5*time.Second, nodeDisks(replica, vmPath(p.VM, "replica/status"), map[string]any{"mapping": mapping}), nil)
+	failed, err := kube.WaitDisks(ctx, 5*time.Second, nodeDisks(replica, vmPath(p.VM, "replica/status"), wire.ReplicaRequest{Mapping: mapping}), nil)
 	if failed != "" {
 		err = fmt.Errorf("disk %s failed to copy; previous replica kept", failed)
 	}
 	if err != nil {
 		return abort(err)
 	}
-	if err := replica.do(ctx, http.MethodPost, vmPath(p.VM, "replica/swap"), map[string]any{"export": ex, "mapping": mapping}, nil); err != nil {
+	if err := replica.do(ctx, http.MethodPost, vmPath(p.VM, "replica/swap"), wire.ReplicaRequest{Export: ex, Mapping: mapping}, nil); err != nil {
 		return abort(err)
 	}
 	return nil
 }
 
 func (c *Manager) firstReplica(ctx context.Context, p Protected, replica Node, ex kube.Export) error {
-	if err := replica.do(ctx, http.MethodPost, "/api/import", map[string]any{"name": p.VM, "operation": kube.HAReplicaOperation, "export": ex}, nil); err != nil {
+	if err := replica.do(ctx, http.MethodPost, "/api/import", wire.ImportRequest{Name: p.VM, Operation: kube.HAReplicaOperation, Export: ex}, nil); err != nil {
 		return err
 	}
 	defer func() {
@@ -421,7 +422,7 @@ func (c *Manager) firstReplica(ctx context.Context, p Protected, replica Node, e
 		defer cancel()
 		logCleanup("import of "+p.VM, replica.do(cctx, http.MethodPost, vmPath(p.VM, "imported"), nil, nil))
 	}()
-	if err := replica.do(ctx, http.MethodPost, vmPath(p.VM, "ha"), map[string]bool{"enabled": true}, nil); err != nil {
+	if err := replica.do(ctx, http.MethodPost, vmPath(p.VM, "ha"), wire.HARequest{Enabled: true}, nil); err != nil {
 		return err
 	}
 	failed, err := kube.WaitDisks(ctx, 5*time.Second, nodeDisks(replica, vmPath(p.VM, "disks"), nil), nil)

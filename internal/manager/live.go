@@ -15,6 +15,7 @@ import (
 
 	"argus/internal/auth"
 	"argus/internal/kube"
+	"argus/internal/wire"
 )
 
 const settingsKey = "argus-settings"
@@ -206,7 +207,7 @@ func (c *Manager) syncCAs(ctx context.Context, src, dst Node) error {
 			}
 		}
 		sort.Strings(others)
-		if err := n.do(ctx, http.MethodPost, "/api/kubevirt-external-ca", map[string]string{"bundle": strings.Join(others, "\n") + "\n"}, nil); err != nil {
+		if err := n.do(ctx, http.MethodPost, "/api/kubevirt-external-ca", wire.ExternalCARequest{Bundle: strings.Join(others, "\n") + "\n"}, nil); err != nil {
 			return err
 		}
 	}
@@ -236,7 +237,7 @@ func (c *Manager) liveMigrate(ctx context.Context, j *Job, src, dst Node, ns, vm
 	if err := src.do(ctx, http.MethodGet, vmPathIn(ns, vm, "spec"), nil, &spec); err != nil {
 		return err
 	}
-	op := map[string]string{"operation": j.ID}
+	op := wire.OperationRequest{Operation: j.ID}
 	cleanup := func(cctx context.Context) {
 		logCleanup("migration of "+vm+" on "+src.Name, src.do(cctx, http.MethodPost, vmPathIn(ns, vm, "migration-cleanup"), op, nil))
 		logCleanup("migration of "+vm+" on "+dst.Name, dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, vm, "migration-cleanup"), op, nil))
@@ -256,12 +257,12 @@ func (c *Manager) liveMigrate(ctx context.Context, j *Job, src, dst Node, ns, vm
 	}
 
 	c.update(j, "Preparing target", false, false)
-	var recv struct{ SyncAddress string }
-	if err := dst.do(ctx, http.MethodPost, "/api/receive", map[string]any{"name": vm, "migrationID": j.ID, "spec": spec}, &recv); err != nil {
+	var recv wire.ReceiveResponse
+	if err := dst.do(ctx, http.MethodPost, "/api/receive", wire.ReceiveRequest{Name: vm, MigrationID: j.ID, Spec: spec}, &recv); err != nil {
 		return abort(err)
 	}
 	c.update(j, "Migrating", false, false)
-	sendErr := src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "send"), map[string]string{"migrationID": j.ID, "connectURL": recv.SyncAddress}, nil)
+	sendErr := src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "send"), wire.SendRequest{MigrationID: j.ID, ConnectURL: recv.SyncAddress}, nil)
 	phasePath := vmPathIn(ns, vm, "migration") + "?operation=" + j.ID
 	lastPhase, since := "", time.Now()
 	for {
@@ -328,7 +329,7 @@ func (c *Manager) finishLive(ctx context.Context, j *Job, src, dst Node, ns, vm 
 	return errUnknown
 }
 
-func (c *Manager) cancelLive(j *Job, src, dst Node, ns, vm string, op map[string]string, abort func(error) error, sourceRunning func(context.Context) bool) error {
+func (c *Manager) cancelLive(j *Job, src, dst Node, ns, vm string, op wire.OperationRequest, abort func(error) error, sourceRunning func(context.Context) bool) error {
 	c.update(j, "Cancelling", false, false)
 	cctx, cancel := cleanupCtx()
 	defer cancel()

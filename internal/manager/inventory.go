@@ -11,6 +11,7 @@ import (
 
 	"argus/internal/hostd"
 	"argus/internal/kube"
+	"argus/internal/wire"
 )
 
 const (
@@ -161,7 +162,7 @@ func (m *Manager) alignCPU(ctx context.Context, n Node, info *kube.NodeInfo) {
 	if err != nil || info.CPU.Baseline == want || want != "" && !slices.Contains(info.CPU.Models, want) {
 		return
 	}
-	if n.Call(ctx, http.MethodPost, "/api/host/cpu-baseline", map[string]string{"model": want}, nil) == nil {
+	if n.Call(ctx, http.MethodPost, "/api/host/cpu-baseline", wire.CPUBaselineRequest{Model: want}, nil) == nil {
 		info.CPU.Baseline = want
 	}
 }

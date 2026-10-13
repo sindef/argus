@@ -20,6 +20,7 @@ import (
 	"argus/internal/auth"
 	"argus/internal/hostd"
 	"argus/internal/tlscert"
+	"argus/internal/wire"
 )
 
 var validImage = regexp.MustCompile(`^[A-Za-z0-9./:@_-]+$`)
@@ -113,7 +114,8 @@ func (s *Server) apiHostStatus(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	writeJSON(w, map[string]any{"status": strings.TrimSpace(readFile(filepath.Join(s.runDir, "status"))), "version": readEnv(s.releaseFile)["KAIROS_VERSION"], "running": n, "ready": reason == "", "reason": reason})
+	status := strings.TrimSpace(readFile(filepath.Join(s.runDir, "status")))
+	writeJSON(w, wire.HostStatus{Status: status, State: wire.StateOf(status), Version: readEnv(s.releaseFile)["KAIROS_VERSION"], Running: n, Ready: reason == "", Reason: reason})
 }
 
 var errMaintenance = errors.New("host maintenance in progress")
@@ -425,7 +427,7 @@ func (s *Server) apiRotateToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiRetireToken(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Name string }
+	var req wire.RetireTokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" || "token:"+req.Name == session(r).User {
 		apiError(w, r, http.StatusBadRequest, errors.New("name of another token required"))
 		return

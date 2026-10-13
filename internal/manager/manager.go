@@ -21,6 +21,7 @@ import (
 	"argus/internal/auth"
 	"argus/internal/kube"
 	"argus/internal/tlscert"
+	"argus/internal/wire"
 
 	"github.com/gorilla/websocket"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -199,7 +200,7 @@ func (c *Manager) RotateToken(ctx context.Context, org, name string) error {
 		return err
 	}
 	go c.Refresh(name)
-	if err := ns[i].do(ctx, http.MethodPost, "/api/tokens/retire", map[string]string{"name": out.Old}, nil); err != nil {
+	if err := ns[i].do(ctx, http.MethodPost, "/api/tokens/retire", wire.RetireTokenRequest{Name: out.Old}, nil); err != nil {
 		return fmt.Errorf("new token saved, but the old token %s is still valid on %s: %w", out.Old, name, err)
 	}
 	return nil
@@ -498,13 +499,13 @@ func logCleanup(what string, err error) {
 
 func (c *Manager) importAndWait(ctx context.Context, j *Job, dst Node, name, pool string, template bool, ex kube.Export) error {
 	c.update(j, "Importing", false, false)
-	if err := dst.do(ctx, http.MethodPost, "/api/import", map[string]any{"name": name, "operation": j.ID, "export": ex, "pool": pool, "template": template}, nil); err != nil {
+	if err := dst.do(ctx, http.MethodPost, "/api/import", wire.ImportRequest{Name: name, Operation: j.ID, Export: ex, Pool: pool, Template: template}, nil); err != nil {
 		return err
 	}
 	rollback := func(cause error) error {
 		cctx, cancel := cleanupCtx()
 		defer cancel()
-		err := dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, name, "abort"), map[string]string{"operation": j.ID}, nil)
+		err := dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, name, "abort"), wire.OperationRequest{Operation: j.ID}, nil)
 		logCleanup("import of "+name, dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, name, "imported"), nil, nil))
 		if err != nil {
 			return fmt.Errorf("%w; target cleanup failed: %w", cause, err)
@@ -558,7 +559,7 @@ func (c *Manager) migrate(ctx context.Context, j *Job, src, dst Node, ns, vm str
 	}
 	c.update(j, "Exporting", false, false)
 	var ex kube.Export
-	if err := src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "export"), map[string]string{"baseURL": src.URL}, &ex); err != nil {
+	if err := src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "export"), wire.ExportRequest{BaseURL: src.URL}, &ex); err != nil {
 		return err
 	}
 	unexport := func() {
