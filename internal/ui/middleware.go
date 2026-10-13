@@ -3,6 +3,8 @@ package ui
 import (
 	"cmp"
 	"context"
+	"encoding/json"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -53,6 +55,21 @@ func Base(r *http.Request) string {
 func (s *Core) Render(w http.ResponseWriter, r *http.Request, page, tmpl string, data map[string]any) {
 	if data == nil {
 		data = map[string]any{}
+	}
+	if IsAPI(r) {
+		out := map[string]string{}
+		if e := fmt.Sprint(data["Error"]); data["Error"] != nil && e != "" {
+			out["error"] = e
+		}
+		if n := fmt.Sprint(data["Notice"]); data["Notice"] != nil && n != "" {
+			out["notice"] = n
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if out["error"] != "" {
+			w.WriteHeader(http.StatusBadRequest)
+		}
+		json.NewEncoder(w).Encode(out)
+		return
 	}
 	if w.Header().Get("Content-Type") == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
