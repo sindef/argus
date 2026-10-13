@@ -3,14 +3,17 @@ package kube
 import (
 	"argus/internal/store"
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -21,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
@@ -381,129 +385,180 @@ func subresourcePath(ns, resource, name, sub string) string {
 	return fmt.Sprintf("/apis/subresources.kubevirt.io/v1/namespaces/%s/%s/%s/%s", ns, resource, name, sub)
 }
 
+type condition struct {
+	Type   string `json:"type"`
+	Status string `json:"status"`
+}
+
+type nameRef struct {
+	Name      string `json:"name"`
+	ClaimName string `json:"claimName"`
+}
+
+type vmObject struct {
+	Spec struct {
+		DataVolumeTemplates []struct {
+			Metadata struct {
+				Name string `json:"name"`
+			} `json:"metadata"`
+			Spec struct {
+				Storage struct {
+					StorageClassName string `json:"storageClassName"`
+					Resources        struct {
+						Requests struct {
+							Storage string `json:"storage"`
+						} `json:"requests"`
+					} `json:"resources"`
+				} `json:"storage"`
+			} `json:"spec"`
+		} `json:"dataVolumeTemplates"`
+		Template struct {
+			Spec struct {
+				Domain struct {
+					Memory struct {
+						Guest string `json:"guest"`
+					} `json:"memory"`
+					Resources struct {
+						Requests struct {
+							Memory string `json:"memory"`
+						} `json:"requests"`
+					} `json:"resources"`
+					Devices struct {
+						Disks []struct {
+							Name  string `json:"name"`
+							Disk  *bus   `json:"disk"`
+							CDROM *bus   `json:"cdrom"`
+							LUN   *bus   `json:"lun"`
+						} `json:"disks"`
+						Interfaces []struct {
+							Name       string `json:"name"`
+							MacAddress string `json:"macAddress"`
+						} `json:"interfaces"`
+					} `json:"devices"`
+				} `json:"domain"`
+				Volumes  []map[string]any `json:"volumes"`
+				Networks []struct {
+					Name   string `json:"name"`
+					Multus *struct {
+						NetworkName string `json:"networkName"`
+					} `json:"multus"`
+					Pod *struct{} `json:"pod"`
+				} `json:"networks"`
+			} `json:"spec"`
+		} `json:"template"`
+	} `json:"spec"`
+	Status struct {
+		PrintableStatus string      `json:"printableStatus"`
+		Conditions      []condition `json:"conditions"`
+	} `json:"status"`
+}
+
+type bus struct {
+	Bus string `json:"bus"`
+}
+
+type vmiObject struct {
+	Status struct {
+		NodeName    string `json:"nodeName"`
+		GuestOSInfo struct {
+			PrettyName string `json:"prettyName"`
+		} `json:"guestOSInfo"`
+		Conditions []condition `json:"conditions"`
+		Interfaces []struct {
+			Name        string   `json:"name"`
+			MAC         string   `json:"mac"`
+			IPAddresses []string `json:"ipAddresses"`
+		} `json:"interfaces"`
+	} `json:"status"`
+}
+
+func conditionTrue(cs []condition, types ...string) bool {
+	return slices.ContainsFunc(cs, func(c condition) bool { return c.Status == "True" && slices.Contains(types, c.Type) })
+}
+
+func volumeSource(v map[string]any) string {
+	for k, val := range v {
+		if k == "name" {
+			continue
+		}
+		var ref nameRef
+		if m, ok := val.(map[string]any); ok && runtime.DefaultUnstructuredConverter.FromUnstructured(m, &ref) == nil {
+			if n := cmp.Or(ref.Name, ref.ClaimName); n != "" {
+				return k + ": " + n
+			}
+		}
+		return k
+	}
+	return ""
+}
+
 func toVM(v, vmi *unstructured.Unstructured) VM {
-	o := v.Object
-	vm := VM{Namespace: v.GetNamespace(), Name: v.GetName(), DisplayName: v.GetAnnotations()[displayNameAnnotation], Backup: v.GetAnnotations()[BackupAnnotation], Schedule: v.GetAnnotations()[ScheduleAnnotation], Template: v.GetLabels()[TemplateLabel] == "true"}
-	if t := v.GetAnnotations()[TagsAnnotation]; t != "" {
+	ann := v.GetAnnotations()
+	vm := VM{Namespace: v.GetNamespace(), Name: v.GetName(), DisplayName: ann[displayNameAnnotation], Backup: ann[BackupAnnotation], Schedule: ann[ScheduleAnnotation],
+		Folder: ann[FolderAnnotation], Template: v.GetLabels()[TemplateLabel] == "true"}
+	if t := ann[TagsAnnotation]; t != "" {
 		vm.Tags = strings.Split(t, ",")
 	}
-	vm.Folder = v.GetAnnotations()[FolderAnnotation]
-	if a := v.GetAnnotations()[AttributesAnnotation]; a != "" && json.Unmarshal([]byte(a), &vm.Attributes) != nil {
+	if a := ann[AttributesAnnotation]; a != "" && json.Unmarshal([]byte(a), &vm.Attributes) != nil {
 		vm.Attributes = nil
 	}
-	vm.Status, _, _ = unstructured.NestedString(o, "status", "printableStatus")
-	templates, _, _ := unstructured.NestedSlice(o, "spec", "dataVolumeTemplates")
-	for _, t := range templates {
-		if q, ok, _ := unstructured.NestedString(t.(map[string]any), "spec", "storage", "resources", "requests", "storage"); ok {
-			if qty, err := resource.ParseQuantity(q); err == nil {
-				vm.StorageBytes += qty.Value()
-			}
-		}
+	var o vmObject
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(v.Object, &o); err != nil {
+		log.Printf("read VM %s: %v", v.GetName(), err)
 	}
+	vm.Status = o.Status.PrintableStatus
 	vm.Running = vm.Status == "Running"
-	conds, _, _ := unstructured.NestedSlice(o, "status", "conditions")
-	for _, c := range conds {
-		if t := asStr(asObj(c)["type"]); (t == "RestartRequired" || t == "MigrationRequired") && asStr(asObj(c)["status"]) == "True" {
-			vm.PendingRestart = vm.Running
-		}
-	}
-	vm.Cores, _ = vcpus(o)
-	if vm.Memory, _, _ = unstructured.NestedString(o, "spec", "template", "spec", "domain", "memory", "guest"); vm.Memory == "" {
-		vm.Memory, _, _ = unstructured.NestedString(o, "spec", "template", "spec", "domain", "resources", "requests", "memory")
-	}
+	vm.PendingRestart = vm.Running && conditionTrue(o.Status.Conditions, "RestartRequired", "MigrationRequired")
+	vm.Cores, _ = vcpus(v.Object)
+	tpl := o.Spec.Template.Spec
+	vm.Memory = cmp.Or(tpl.Domain.Memory.Guest, tpl.Domain.Resources.Requests.Memory)
 
 	classes, sizes := map[string]string{}, map[string]int64{}
-	tpls, _, _ := unstructured.NestedSlice(o, "spec", "dataVolumeTemplates")
-	for _, t := range tpls {
-		n, _, _ := unstructured.NestedString(t.(map[string]any), "metadata", "name")
-		classes[n], _, _ = unstructured.NestedString(t.(map[string]any), "spec", "storage", "storageClassName")
-		if q, ok, _ := unstructured.NestedString(t.(map[string]any), "spec", "storage", "resources", "requests", "storage"); ok {
-			if qty, err := resource.ParseQuantity(q); err == nil {
-				sizes[n] = qty.Value()
-			}
+	for _, t := range o.Spec.DataVolumeTemplates {
+		classes[t.Metadata.Name] = t.Spec.Storage.StorageClassName
+		if qty, err := resource.ParseQuantity(t.Spec.Storage.Resources.Requests.Storage); err == nil {
+			sizes[t.Metadata.Name] = qty.Value()
+			vm.StorageBytes += qty.Value()
 		}
 	}
 	sources, volumeClass, volumeSize := map[string]string{}, map[string]string{}, map[string]int64{}
-	vols, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "volumes")
-	for _, x := range vols {
-		m, _ := x.(map[string]any)
-		n, _ := m["name"].(string)
-		for k, val := range m {
-			if k == "name" {
-				continue
-			}
-			src := k
-			if mm, ok := val.(map[string]any); ok {
-				if s, ok := mm["name"].(string); ok {
-					src += ": " + s
-				} else if s, ok := mm["claimName"].(string); ok {
-					src += ": " + s
-				}
-			}
-			sources[n] = src
-		}
-		if dv, ok := m["dataVolume"].(map[string]any); ok {
-			volumeClass[n] = classes[fmt.Sprint(dv["name"])]
-			volumeSize[n] = sizes[fmt.Sprint(dv["name"])]
+	for _, vol := range tpl.Volumes {
+		n := fmt.Sprint(vol["name"])
+		sources[n] = volumeSource(vol)
+		if dv, ok := vol["dataVolume"].(map[string]any); ok {
+			volumeClass[n], volumeSize[n] = classes[fmt.Sprint(dv["name"])], sizes[fmt.Sprint(dv["name"])]
 		}
 	}
-	disks, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "domain", "devices", "disks")
-	for _, x := range disks {
-		m, _ := x.(map[string]any)
-		d := Disk{}
-		d.Name, _ = m["name"].(string)
-		for _, t := range []string{"disk", "cdrom", "lun"} {
-			if mm, ok := m[t].(map[string]any); ok {
-				d.Bus, _ = mm["bus"].(string)
-			}
-		}
-		d.Source, d.StorageClass, d.SizeBytes = sources[d.Name], volumeClass[d.Name], volumeSize[d.Name]
-		vm.Disks = append(vm.Disks, d)
+	for _, d := range tpl.Domain.Devices.Disks {
+		b := cmp.Or(d.Disk, d.CDROM, d.LUN, &bus{})
+		vm.Disks = append(vm.Disks, Disk{Name: d.Name, Bus: b.Bus, Source: sources[d.Name], StorageClass: volumeClass[d.Name], SizeBytes: volumeSize[d.Name]})
 	}
-
 	nets := map[string]string{}
-	ns, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "networks")
-	for _, x := range ns {
-		m, _ := x.(map[string]any)
-		n, _ := m["name"].(string)
-		if mm, ok := m["multus"].(map[string]any); ok {
-			nets[n], _ = mm["networkName"].(string)
-		} else if _, ok := m["pod"]; ok {
-			nets[n] = "pod"
+	for _, n := range tpl.Networks {
+		switch {
+		case n.Multus != nil:
+			nets[n.Name] = n.Multus.NetworkName
+		case n.Pod != nil:
+			nets[n.Name] = "pod"
 		}
 	}
-	ifaces, _, _ := unstructured.NestedSlice(o, "spec", "template", "spec", "domain", "devices", "interfaces")
-	for _, x := range ifaces {
-		m, _ := x.(map[string]any)
-		n := NIC{}
-		n.Name, _ = m["name"].(string)
-		n.MAC, _ = m["macAddress"].(string)
-		n.Network = nets[n.Name]
-		vm.NICs = append(vm.NICs, n)
+	for _, i := range tpl.Domain.Devices.Interfaces {
+		vm.NICs = append(vm.NICs, NIC{Name: i.Name, MAC: i.MacAddress, Network: nets[i.Name]})
 	}
-
 	if vmi == nil {
 		return vm
 	}
-	vm.Node, _, _ = unstructured.NestedString(vmi.Object, "status", "nodeName")
-	vm.OS, _, _ = unstructured.NestedString(vmi.Object, "status", "guestOSInfo", "prettyName")
-	conds, _, _ = unstructured.NestedSlice(vmi.Object, "status", "conditions")
-	for _, c := range conds {
-		if asStr(asObj(c)["type"]) == "AgentConnected" && asStr(asObj(c)["status"]) == "True" {
-			vm.Agent = true
-		}
+	var io vmiObject
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(vmi.Object, &io); err != nil {
+		log.Printf("read VMI %s: %v", vmi.GetName(), err)
 	}
+	vm.Node, vm.OS = io.Status.NodeName, io.Status.GuestOSInfo.PrettyName
+	vm.Agent = conditionTrue(io.Status.Conditions, "AgentConnected")
 	vm.Started = vmi.GetCreationTimestamp().Time
-	st, _, _ := unstructured.NestedSlice(vmi.Object, "status", "interfaces")
-	for _, x := range st {
-		m, _ := x.(map[string]any)
-		name, _ := m["name"].(string)
-		mac, _ := m["mac"].(string)
-		ips, _, _ := unstructured.NestedStringSlice(m, "ipAddresses")
+	for _, st := range io.Status.Interfaces {
 		for i := range vm.NICs {
-			if vm.NICs[i].Name == name {
-				vm.NICs[i].MAC = mac
-				vm.NICs[i].IPs = ips
+			if vm.NICs[i].Name == st.Name {
+				vm.NICs[i].MAC, vm.NICs[i].IPs = st.MAC, st.IPAddresses
 			}
 		}
 	}
