@@ -44,6 +44,41 @@
       }
      }
     }
+   },
+   "post": {
+    "summary": "Add host",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
    }
   },
   "/vms": {
@@ -1097,6 +1132,3171 @@
      }
     ]
    }
+  },
+  "/certificate": {
+   "post": {
+    "summary": "Certificate",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/notify": {
+   "post": {
+    "summary": "Notify",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/alarms/ack": {
+   "post": {
+    "summary": "Alarms ack",
+    "description": "Privilege: admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/tasks/dismiss": {
+   "post": {
+    "summary": "Tasks dismiss",
+    "description": "Privilege: signed-in.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/users/{name}/mfa-reset": {
+   "post": {
+    "summary": "Users mfa reset",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/users": {
+   "post": {
+    "summary": "Users",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/users/{name}/role": {
+   "post": {
+    "summary": "Users role",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/users/scopes": {
+   "post": {
+    "summary": "Users scopes",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/users/{name}/update": {
+   "post": {
+    "summary": "Users update",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/users/{name}/reset": {
+   "post": {
+    "summary": "Users reset",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/users/{name}/delete": {
+   "post": {
+    "summary": "Users delete",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/backups/restore": {
+   "post": {
+    "summary": "Host backups restore",
+    "description": "Privilege: vm.backup.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/disks/{name}/{action}": {
+   "post": {
+    "summary": "Host disks",
+    "description": "Privilege: host.config.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "action",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/devices": {
+   "post": {
+    "summary": "Host devices",
+    "description": "Privilege: host.config.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/network/host/{op}": {
+   "post": {
+    "summary": "Host network host",
+    "description": "Privilege: host.config.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "op",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/pools": {
+   "post": {
+    "summary": "Host pools",
+    "description": "Privilege: host.config.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/pools/{name}/{op}": {
+   "post": {
+    "summary": "Host pools",
+    "description": "Privilege: host.config.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "op",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/imports/{source}": {
+   "post": {
+    "summary": "Host imports",
+    "description": "Privilege: vm.provision.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "source",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/imports/vcenter-vms": {
+   "post": {
+    "summary": "Host imports vcenter vms",
+    "description": "Privilege: vm.provision.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/vms/{name}/hardware/{op}": {
+   "post": {
+    "summary": "VM hardware",
+    "description": "Privilege: vm.config.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "op",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/vms/{name}/disks/{disk}/download": {
+   "post": {
+    "summary": "VM disks download",
+    "description": "Privilege: vm.backup.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "disk",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/vms/{name}/media": {
+   "post": {
+    "summary": "VM media",
+    "description": "Privilege: vm.config.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/vms/{name}/media/eject": {
+   "post": {
+    "summary": "VM media eject",
+    "description": "Privilege: vm.config.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/user-groups/save": {
+   "post": {
+    "summary": "User groups save",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/user-groups/delete": {
+   "post": {
+    "summary": "User groups delete",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/user-roles/save": {
+   "post": {
+    "summary": "User roles save",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/user-roles/delete": {
+   "post": {
+    "summary": "User roles delete",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/hosts/{host}/vms/{name}/protect": {
+   "post": {
+    "summary": "VM protect",
+    "description": "Privilege: vm.migrate.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/vms/{name}/unprotect": {
+   "post": {
+    "summary": "VM unprotect",
+    "description": "Privilege: vm.migrate.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/vms/{name}/disks/{disk}/delete": {
+   "post": {
+    "summary": "VM disks delete",
+    "description": "Privilege: vm.config.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "disk",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/vms/{name}/disks/move": {
+   "post": {
+    "summary": "VM disks move",
+    "description": "Privilege: vm.config.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/vms/{name}/tags": {
+   "post": {
+    "summary": "VM tags",
+    "description": "Privilege: vm.config.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/vms/{name}/snapshots/{snap}/{op}": {
+   "post": {
+    "summary": "VM snapshots",
+    "description": "Privilege: vm.snapshot.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "snap",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "op",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/vms/{name}/backups/{op}": {
+   "post": {
+    "summary": "VM backups",
+    "description": "Privilege: vm.backup.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "op",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/vms/{name}/schedule/{op}": {
+   "post": {
+    "summary": "VM schedule",
+    "description": "Privilege: vm.power.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "op",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/vms/{name}/{action}": {
+   "post": {
+    "summary": "VM",
+    "description": "Privilege: vm.view.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "action",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/alarm-rules/{op}": {
+   "post": {
+    "summary": "Alarm rules",
+    "description": "Privilege: admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "op",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/jobs/{id}/resolve": {
+   "post": {
+    "summary": "Jobs resolve",
+    "description": "Privilege: admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/networks/{name}/{op}": {
+   "post": {
+    "summary": "Networks",
+    "description": "Privilege: network.config.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "op",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/volumes": {
+   "post": {
+    "summary": "Volumes",
+    "description": "Privilege: vm.config.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/hosts/{host}/volumes/{op}": {
+   "post": {
+    "summary": "Host volumes",
+    "description": "Privilege: vm.config.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "op",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/profile": {
+   "post": {
+    "summary": "Profile",
+    "description": "Privilege: admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   },
+   "get": {
+    "summary": "Get host profile",
+    "description": "Privilege: admin.",
+    "responses": {
+     "200": {
+      "description": "Get host profile",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Profile"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "dc",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "cluster",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/profile/apply": {
+   "post": {
+    "summary": "Profile apply",
+    "description": "Privilege: admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/groups/{op}": {
+   "post": {
+    "summary": "Groups",
+    "description": "Privilege: admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "op",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/delete": {
+   "post": {
+    "summary": "Host delete",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/access": {
+   "post": {
+    "summary": "Host access",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/hosts/{host}/rotate-token": {
+   "post": {
+    "summary": "Host rotate token",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "host",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/drs/apply": {
+   "post": {
+    "summary": "Drs apply",
+    "description": "Privilege: admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/firewall/{op}": {
+   "post": {
+    "summary": "Firewall",
+    "description": "Privilege: network.config.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "op",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/drs/rules/{op}": {
+   "post": {
+    "summary": "Drs rules",
+    "description": "Privilege: admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "op",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/vm-copy": {
+   "post": {
+    "summary": "Vm copy",
+    "description": "Privilege: vm.provision.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/templates/delete": {
+   "post": {
+    "summary": "Templates delete",
+    "description": "Privilege: image.config.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/images/{op}": {
+   "post": {
+    "summary": "Images",
+    "description": "Privilege: image.config.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "op",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/network/hosts/bridge": {
+   "post": {
+    "summary": "Network bridge",
+    "description": "Privilege: host.config.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/switches/teaming": {
+   "post": {
+    "summary": "Switches teaming",
+    "description": "Privilege: host.config.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/settings/sso": {
+   "post": {
+    "summary": "Settings sso",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/settings/ldap": {
+   "post": {
+    "summary": "Settings ldap",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/settings/orgs": {
+   "post": {
+    "summary": "Settings orgs",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/settings/orgs/{id}/delete": {
+   "post": {
+    "summary": "Settings orgs delete",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/settings/orgs/{id}/rename": {
+   "post": {
+    "summary": "Settings orgs rename",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/settings/backup": {
+   "post": {
+    "summary": "Settings backup",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Encrypted backup",
+      "content": {
+       "application/octet-stream": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/settings/ha": {
+   "post": {
+    "summary": "Settings ha",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/ha/failover": {
+   "post": {
+    "summary": "Ha failover",
+    "description": "Privilege: admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/settings/migration": {
+   "post": {
+    "summary": "Settings migration",
+    "description": "Privilege: org-admin.",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Form"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Done",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Result"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/events": {
+   "get": {
+    "summary": "List recent events",
+    "description": "Privilege: vm.view.",
+    "responses": {
+     "200": {
+      "description": "List recent events",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/Event"
+         }
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/storage": {
+   "get": {
+    "summary": "List pools and volumes",
+    "description": "Privilege: vm.view.",
+    "responses": {
+     "200": {
+      "description": "List pools and volumes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "pools": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/Pool"
+           }
+          },
+          "volumes": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/Volume"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/firewall": {
+   "get": {
+    "summary": "Get firewall policy",
+    "description": "Privilege: network.config.",
+    "responses": {
+     "200": {
+      "description": "Get firewall policy",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/FirewallPolicy"
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/alarm-rules": {
+   "get": {
+    "summary": "List alarm rules",
+    "description": "Privilege: vm.view.",
+    "responses": {
+     "200": {
+      "description": "List alarm rules",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/AlarmRule"
+         }
+        }
+       }
+      }
+     },
+     "4XX": {
+      "description": "Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
   }
  },
  "components": {
@@ -1551,6 +4751,225 @@
      "warning": {
       "type": "string",
       "description": "Set when some hosts could not apply the change"
+     }
+    }
+   },
+   "Form": {
+    "type": "object",
+    "description": "The fields of the matching UI form. Booleans set checkboxes, arrays repeat a field, and \"prompt\" answers the UI's input prompt.",
+    "additionalProperties": {
+     "oneOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "number"
+      },
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      }
+     ]
+    }
+   },
+   "Result": {
+    "type": "object",
+    "properties": {
+     "notice": {
+      "type": "string"
+     },
+     "error": {
+      "type": "string"
+     }
+    }
+   },
+   "Event": {
+    "type": "object",
+    "properties": {
+     "host": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string"
+     },
+     "reason": {
+      "type": "string"
+     },
+     "message": {
+      "type": "string"
+     },
+     "object": {
+      "type": "string"
+     },
+     "time": {
+      "type": "string",
+      "format": "date-time"
+     }
+    }
+   },
+   "Pool": {
+    "type": "object",
+    "properties": {
+     "host": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "status": {
+      "type": "string"
+     },
+     "freeBytes": {
+      "type": "integer"
+     },
+     "usedBytes": {
+      "type": "integer"
+     },
+     "provisionedBytes": {
+      "type": "integer"
+     },
+     "volumes": {
+      "type": "integer"
+     },
+     "snapshots": {
+      "type": "integer"
+     }
+    }
+   },
+   "Volume": {
+    "type": "object",
+    "properties": {
+     "host": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "sizeBytes": {
+      "type": "integer"
+     },
+     "phase": {
+      "type": "string"
+     },
+     "progress": {
+      "type": "string"
+     },
+     "created": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "image": {
+      "type": "boolean"
+     },
+     "usedBy": {
+      "type": "string"
+     },
+     "snapshots": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "thick": {
+      "type": "boolean"
+     }
+    }
+   },
+   "FirewallPolicy": {
+    "type": "object",
+    "properties": {
+     "defaultDrop": {
+      "type": "boolean"
+     },
+     "rules": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "name": {
+         "type": "string"
+        },
+        "source": {
+         "type": "string",
+         "description": "any, tag:T, net:N, host:H, vm:HOST/NAME or cidr:C"
+        },
+        "dest": {
+         "type": "string"
+        },
+        "proto": {
+         "type": "string"
+        },
+        "ports": {
+         "type": "array",
+         "items": {
+          "type": "integer"
+         }
+        },
+        "allow": {
+         "type": "boolean"
+        }
+       }
+      }
+     }
+    }
+   },
+   "AlarmRule": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "metric": {
+      "type": "string"
+     },
+     "warn": {
+      "type": "number"
+     },
+     "critical": {
+      "type": "number"
+     },
+     "minutes": {
+      "type": "integer"
+     },
+     "scope": {
+      "type": "string"
+     },
+     "tag": {
+      "type": "string"
+     }
+    }
+   },
+   "Profile": {
+    "type": "object",
+    "properties": {
+     "dns": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "ntp": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "syslog": {
+      "type": "string"
+     },
+     "migrationBridge": {
+      "type": "string"
+     },
+     "backup": {
+      "type": "string"
+     },
+     "networks": {
+      "type": "boolean"
      }
     }
    }

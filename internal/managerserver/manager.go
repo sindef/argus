@@ -865,7 +865,7 @@ func fanOut(ctx context.Context, states []manager.NodeState, fn func(context.Con
 	return strings.Join(errs, "; ")
 }
 
-func (s *Server) managerEvents(w http.ResponseWriter, r *http.Request) {
+func (s *Server) fleetEvents(r *http.Request) ([]hostEvent, string) {
 	var (
 		mu  sync.Mutex
 		evs []hostEvent
@@ -886,6 +886,11 @@ func (s *Server) managerEvents(w http.ResponseWriter, r *http.Request) {
 	if len(evs) > 200 {
 		evs = evs[:200]
 	}
+	return evs, errs
+}
+
+func (s *Server) managerEvents(w http.ResponseWriter, r *http.Request) {
+	evs, errs := s.fleetEvents(r)
 	rules, err := s.manager.AlarmRules(r.Context(), ui.Session(r).Org)
 	if err != nil && errs == "" {
 		errs = err.Error()

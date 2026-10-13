@@ -250,7 +250,10 @@ func TestOpenAPIMatchesRoutes(t *testing.T) {
 		}
 	}
 	served := map[string]bool{}
-	for _, rt := range newHarness(t).s.apiV1Routes() {
+	for _, rt := range newHarness(t).s.routes() {
+		if !strings.Contains(rt.Pattern, " /api/v1/") {
+			continue
+		}
 		served[rt.Pattern] = true
 		if !documented[rt.Pattern] && rt.Pattern != "GET /api/v1/openapi.json" {
 			t.Errorf("%s is not in openapi.json", rt.Pattern)

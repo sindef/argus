@@ -10,7 +10,7 @@ import (
 )
 
 func (s *Server) routes() []ui.Route {
-	return slices.Concat(s.Routes(), s.hostPageRoutes(), []ui.Route{
+	rs := slices.Concat(s.Routes(), s.hostPageRoutes(), []ui.Route{
 		{Pattern: "GET /user-groups", Priv: ui.OrgAdmin, H: s.groupsPage},
 		{Pattern: "POST /user-groups/save", Priv: ui.OrgAdmin, H: s.saveGroup},
 		{Pattern: "POST /user-groups/delete", Priv: ui.OrgAdmin, H: s.deleteGroup},
@@ -87,7 +87,9 @@ func (s *Server) routes() []ui.Route {
 		{Pattern: "POST /settings/ha", Priv: ui.OrgAdmin, H: s.managerHASettings},
 		{Pattern: "POST /ha/failover", Priv: auth.Administer, H: s.managerFailover},
 		{Pattern: "POST /settings/migration", Priv: ui.OrgAdmin, H: s.managerMigrationSettings},
-	}, s.apiV1Routes())
+	})
+	v1 := append(s.apiV1Routes(), s.v1ReadRoutes()...)
+	return slices.Concat(rs, v1, v1FormRoutes(rs, v1))
 }
 
 func (s *Server) hostPageRoutes() []ui.Route {
