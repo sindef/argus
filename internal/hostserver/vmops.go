@@ -7,6 +7,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"argus/internal/hostui"
 	"argus/internal/kube"
 	"argus/internal/ui"
 	"argus/internal/wire"
@@ -63,6 +64,10 @@ func (l localOps) SetTags(ctx context.Context, ns, name string, req wire.TagsReq
 
 func (l localOps) BackupOp(ctx context.Context, ns, name, op string, form map[string]string) error {
 	return l.s.backupOp(ctx, ns, name, op, func(k string) string { return form[k] })
+}
+
+func (l localOps) BackupCatalog(ctx context.Context) (hostui.BackupCatalog, error) {
+	return l.s.backupCatalog(ctx), nil
 }
 
 func (l localOps) ScheduleOp(ctx context.Context, ns, name, op string, form map[string]string) error {

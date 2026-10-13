@@ -2,6 +2,7 @@ package hostserver
 
 import (
 	"bytes"
+	"cmp"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -690,6 +691,36 @@ func (s *Server) backupNow(ctx context.Context, ns, name, target string) error {
 		return errors.New("a backup of this VM is already running")
 	}
 	return nil
+}
+
+func (s *Server) backupCatalog(ctx context.Context) hostui.BackupCatalog {
+	var c hostui.BackupCatalog
+	targets, err := s.backupTargets(ctx)
+	errs := []string{}
+	if err != nil {
+		errs = append(errs, err.Error())
+	}
+	for _, t := range targets {
+		bs, err := openTarget(t, s.hostd).List(ctx)
+		if err != nil {
+			errs = append(errs, t.Name+": "+err.Error())
+		}
+		for _, b := range bs {
+			c.Backups = append(c.Backups, wire.VMBackup{Backup: b, Target: t.Name})
+		}
+	}
+	slices.SortFunc(c.Backups, func(a, b wire.VMBackup) int {
+		return cmp.Or(strings.Compare(a.VM, b.VM), strings.Compare(b.Stamp, a.Stamp))
+	})
+	for _, p := range s.poolChoices(ctx) {
+		c.Pools = append(c.Pools, p.Name)
+	}
+	c.Error = strings.Join(errs, "; ")
+	return c
+}
+
+func (s *Server) apiBackupCatalog(w http.ResponseWriter, r *http.Request) {
+	ui.WriteJSON(w, s.backupCatalog(r.Context()))
 }
 
 func (s *Server) apiVMBackups(w http.ResponseWriter, r *http.Request) {

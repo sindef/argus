@@ -58,6 +58,12 @@ type VMForm struct {
 
 var ErrQueued = errors.New("queued as a task")
 
+type BackupCatalog struct {
+	Backups []wire.VMBackup `json:"backups"`
+	Pools   []string        `json:"pools"`
+	Error   string          `json:"error"`
+}
+
 type CreateVMReq struct {
 	Spec kube.VMSpec `json:"spec"`
 	Pool string      `json:"pool"`
@@ -108,6 +114,7 @@ type Ops interface {
 	MoveDisk(ctx context.Context, ns, name string, req wire.MoveDiskRequest) error
 	SetTags(ctx context.Context, ns, name string, req wire.TagsRequest) error
 	BackupOp(ctx context.Context, ns, name, op string, form map[string]string) error
+	BackupCatalog(ctx context.Context) (BackupCatalog, error)
 	ScheduleOp(ctx context.Context, ns, name, op string, form map[string]string) error
 	DialConsole(ctx context.Context, ns, name, kind string) (*websocket.Conn, error)
 }

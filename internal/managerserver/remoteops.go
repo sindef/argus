@@ -85,6 +85,11 @@ func (o remoteOps) NetworkOp(ctx context.Context, op string, req hostui.NetOpReq
 	return o.post(ctx, manager.APIPath("/api/host/network/%s", op), req)
 }
 
+func (o remoteOps) BackupCatalog(ctx context.Context) (hostui.BackupCatalog, error) {
+	var out hostui.BackupCatalog
+	return out, o.get(ctx, "/api/backups", &out)
+}
+
 func (o remoteOps) VMForm(ctx context.Context) (hostui.VMForm, error) {
 	var out hostui.VMForm
 	err := o.get(ctx, "/api/host/vm-form", &out)

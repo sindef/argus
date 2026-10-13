@@ -19,7 +19,7 @@ import (
 	"argus/internal/ui"
 )
 
-var hostTabs = []struct{ Path, Label, Icon string }{{"dashboard", "Summary", "gauge"}, {"pools", "Pools", "database"}, {"disks", "Disks", "hard-drive"}, {"network/host", "Network", "cable"}, {"devices", "Devices", "cpu"}}
+var hostTabs = []struct{ Path, Label, Icon string }{{"dashboard", "Summary", "gauge"}, {"pools", "Pools", "database"}, {"disks", "Disks", "hard-drive"}, {"network/host", "Network", "cable"}, {"devices", "Devices", "cpu"}, {"backups", "Backups", "download"}}
 
 type hostNetRow struct {
 	Node    manager.Node

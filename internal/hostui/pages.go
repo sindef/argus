@@ -1,6 +1,7 @@
 package hostui
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"argus/internal/auth"
 	"argus/internal/hostd"
 	"argus/internal/kube"
 	"argus/internal/ui"
@@ -296,4 +298,26 @@ func (s *UI) mediaEject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Write([]byte("Media ejected"))
+}
+
+func (s *UI) backupsPage(w http.ResponseWriter, r *http.Request) {
+	c, err := s.Ops(r).BackupCatalog(r.Context())
+	if err == nil && c.Error != "" {
+		err = errors.New(c.Error)
+	}
+	s.Render(w, r, "backups.html", "layout", map[string]any{"Nav": "backups", "Tab": "backups", "Catalog": c, "CanOperate": ui.Permits(r, auth.VMBackup), "Error": ui.ErrText(err)})
+}
+
+func (s *UI) restoreFromCatalog(w http.ResponseWriter, r *http.Request) {
+	vm := r.FormValue("vm")
+	if !ui.ValidObject.MatchString(vm) {
+		ui.Flash(w, r, errors.New("invalid VM name"))
+		return
+	}
+	if err := s.Ops(r).BackupOp(r.Context(), kube.Namespace, vm, "restore", formMap(r)); err != nil {
+		ui.Flash(w, r, err)
+		return
+	}
+	log.Printf("%s: restore %s backup %s as %s", ui.Session(r).User, vm, r.FormValue("stamp"), r.FormValue("target"))
+	w.Header().Set("HX-Refresh", "true")
 }

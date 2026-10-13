@@ -27,6 +27,8 @@ func (s *UI) PageRoutes() []ui.Route {
 	return []ui.Route{
 		{Pattern: "GET /dashboard", Priv: auth.HostView, H: s.dashboard},
 		{Pattern: "GET /dashboard/stats", Priv: auth.HostView, H: s.dashboardStats},
+		{Pattern: "GET /backups", Priv: auth.VMBackup, H: s.backupsPage},
+		{Pattern: "POST /backups/restore", Priv: auth.VMBackup, H: s.restoreFromCatalog},
 		{Pattern: "GET /disks", Priv: auth.HostConfig, H: s.disksPage},
 		{Pattern: "GET /disks/{name}", Priv: auth.HostConfig, H: s.diskModal},
 		{Pattern: "POST /disks/{name}/{action}", Priv: auth.HostConfig, H: s.diskAction},

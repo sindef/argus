@@ -1,0 +1,26 @@
+{{define "content"}}
+<div class="page-head">
+  <svg class="i i-lg"><use href="/static/vendor/lucide/icons.svg#i-download"/></svg>
+  <h1>Backups</h1>
+</div>
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+<div class="card">
+  <div class="card-head">{{template "icon" "download"}}<h2>Backups on targets</h2><span class="help" title="Every backup on this host's backup targets, including VMs that no longer exist.">?</span></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>VM</th><th>Taken</th><th>Target</th><th>Size</th><th></th></tr></thead>
+    <tbody>{{range .Catalog.Backups}}<tr><td>{{.VM}}</td><td>{{stamp .Stamp}}</td><td>{{.Target}}</td><td>{{bytes .Size}}</td>
+      <td class="row-actions">{{if and $.CanOperate .Complete}}<button class="link" data-dialog="restore-catalog" data-fill='{"stamp":"{{.Stamp}}","store":"{{.Target}}","vm":"{{.VM}}","target":"{{.VM}}"}'>Restore</button>{{else if not .Complete}}<span class="muted">Incomplete</span>{{end}}</td></tr>
+    {{else}}<tr><td colspan="5" class="muted">No backups.</td></tr>{{end}}</tbody>
+  </table></div>
+</div>
+<dialog id="restore-catalog" class="card">
+  <form hx-post="{{.Base}}/backups/restore" hx-target="#restore-catalog-error" class="form">
+    <h2>Restore backup</h2>
+    <p id="restore-catalog-error" class="error form-error"></p>
+    <input type="hidden" name="stamp"><input type="hidden" name="store"><input type="hidden" name="vm">
+    <label>VM name <input name="target" required pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?"></label>
+    <label>Storage pool <select name="pool"><option value="">As backed up</option>{{range .Catalog.Pools}}<option>{{.}}</option>{{end}}</select></label>
+    <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Restore</button></div>
+  </form>
+</dialog>
+{{end}}
