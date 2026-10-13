@@ -77,13 +77,16 @@ func (c *Manager) Nodes(ctx context.Context) ([]Node, error) {
 
 func (c *Manager) NodesFor(ctx context.Context, org string) ([]Node, error) {
 	ns, err := c.Nodes(ctx)
-	out := ns[:0]
+	if err != nil {
+		return nil, err
+	}
+	var out []Node
 	for _, n := range ns {
 		if n.Org == org {
 			out = append(out, n)
 		}
 	}
-	return out, err
+	return out, nil
 }
 
 func (c *Manager) NodeIn(ctx context.Context, org, name string) (Node, error) {
