@@ -73,7 +73,11 @@ func New(c Config) (*Core, error) {
 
 func (c *Core) Handle(rs []Route) {
 	for _, rt := range rs {
-		c.Mux.HandleFunc(rt.Pattern, c.Guard(rt.Priv, rt.H))
+		h := c.Guard(rt.Priv, rt.H)
+		if !rt.Stream {
+			h = limitBody(h)
+		}
+		c.Mux.HandleFunc(rt.Pattern, h)
 	}
 }
 
@@ -97,8 +101,14 @@ func (c *Core) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "cross-origin request refused", http.StatusForbidden)
 		return
 	}
-	if ct := r.Header.Get("Content-Type"); r.Body != nil && !strings.HasPrefix(ct, "multipart/") && !strings.HasSuffix(r.URL.Path, "/zfs/recv") {
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	}
 	c.Mux.ServeHTTP(w, r)
+}
+
+func limitBody(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Body != nil && !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
+			r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+		}
+		h(w, r)
+	}
 }

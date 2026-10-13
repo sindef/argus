@@ -76,7 +76,7 @@ func (s *Server) routes() []ui.Route {
 		{Pattern: "POST /api/vms/{ns}/{name}/zfs/snapshot", Priv: auth.Administer, H: s.apiZFSSnapshot},
 		{Pattern: "POST /api/vms/{ns}/{name}/zfs/prune", Priv: auth.Administer, H: s.apiZFSPrune},
 		{Pattern: "GET /api/vms/{ns}/{name}/zfs/send", Priv: auth.Administer, H: s.apiZFSSend},
-		{Pattern: "PUT /api/vms/{ns}/{name}/zfs/recv", Priv: auth.Administer, H: s.apiZFSRecv},
+		{Pattern: "PUT /api/vms/{ns}/{name}/zfs/recv", Priv: auth.Administer, H: s.apiZFSRecv, Stream: true},
 		{Pattern: "POST /api/vms/{ns}/{name}/snapshot-export", Priv: auth.Administer, H: s.apiSnapshotExport},
 		{Pattern: "GET /api/kubevirt-ca", Priv: auth.Administer, H: s.apiKubeVirtCA},
 		{Pattern: "POST /api/kubevirt-external-ca", Priv: auth.Administer, H: s.apiExternalCA},
