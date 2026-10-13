@@ -373,7 +373,11 @@ func (s *Server) copyDisk(ctx context.Context, st backupStore, ns, name, dv, tok
 	return hostd.ManifestFile{SHA256: hex.EncodeToString(hr.h.Sum(nil)), Size: hr.n}, nil
 }
 
-func (s *Server) restoreBackup(ctx context.Context, store, vm, stamp, target string) error {
+func (s *Server) restoreBackup(ctx context.Context, store, vm, stamp, target, pool string) error {
+	class, err := s.poolClass(ctx, pool)
+	if err != nil {
+		return err
+	}
 	rel := vm + "/" + stamp
 	st, err := s.store(ctx, store)
 	if err != nil {
@@ -431,7 +435,7 @@ func (s *Server) restoreBackup(ctx context.Context, store, vm, stamp, target str
 	}
 	job := restoreJob{Store: store, Rel: rel, Namespace: meta.Namespace, Target: target, Key: meta.Namespace + "/" + vm}
 	s.trackRestore(token, job)
-	if err := s.kube.ImportVM(ctx, meta.Namespace, target, "restore-"+stamp, ex, kube.ImportOptions{}); err != nil {
+	if err := s.kube.ImportVM(ctx, meta.Namespace, target, "restore-"+stamp, ex, kube.ImportOptions{StorageClass: class}); err != nil {
 		s.untrackRestore(token)
 		return err
 	}
@@ -580,6 +584,9 @@ func (s *Server) vmBackupInfo(ctx context.Context, ns, name string) wire.VMBacku
 		info.Policy.BackupKeep = 7
 	}
 	info.Status = s.backups.status(ns + "/" + name)
+	for _, p := range s.poolChoices(ctx) {
+		info.Pools = append(info.Pools, p.Name)
+	}
 	targets, err := s.backupTargets(ctx)
 	if err != nil {
 		info.Error = err.Error()
@@ -609,7 +616,7 @@ func (s *Server) backupOp(ctx context.Context, ns, name, op string, f func(strin
 	case "now":
 		return s.backupNow(ctx, ns, name, f("target"))
 	case "restore":
-		return s.restoreBackup(ctx, f("store"), name, f("stamp"), strings.TrimSpace(f("target")))
+		return s.restoreBackup(ctx, f("store"), name, f("stamp"), strings.TrimSpace(f("target")), f("pool"))
 	case "delete":
 		if s.backups.status(ns+"/"+name) == "Running" {
 			return errors.New("a backup of this VM is running; delete it after the backup finishes")

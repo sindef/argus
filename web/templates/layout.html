@@ -188,6 +188,7 @@
     <p id="restore-error" class="error form-error"></p>
     <input type="hidden" name="stamp"><input type="hidden" name="store">
     <label>VM name <span class="help" title="Restoring alongside the original needs a new name; disks and MAC addresses are renamed.">?</span><input name="target" value="{{.Name}}-restore" required></label>
+    <label>Storage pool <select name="pool"><option value="">As backed up</option>{{range .B.Pools}}<option>{{.}}</option>{{end}}</select></label>
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Restore</button></div>
   </form>
 </dialog>

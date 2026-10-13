@@ -172,6 +172,7 @@ type VMBackups struct {
 	Status    string          `json:"status"`
 	Backups   []VMBackup      `json:"backups"`
 	Schedules []ScheduledTask `json:"schedules"`
+	Pools     []string        `json:"pools"`
 	Error     string          `json:"error"`
 }
 
