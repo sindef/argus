@@ -35,7 +35,10 @@ func filterVMs(vms []kube.VM, q string) []kube.VM {
 	}
 	out := vms[:0]
 	for _, v := range vms {
-		hay := strings.ToLower(v.Name + " " + v.DisplayName + " " + strings.Join(v.IPs(), " ") + " " + strings.Join(v.Tags, " "))
+		hay := strings.ToLower(v.Name + " " + v.DisplayName + " " + strings.Join(v.IPs(), " ") + " " + strings.Join(v.Tags, " ") + " " + v.Folder)
+		for k, val := range v.Attributes {
+			hay += " " + strings.ToLower(k+"="+val)
+		}
 		if strings.Contains(hay, q) {
 			out = append(out, v)
 		}
