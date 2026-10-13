@@ -38,14 +38,17 @@ func (c *Manager) CopyImage(ctx context.Context, org, image string, src Node, ta
 	})
 }
 
-func (c *Manager) SendImage(ctx context.Context, org, image, size string, src kube.RegistrySource, targets []Node, creds func() (string, string)) error {
+func (c *Manager) SendImage(ctx context.Context, org, image, size string, targets []Node, source func(context.Context, Node) (kube.RegistrySource, error)) error {
 	names := make([]string, len(targets))
 	for i, t := range targets {
 		names[i] = t.Name
 	}
 	return c.startTask(ctx, &Job{Org: org, Kind: "Send image " + image, From: "Image library", To: strings.Join(names, ", ")}, "image:"+image, 12*time.Hour, func(ctx context.Context, j *Job) error {
 		for _, t := range targets {
-			src.User, src.Pass = creds()
+			src, err := source(ctx, t)
+			if err != nil {
+				return err
+			}
 			if err := c.importTo(ctx, j, t, image, map[string]any{"name": image, "size": size, "registry": src}); err != nil {
 				return err
 			}

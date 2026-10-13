@@ -10,7 +10,7 @@
 <div class="table-wrap">
 <table>
   <thead><tr><th>Library</th><th>Tag</th><th>Architecture</th><th>Size</th><th>Added</th><th></th></tr></thead>
-  <tbody>{{range .Library}}{{$d := printf `{"name":"%s:%s","arch":"%s","size":"%s","digest":"%s","pull":"%s/%s:%s"}` .Name .Tag .Arch (bytes .Size) .Digest $.Address .Repo .Tag}}<tr class="clickable" data-dialog="image-details" data-fill='{{$d}}'>
+  <tbody>{{range .Library}}{{$d := printf `{"name":"%s:%s","arch":"%s","size":"%s","digest":"%s","pull":"%s/%s:%s"}` .Name .Tag .Arch (bytes .Size) .Digest (or $.Address $.AutoAddress) .Repo .Tag}}<tr class="clickable" data-dialog="image-details" data-fill='{{$d}}'>
     <td>{{template "icon" "image"}}{{.Name}}</td><td class="mono">{{.Tag}}</td><td>{{.Arch}}</td><td>{{bytes .Size}}</td><td>{{.Created.Local.Format "2006-01-02 15:04"}}</td>
     <td class="row-actions"><div class="menu"><button class="icon-btn" data-menu aria-label="Actions">{{template "icon" "ellipsis"}}</button>
       <div class="menu-list" hidden hx-target="#flash">
@@ -69,7 +69,7 @@
   <tbody>
   <tr>
     <td>{{template "icon" "server"}}Argus Manager</td><td>Registry</td>
-    <td class="mono">{{if .Address}}{{.Address}}/{{.Org}}{{else}}<span class="muted">Address not set</span>{{end}}</td>
+    <td class="mono">{{if .Address}}{{.Address}}/{{.Org}}{{else if .AutoAddress}}{{.AutoAddress}}/{{.Org}} <span class="muted">(auto)</span>{{else}}<span class="muted">Automatic</span>{{end}}</td>
     <td class="row-actions">{{if .Super}}<button class="link" data-dialog="registry-address" data-fill='{"address":"{{.Address}}"}'>Set address</button>{{end}}</td>
   </tr>
   {{range .Sources}}<tr{{if $.CanOperate}} class="clickable" data-dialog="add-source" data-fill='{"name":"{{.Name}}","kind":"{{.Kind}}","url":"{{.URL}}","ca":"{{.CA}}"}'{{end}}>
@@ -84,7 +84,7 @@
   </tbody>
 </table>
 </div>
-{{with .Address}}<dl class="kv spaced"><dt>Push <span class="help" title="Sign in with your Argus Manager user as {{$.Org}}/username. Images must contain a disk file under /disk, as KubeVirt container disks do.">?</span></dt><dd class="mono wrap">docker push {{.}}/{{$.Org}}/NAME:TAG</dd></dl>{{end}}
+{{with or .Address .AutoAddress}}<dl class="kv spaced"><dt>Push <span class="help" title="Sign in with your Argus Manager user as {{$.Org}}/username. Images must contain a disk file under /disk, as KubeVirt container disks do.">?</span></dt><dd class="mono wrap">docker push {{.}}/{{$.Org}}/NAME:TAG</dd></dl>{{end}}
 </section>
 </div>
 <dialog id="image-details" class="card">
@@ -176,7 +176,7 @@
   <form hx-post="/images/address" hx-target="#address-error" class="form">
     <h2>Registry address</h2>
     <p id="address-error" class="error form-error"></p>
-    <label>Address <span class="help" title="Host name or IP address, with port if not 443, that every host uses to reach Argus Manager. Added to Argus Manager's built-in certificate.">?</span><input name="address" placeholder="10.0.0.5:8443"></label>
+    <label>Address <span class="help" title="Host name or IP address, with port if not 443, that every host uses to reach Argus Manager. Added to Argus Manager's built-in certificate. Empty uses the Manager's own address on its connection to each host.">?</span><input name="address" placeholder="{{with .AutoAddress}}{{.}} (auto){{else}}Automatic{{end}}"></label>
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Save</button></div>
   </form>
 </dialog>

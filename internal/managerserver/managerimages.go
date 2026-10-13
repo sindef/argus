@@ -5,8 +5,10 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"argus/internal/auth"
 	"argus/internal/kube"
@@ -45,12 +47,18 @@ func (s *Server) managerImages(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	sort.Strings(hosts)
+	auto := ""
+	if i := slices.IndexFunc(states, manager.NodeState.Reachable); i >= 0 {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		auto, _ = s.hostRegistry(ctx, states[i].Node, false)
+		cancel()
+	}
 	sources, _, err := s.imageSources(r.Context(), ui.Session(r).Org)
 	if err != nil {
 		errs = strings.TrimSpace(errs + " " + err.Error())
 	}
 	s.Render(w, r, "manager-images.html", "layout", map[string]any{"Nav": "images", "Rows": out, "HostNames": hosts, "CanOperate": ui.Session(r).Role.Can(auth.Operator), "Error": errs,
-		"Library": s.library(ui.Session(r).Org), "HostArch": arch, "Templates": s.libraryTemplates(ui.Session(r).Org), "HostTemplates": s.hostTemplates(r), "Sources": sources, "Address": s.registryAddress(r.Context()), "Org": ui.Session(r).Org, "Super": superAdmin(r)})
+		"Library": s.library(ui.Session(r).Org), "HostArch": arch, "Templates": s.libraryTemplates(ui.Session(r).Org), "HostTemplates": s.hostTemplates(r), "Sources": sources, "Address": s.registryAddress(r.Context()), "AutoAddress": auto, "Org": ui.Session(r).Org, "Super": superAdmin(r)})
 }
 
 func (s *Server) managerImageOp(w http.ResponseWriter, r *http.Request) {

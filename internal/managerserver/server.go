@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"net"
 	"net/http"
 	"slices"
 	"strings"
@@ -26,6 +27,7 @@ type Server struct {
 	registry *registry.Registry
 	regAuth  registryAuth
 	caPEM    []byte
+	port     string
 }
 
 type Options struct {
@@ -33,6 +35,7 @@ type Options struct {
 	Manager *manager.Manager
 	Certs   *tlscert.Holder
 	DataDir string
+	Addr    string
 }
 
 func New(a *auth.Store, o Options) (*Server, error) {
@@ -40,7 +43,10 @@ func New(a *auth.Store, o Options) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{UI: &hostui.UI{Core: core}, manager: o.Manager, dataDir: o.DataDir}
+	s := &Server{UI: &hostui.UI{Core: core}, manager: o.Manager, dataDir: o.DataDir, port: "443"}
+	if _, port, err := net.SplitHostPort(o.Addr); err == nil {
+		s.port = port
+	}
 	core.Mode = s
 	s.sso.m = map[string]ssoFlow{}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

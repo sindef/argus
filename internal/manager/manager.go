@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"slices"
 	"sort"
@@ -579,6 +581,17 @@ func (c *Manager) migrate(ctx context.Context, j *Job, src, dst Node, ns, vm str
 
 func (n Node) Call(ctx context.Context, method, path string, in, out any) error {
 	return n.do(ctx, method, path, in, out)
+}
+
+func (n Node) LocalIP(ctx context.Context) (string, error) {
+	var local string
+	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{GotConn: func(i httptrace.GotConnInfo) {
+		local, _, _ = net.SplitHostPort(i.Conn.LocalAddr().String())
+	}})
+	if err := n.do(ctx, http.MethodGet, "/api/host/status", nil, nil); err != nil {
+		return "", err
+	}
+	return local, nil
 }
 
 func (n Node) DialConsole(ctx context.Context, ns, vm, kind string) (*websocket.Conn, error) {

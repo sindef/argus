@@ -62,6 +62,7 @@ type registryAuth struct {
 	mu    sync.Mutex
 	pulls map[string]pullGrant
 	users map[string]userGrant
+	ips   map[string]bool
 }
 
 type pullGrant struct {
@@ -87,7 +88,7 @@ func (s *Server) startRegistry(ctx context.Context) error {
 	}
 	g.Authorize = s.registryAuthorize
 	s.registry = g
-	s.regAuth = registryAuth{pulls: map[string]pullGrant{}, users: map[string]userGrant{}}
+	s.regAuth = registryAuth{pulls: map[string]pullGrant{}, users: map[string]userGrant{}, ips: map[string]bool{}}
 	if err := s.reloadManagerCert(ctx); err != nil {
 		return err
 	}
@@ -102,6 +103,32 @@ func (s *Server) registryAddress(ctx context.Context) string {
 	return st.Address
 }
 
+func (s *Server) hostRegistry(ctx context.Context, n manager.Node, trust bool) (string, error) {
+	if addr := s.registryAddress(ctx); addr != "" {
+		return addr, nil
+	}
+	ip, err := n.LocalIP(ctx)
+	if err == nil && net.ParseIP(ip) == nil {
+		err = errors.New("no local address")
+	}
+	if err != nil {
+		return "", fmt.Errorf("cannot find the address %s uses to reach Argus Manager: %w", n.Name, err)
+	}
+	s.regAuth.mu.Lock()
+	known := s.regAuth.ips[ip] || !trust
+	s.regAuth.ips[ip] = s.regAuth.ips[ip] || trust
+	s.regAuth.mu.Unlock()
+	if !known {
+		if err := s.reloadManagerCert(ctx); err != nil {
+			return "", err
+		}
+	}
+	if s.port == "443" {
+		return strings.TrimSuffix(net.JoinHostPort(ip, "443"), ":443"), nil
+	}
+	return net.JoinHostPort(ip, s.port), nil
+}
+
 func (s *Server) reloadManagerCert(ctx context.Context) error {
 	host := s.registryAddress(ctx)
 	if h, _, err := net.SplitHostPort(host); err == nil {
@@ -114,6 +141,11 @@ func (s *Server) reloadManagerCert(ctx context.Context) error {
 	} else if host != "" {
 		names = append(names, host)
 	}
+	s.regAuth.mu.Lock()
+	for ip := range s.regAuth.ips {
+		ips = append(ips, net.ParseIP(ip))
+	}
+	s.regAuth.mu.Unlock()
 	pki, err := tlscert.Load(ctx, s.Auth.Secrets(), ips, names...)
 	if err != nil {
 		return err
@@ -368,17 +400,24 @@ func (s *Server) librarySend(r *http.Request) error {
 	if !slices.ContainsFunc(s.library(org), func(i libraryImage) bool { return i.Name == name && i.Tag == tag }) {
 		return fmt.Errorf("%s is not in the library", r.FormValue("image"))
 	}
-	addr := s.registryAddress(r.Context())
-	if addr == "" {
-		return errors.New("set the address hosts use to reach Argus Manager under Image sources first")
-	}
 	targets, err := s.nodesNamed(r, r.Form["hosts"])
 	if err != nil {
 		return err
 	}
-	repo := org + "/" + name
+	return s.manager.SendImage(r.Context(), org, hostName, size, targets, func(ctx context.Context, t manager.Node) (kube.RegistrySource, error) {
+		return s.librarySource(ctx, t, name, tag)
+	})
+}
+
+func (s *Server) librarySource(ctx context.Context, n manager.Node, name, tag string) (kube.RegistrySource, error) {
+	addr, err := s.hostRegistry(ctx, n, true)
+	if err != nil {
+		return kube.RegistrySource{}, err
+	}
+	repo := n.Org + "/" + name
 	src := kube.RegistrySource{Image: addr + "/" + repo + ":" + tag, CA: string(s.caPEM)}
-	return s.manager.SendImage(r.Context(), org, hostName, size, src, targets, func() (string, string) { return s.newPull(repo) })
+	src.User, src.Pass = s.newPull(repo)
+	return src, nil
 }
 
 func (s *Server) importFromSource(r *http.Request) error {

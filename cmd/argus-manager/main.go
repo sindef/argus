@@ -89,7 +89,7 @@ func main() {
 	certs := tlscert.NewHolder(pki.Cert)
 	certs.Load(ctx, fs)
 	cancel()
-	srv, err := managerserver.New(store, managerserver.Options{Banner: func(string) {}, Manager: mgr, Certs: certs, DataDir: data})
+	srv, err := managerserver.New(store, managerserver.Options{Banner: func(string) {}, Manager: mgr, Certs: certs, DataDir: data, Addr: addr})
 	if err != nil {
 		log.Fatal(err)
 	}
