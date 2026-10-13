@@ -37,9 +37,11 @@ iso: os
 
 source-bundle: NOTICES = full
 source-bundle: os
-	rm -rf $(SOURCES)
-	docker buildx build $(PLATFORM) --build-arg VERSION=$(VERSION) --build-arg NOTICES=full --target source-bundle --output type=local,dest=$(SOURCES) os
-	docker buildx build $(PLATFORM) --target source-bundle --output type=local,dest=$(SOURCES) .
+	rm -rf $(SOURCES) && mkdir -p $(SOURCES)
+	docker buildx build $(PLATFORM) --build-arg VERSION=$(VERSION) --build-arg NOTICES=full --target source-bundle --output type=tar,dest=$(SOURCES).tar os
+	tar -xf $(SOURCES).tar -C $(SOURCES)
+	docker buildx build $(PLATFORM) --target source-bundle --output type=tar,dest=$(SOURCES).tar .
+	tar -xf $(SOURCES).tar -C $(SOURCES) && rm $(SOURCES).tar
 	cd $(SOURCES) && find . -type f ! -name SHA256SUMS -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > SHA256SUMS
 	rm -f $(BUNDLE)*
 	tar -czf $(BUNDLE) -C $(SOURCES) .
