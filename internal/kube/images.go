@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -311,9 +312,13 @@ type RegistrySource struct {
 	CA    string `json:"ca,omitempty"`
 	User  string `json:"user,omitempty"`
 	Pass  string `json:"pass,omitempty"`
+	Bytes int64  `json:"bytes,omitempty"`
 }
 
 func (c *Client) ImportRegistryImage(ctx context.Context, name, size string, src RegistrySource) error {
+	if err := c.checkImageSpace(ctx, src.Bytes); err != nil {
+		return err
+	}
 	if err := c.FinishImageImport(ctx, name); err != nil {
 		return err
 	}
@@ -422,4 +427,29 @@ func dvError(o map[string]any) string {
 		}
 	}
 	return ""
+}
+
+func (c *Client) checkImageSpace(ctx context.Context, bytes int64) error {
+	if bytes <= 0 {
+		return nil
+	}
+	classes, err := c.dyn.Resource(scGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+	var pool string
+	for _, sc := range classes.Items {
+		if sc.GetAnnotations()["storageclass.kubernetes.io/is-default-class"] == "true" {
+			pool, _, _ = unstructured.NestedString(sc.Object, "parameters", "poolname")
+		}
+	}
+	pools, err := c.Pools(ctx)
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(pools, func(p Pool) bool { return p.Name == pool })
+	if need := bytes*2 + bytes/10; i >= 0 && pools[i].Free < need {
+		return fmt.Errorf("pool %s has %.1f GiB free; copying this image needs about %.1f GiB for the download and the disk", pool, float64(pools[i].Free)/(1<<30), float64(need)/(1<<30))
+	}
+	return nil
 }

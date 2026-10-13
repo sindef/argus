@@ -461,6 +461,10 @@ func (s *Server) librarySource(ctx context.Context, n manager.Node, name, tag st
 	}
 	repo := n.Org + "/" + name
 	src := kube.RegistrySource{Image: addr + "/" + repo + ":" + tag, CA: string(s.caPEM)}
+	lib := s.library(n.Org)
+	if i := slices.IndexFunc(lib, func(x libraryImage) bool { return x.Name == name && x.Tag == tag }); i >= 0 {
+		src.Bytes = lib[i].Size
+	}
 	src.User, src.Pass = s.newPull(repo)
 	return src, nil
 }
