@@ -350,6 +350,7 @@ input[readonly] { color: var(--muted); }
 .files thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
 .files.htmx-request table { opacity: .5; transition: opacity .15s; }
 tr.acked td:not(.row-actions) { opacity: .55; }
+.card:has([data-show-acked]:not(:checked)) tr.acked, .card:has([data-show-acked]:checked) tr.all-acked { display: none; }
 .content:has(> .taskbar) { padding-bottom: 64px; }
 .taskbar { position: fixed; bottom: 0; left: 260px; right: 0; z-index: 9; background: var(--bg-2); border-top: 1px solid var(--line); }
 .content.with-drawer > .taskbar { right: var(--drawer-w); }

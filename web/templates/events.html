@@ -6,11 +6,11 @@
 {{with .Error}}<p class="error">{{.}}</p>{{end}}
 {{with .Alarms}}
 <div class="card spaced">
-  <div class="card-head">{{template "icon" "triangle-alert"}}<h2>Active alarms</h2></div>
+  <div class="card-head">{{template "icon" "triangle-alert"}}<h2>Active alarms</h2>{{if ne (len (unacked .)) (len .)}}<label class="check right"><input type="checkbox" data-show-acked> Show acknowledged</label>{{end}}</div>
   <div class="table-wrap"><table>
     <thead><tr><th>Severity</th>{{if $.Manager}}<th>Host</th>{{end}}<th>Object</th><th>Message</th><th>Since</th><th></th></tr></thead>
     <tbody>{{range .}}<tr{{if .AckBy}} class="acked"{{end}}><td><span class="dot {{if eq .Severity "critical"}}Failed{{else}}Warning{{end}}">{{.Severity}}</span></td>{{if $.Manager}}<td>{{.Host}}</td>{{end}}<td>{{.Object}}</td><td>{{.Message}}</td><td>{{since .Since}}</td>
-      <td class="row-actions">{{if .AckBy}}<span class="muted" title="{{.AckAt.Local.Format "2006-01-02 15:04"}}">Acknowledged by {{.AckBy}}</span>{{else if eq $.Session.Role "admin"}}<button class="link" hx-post="/alarms/ack" hx-vals='{"key":"{{.Key}}"}' hx-target="#flash">Acknowledge</button>{{end}}</td></tr>{{end}}</tbody>
+      <td class="row-actions">{{if .AckBy}}<span class="muted" title="{{.AckAt.Local.Format "2006-01-02 15:04"}}">Acknowledged by {{.AckBy}}</span>{{else if eq $.Session.Role "admin"}}<button class="link" hx-post="/alarms/ack" hx-vals='{"key":"{{.Key}}"}' hx-target="#flash">Acknowledge</button>{{end}}</td></tr>{{end}}{{if not (unacked .)}}<tr class="all-acked"><td colspan="6" class="muted">All alarms acknowledged.</td></tr>{{end}}</tbody>
   </table></div>
 </div>
 {{end}}
