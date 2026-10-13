@@ -12,6 +12,8 @@ spec:
   valuesContent: |-
     analytics:
       enabled: false
+    zfsNode:
+      allowedTopologyKeys: "kubernetes.io/hostname,openebs.io/nodeid"
     zfsController:
       resizer:
         extraArgs: ["--v=2"]
