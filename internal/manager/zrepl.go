@@ -14,7 +14,10 @@ import (
 	"argus/internal/wire"
 )
 
-var errNoZFS = errors.New("not on ZFS")
+var (
+	errNoZFS   = errors.New("not on ZFS")
+	errPartial = errors.New("replica disks are from different points in time until the next successful sync")
+)
 
 func zbase(owner, replica kube.ZDisk) string {
 	for i := len(replica.Snapshots) - 1; i >= 0; i-- {
@@ -47,10 +50,15 @@ func zsync(ctx context.Context, vm string, owner, replica Node) error {
 	if err := owner.do(ctx, http.MethodPost, vmPath(vm, "zfs/snapshot"), wire.ZFSSnapshotRequest{Keep: keep}, &snap); err != nil {
 		return err
 	}
+	received := 0
 	for v := range od {
 		if err := zpipe(ctx, vm, v, snap.Snap, bases[v], owner, replica); err != nil {
+			if received > 0 || bases[v] == "" {
+				return fmt.Errorf("disk %s: %w; %w", v, err, errPartial)
+			}
 			return fmt.Errorf("disk %s: %w", v, err)
 		}
+		received++
 	}
 	if err := replica.do(ctx, http.MethodPost, vmPath(vm, "replica/swap"), wire.ReplicaRequest{Export: kube.Export{Spec: snap.Spec}, Mapping: mapping}, nil); err != nil {
 		return err

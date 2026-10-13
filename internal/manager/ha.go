@@ -346,6 +346,8 @@ func (c *Manager) replicate(ctx context.Context) {
 						ps[i].LastError = msg
 						if err == nil {
 							ps[i].LastSync = time.Now()
+						} else if errors.Is(err, errPartial) {
+							ps[i].LastSync = time.Time{}
 						}
 					}
 				}
