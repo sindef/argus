@@ -323,7 +323,7 @@ tr.bad td { color: var(--bad); }
 dd.wrap { word-break: break-all; }
 .tree .row > a { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; color: inherit; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 900px) {
-  .panes.ready, .panes.static { grid-template-columns: 1fr; }
+  .panes.ready, .panes.static { grid-template-columns: minmax(0, 1fr); }
   .panes-nav { position: static; flex-direction: row; overflow-x: auto; }
 }
 .pane > dl.kv { margin-top: 16px; }
