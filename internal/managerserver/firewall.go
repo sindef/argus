@@ -26,7 +26,7 @@ func (s *Server) firewallPage(w http.ResponseWriter, r *http.Request) {
 			ports[j] = strconv.Itoa(n)
 		}
 		rows = append(rows, row{rule, ui.Fill(map[string]any{"i": strconv.Itoa(i), "name": rule.Name, "source": rule.Source, "dest": rule.Dest, "proto": rule.Proto,
-			"ports": strings.Join(ports, ", "), "action": map[bool]string{true: "allow", false: "deny"}[rule.Allow]})})
+			"ports": strings.Join(ports, ", "), "verdict": map[bool]string{true: "allow", false: "deny"}[rule.Allow]})})
 	}
 	var tags []string
 	for _, st := range s.manager.Inventory(ui.Session(r).Org) {
@@ -55,7 +55,7 @@ func (s *Server) firewallAction(w http.ResponseWriter, r *http.Request) {
 			p.DefaultDrop = r.FormValue("drop") != ""
 		case "save":
 			rule := manager.FirewallRule{Name: strings.TrimSpace(r.FormValue("name")), Source: strings.TrimSpace(r.FormValue("source")), Dest: strings.TrimSpace(r.FormValue("dest")),
-				Proto: r.FormValue("proto"), Allow: r.FormValue("action") == "allow"}
+				Proto: r.FormValue("proto"), Allow: r.FormValue("verdict") == "allow"}
 			for _, f := range strings.FieldsFunc(r.FormValue("ports"), func(c rune) bool { return c == ',' || c == ' ' }) {
 				n, perr := strconv.Atoi(f)
 				if perr != nil {
