@@ -51,6 +51,7 @@ case "$action" in
             ref="$(printf '%s' "$arg" | sed -E 's#@.*$##; s#:[^/:]+$##')@$digest"
         fi
         status "Updating to $ref"
+        idle || exit 1
         if kairos-agent upgrade --source "oci:$ref" >> "$dir/upgrade.log" 2>&1; then
             status "Rebooting into $ref"
             idle && systemctl reboot

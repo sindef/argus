@@ -124,7 +124,7 @@ func (s *Server) maintenance() error {
 		return errMaintenance
 	}
 	status := readFile(filepath.Join(s.runDir, "status"))
-	for _, p := range []string{"Updating", "Rebooting", "Shutting down"} {
+	for _, p := range []string{"Verifying", "Updating", "Rebooting", "Shutting down"} {
 		if strings.HasPrefix(status, p) {
 			return errMaintenance
 		}
