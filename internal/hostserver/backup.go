@@ -382,14 +382,26 @@ func (s *Server) restoreBackup(ctx context.Context, store, vm, stamp, target str
 	if err := checkBackup(ctx, st, rel); err != nil {
 		return err
 	}
+	man, err := manifestOf(ctx, st, rel)
+	if err != nil {
+		return err
+	}
+	want, listed := man.Files["vm.json"]
+	if !listed {
+		return errors.New("backup manifest does not list vm.json")
+	}
 	body, _, err := st.Get(ctx, rel+"/vm.json")
 	if err != nil {
 		return err
 	}
-	var meta backupMeta
-	err = json.NewDecoder(body).Decode(&meta)
+	var raw bytes.Buffer
+	_, err = verifiedCopy(&raw, body, want)
 	body.Close()
 	if err != nil {
+		return fmt.Errorf("backup metadata: %w", err)
+	}
+	var meta backupMeta
+	if err := json.Unmarshal(raw.Bytes(), &meta); err != nil {
 		return fmt.Errorf("backup metadata: %w", err)
 	}
 	if target == "" {
