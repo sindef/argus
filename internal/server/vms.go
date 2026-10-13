@@ -124,6 +124,10 @@ func (s *Server) vmDrawer(w http.ResponseWriter, r *http.Request) {
 func (s *Server) bulk(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	act, sel := r.PathValue("action"), r.Form["sel"]
+	if !granted(r, actionPrivilege(act)) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 	if len(sel) == 0 {
 		flash(w, r, errors.New("select at least one VM"))
 		return

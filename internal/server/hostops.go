@@ -586,7 +586,7 @@ func (s *Server) apiOp(w http.ResponseWriter, r *http.Request, in any, fn func()
 	writeJSON(w, out)
 }
 
-func (s *Server) hostAPIRoutes() {
+func (s *Server) hostAPIRoutes() []route {
 	l := localOps{s}
 	routes := map[string]http.HandlerFunc{
 		"GET /api/host/dashboard": func(w http.ResponseWriter, r *http.Request) {
@@ -686,9 +686,11 @@ func (s *Server) hostAPIRoutes() {
 			s.streamDisk(w, r, r.PathValue("ns"), r.PathValue("name"), r.PathValue("disk"))
 		},
 	}
+	var rs []route
 	for pattern, h := range routes {
-		s.mux.HandleFunc(pattern, s.require(auth.Admin, h))
+		rs = append(rs, route{pattern, auth.Administer, h})
 	}
+	return rs
 }
 
 func decodeJSON(r io.Reader, v any) error {

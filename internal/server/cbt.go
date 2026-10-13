@@ -28,15 +28,13 @@ func cbtCreated(id string) time.Time {
 	return time.Unix(n, 0).UTC()
 }
 
-func (s *Server) cbtRoutes() {
-	for pattern, h := range map[string]http.HandlerFunc{
-		"POST /api/vms/{ns}/{name}/cbt":                          s.cbtCreate,
-		"GET /api/vms/{ns}/{name}/cbt":                           s.cbtList,
-		"DELETE /api/vms/{ns}/{name}/cbt/{id}":                   s.cbtDelete,
-		"GET /api/vms/{ns}/{name}/cbt/{id}/disks/{disk}/changes": s.cbtChanges,
-		"GET /api/vms/{ns}/{name}/cbt/{id}/disks/{disk}/data":    s.cbtData,
-	} {
-		s.mux.HandleFunc(pattern, s.require(auth.Admin, h))
+func (s *Server) cbtRoutes() []route {
+	return []route{
+		{"POST /api/vms/{ns}/{name}/cbt", auth.Administer, s.cbtCreate},
+		{"GET /api/vms/{ns}/{name}/cbt", auth.Administer, s.cbtList},
+		{"DELETE /api/vms/{ns}/{name}/cbt/{id}", auth.Administer, s.cbtDelete},
+		{"GET /api/vms/{ns}/{name}/cbt/{id}/disks/{disk}/changes", auth.Administer, s.cbtChanges},
+		{"GET /api/vms/{ns}/{name}/cbt/{id}/disks/{disk}/data", auth.Administer, s.cbtData},
 	}
 }
 

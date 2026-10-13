@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"html/template"
+	"io/fs"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -89,33 +91,22 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	}
 	s.version = readEnv(o.ReleaseFile)["KAIROS_VERSION"]
 	s.sso.m = map[string]ssoFlow{}
-	for _, p := range []string{"login.html", "password.html", "users.html", "vms.html", "console.html", "images.html", "networks.html", "vmnew.html", "host.html", "manager.html", "manager-vms.html", "manager-vm.html", "hosts.html", "settings.html", "events.html", "volumes.html", "storage.html", "disks.html", "pools.html", "devices.html", "files.html", "hostnet.html", "dashboard.html", "hostnets.html", "profile.html", "manager-images.html", "audit.html", "groups.html", "tokens.html", "firewall.html"} {
-		t, err := template.New(p).Funcs(funcs).ParseFS(web.FS, "templates/layout.html", "templates/manager-nav.html", "templates/"+p)
+	pages, err := fs.Glob(web.FS, "templates/*.html")
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range pages {
+		p := path.Base(f)
+		if p == "layout.html" || p == "manager-nav.html" {
+			continue
+		}
+		t, err := template.New(p).Funcs(funcs).ParseFS(web.FS, "templates/layout.html", "templates/manager-nav.html", f)
 		if err != nil {
 			return nil, err
 		}
 		s.pages[p] = t
 	}
 
-	s.mux.Handle("GET /static/", http.FileServerFS(web.FS))
-	s.mux.HandleFunc("GET /audit", s.requireOrg(s.auditPage))
-	s.mux.HandleFunc("POST /notify", s.requireOrg(s.notifyForm))
-	s.mux.HandleFunc("POST /certificate", s.requireOrg(s.setCertificate))
-	s.mux.HandleFunc("GET /login", s.loginPage)
-	s.mux.HandleFunc("POST /login", s.login)
-	s.mux.HandleFunc("POST /login/totp", s.loginTOTP)
-	s.mux.HandleFunc("POST /account/mfa/{op}", s.require(auth.ReadOnly, s.mfaAction))
-	s.mux.HandleFunc("POST /users/{name}/mfa-reset", s.requireOrg(s.resetMFA))
-	s.mux.HandleFunc("POST /logout", s.logout)
-	s.mux.HandleFunc("GET /password", s.require(auth.ReadOnly, s.passwordPage))
-	s.mux.HandleFunc("POST /password", s.require(auth.ReadOnly, s.changePassword))
-	s.mux.HandleFunc("GET /users", s.requireOrg(s.usersPage))
-	s.mux.HandleFunc("POST /users", s.requireOrg(s.addUser))
-	s.mux.HandleFunc("POST /users/{name}/role", s.requireOrg(s.setRole))
-	s.mux.HandleFunc("POST /users/scopes", s.requireOrg(s.setScopes))
-	s.mux.HandleFunc("POST /users/{name}/update", s.requireOrg(s.updateUser))
-	s.mux.HandleFunc("POST /users/{name}/reset", s.requireOrg(s.resetPassword))
-	s.mux.HandleFunc("POST /users/{name}/delete", s.requireOrg(s.deleteUser))
 	if s.manager != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		err := s.startRegistry(ctx)
@@ -123,198 +114,10 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		if err != nil {
 			return nil, err
 		}
-		s.mux.HandleFunc("GET /user-groups", s.requireOrg(s.groupsPage))
-		s.mux.HandleFunc("POST /user-groups/save", s.requireOrg(s.saveGroup))
-		s.mux.HandleFunc("POST /user-groups/delete", s.requireOrg(s.deleteGroup))
-		s.mux.HandleFunc("POST /user-roles/save", s.requireOrg(s.saveRole))
-		s.mux.HandleFunc("POST /user-roles/delete", s.requireOrg(s.deleteRole))
-		s.mux.HandleFunc("POST /sso/start", s.ssoStart)
-		s.mux.HandleFunc("GET /sso/callback", s.ssoCallback)
-		s.mux.HandleFunc("GET /{$}", s.need(auth.VMView, s.managerHome))
-		s.mux.HandleFunc("GET /datacenters/{dc}", s.need(auth.VMView, s.managerHome))
-		s.mux.HandleFunc("GET /datacenters/{dc}/clusters/{cluster}", s.need(auth.VMView, s.managerHome))
-		s.mux.HandleFunc("GET /vms", s.need(auth.VMView, s.managerVMs))
-		s.mux.HandleFunc("GET /nav/tree", s.need(auth.VMView, s.managerTree))
-		s.mux.HandleFunc("GET /nodes/{node}/vms/{ns}/{name}", s.need(auth.VMView, s.managerVM))
-		s.mux.HandleFunc("GET /nodes/{node}/vms/{ns}/{name}/metrics", s.need(auth.VMView, s.managerVMMetrics))
-		s.mux.HandleFunc("GET /metrics", s.need(auth.VMView, s.managerFleetMetrics))
-		s.mux.HandleFunc("GET /nodes/{node}/vms/{ns}/{name}/console", s.need(auth.VMConsole, s.managerConsole))
-		s.mux.HandleFunc("GET /nodes/{node}/vms/{ns}/{name}/ws/{kind}", s.need(auth.VMConsole, s.managerConsoleWS))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/migrate", s.need(auth.VMMigrate, s.managerMigrate))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/protect", s.need(auth.VMMigrate, s.managerProtect))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/unprotect", s.need(auth.VMMigrate, s.managerUnprotect))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/disks/{disk}/delete", s.need(auth.VMConfig, s.managerRemoveDisk))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/disks/move", s.need(auth.VMConfig, s.managerMoveDisk))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/tags", s.need(auth.VMConfig, s.managerSetTags))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/snapshots/{snap}/{op}", s.need(auth.VMSnapshot, s.managerSnapshotOp))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/backups/{op}", s.need(auth.VMBackup, s.managerBackupOp))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/schedule/{op}", s.need(auth.VMPower, s.managerScheduleOp))
-		s.mux.HandleFunc("POST /nodes/{node}/vms/{ns}/{name}/{action}", s.need(auth.VMView, s.managerVMAction))
-		s.mux.HandleFunc("GET /events", s.need(auth.VMView, s.managerEvents))
-		s.mux.HandleFunc("POST /alarm-rules/{op}", s.need(auth.Administer, s.managerAlarmRule))
-		s.mux.HandleFunc("POST /jobs/{id}/resolve", s.need(auth.Administer, s.managerResolve))
-		s.mux.HandleFunc("GET /storage", s.need(auth.VMView, s.managerStorage))
-		s.mux.HandleFunc("GET /networks", s.need(auth.VMView, s.managerNetworks))
-		s.mux.HandleFunc("POST /networks", s.need(auth.NetworkConfig, s.managerAddNetwork))
-		s.mux.HandleFunc("POST /networks/{name}/{op}", s.need(auth.NetworkConfig, s.managerNetworkOp))
-		s.mux.HandleFunc("GET /volumes", s.need(auth.VMView, s.managerVolumes))
-		s.mux.HandleFunc("POST /volumes", s.need(auth.VMConfig, s.managerVolumeOp))
-		s.mux.HandleFunc("POST /hosts/{node}/volumes/{op}", s.need(auth.VMConfig, s.managerVolumeOp))
-		s.mux.HandleFunc("GET /hosts", s.need(auth.HostView, s.managerHosts))
-		s.mux.HandleFunc("POST /hosts", s.requireOrg(s.managerAddNode))
-		s.mux.HandleFunc("GET /profile", s.need(auth.Administer, s.profilePage))
-		s.mux.HandleFunc("POST /profile", s.need(auth.Administer, s.profileSave))
-		s.mux.HandleFunc("POST /profile/apply", s.need(auth.Administer, s.profileApply))
-		s.mux.HandleFunc("GET /groups/modal/{op}", s.need(auth.Administer, s.groupModal))
-		s.mux.HandleFunc("POST /groups/{op}", s.need(auth.Administer, s.groupAction))
-		s.mux.HandleFunc("POST /hosts/{node}/delete", s.requireOrg(s.managerRemoveNode))
-		s.mux.HandleFunc("POST /hosts/{node}/access", s.requireOrg(s.managerNodeAccess))
-		s.mux.HandleFunc("POST /hosts/{node}/rotate-token", s.requireOrg(s.managerRotateToken))
-		s.mux.HandleFunc("GET /network/hosts", s.need(auth.HostConfig, s.managerHostNets))
-		s.mux.HandleFunc("GET /vm-new", s.need(auth.VMProvision, s.managerNewVM))
-		s.apiV1Routes()
-		s.mux.HandleFunc("POST /drs/apply", s.need(auth.Administer, s.drsApply))
-		s.mux.HandleFunc("GET /firewall", s.need(auth.NetworkConfig, s.firewallPage))
-		s.mux.HandleFunc("POST /firewall/{op}", s.need(auth.NetworkConfig, s.firewallAction))
-		s.mux.HandleFunc("POST /drs/rules/{op}", s.need(auth.Administer, s.drsRule))
-		s.mux.HandleFunc("GET /account/tokens", s.require(auth.ReadOnly, s.accountTokens))
-		s.mux.HandleFunc("POST /account/tokens", s.require(auth.ReadOnly, s.createAccountToken))
-		s.mux.HandleFunc("POST /account/tokens/{name}/delete", s.require(auth.ReadOnly, s.deleteAccountToken))
-		s.mux.HandleFunc("GET /images", s.need(auth.VMView, s.managerImages))
-		s.mux.HandleFunc("GET /vm-copy", s.need(auth.VMProvision, s.vmCopyModal))
-		s.mux.HandleFunc("POST /vm-copy", s.need(auth.VMProvision, s.vmCopy))
-		s.mux.HandleFunc("POST /templates/delete", s.need(auth.ImageConfig, s.deleteLibraryTemplate))
-		s.mux.HandleFunc("GET /template-data/{org}/{name}/{file}", s.serveTemplateData)
-		s.mux.HandleFunc("POST /images/{op}", s.need(auth.ImageConfig, s.managerImageOp))
-		s.mux.HandleFunc("POST /network/hosts/bridge", s.need(auth.HostConfig, s.managerBridgeRollout))
-		s.mux.HandleFunc("GET /switches/{name}/ports", s.need(auth.VMView, s.managerSwitchPorts))
-		s.mux.HandleFunc("POST /switches/teaming", s.need(auth.HostConfig, s.managerSwitchTeaming))
-		s.mux.HandleFunc("GET /settings", s.requireOrg(s.managerSettings))
-		s.mux.HandleFunc("POST /settings/sso", s.requireOrg(s.managerSSO))
-		s.mux.HandleFunc("POST /settings/ldap", s.requireOrg(s.managerLDAP))
-		s.mux.HandleFunc("POST /settings/orgs", s.requireOrg(s.managerAddOrg))
-		s.mux.HandleFunc("POST /settings/orgs/{id}/delete", s.requireOrg(s.managerDeleteOrg))
-		s.mux.HandleFunc("POST /settings/orgs/{id}/rename", s.requireOrg(s.managerRenameOrg))
-		s.mux.HandleFunc("POST /settings/backup", s.requireOrg(s.managerBackup))
-		s.mux.HandleFunc("POST /settings/ha", s.requireOrg(s.managerHASettings))
-		s.mux.HandleFunc("POST /ha/failover", s.need(auth.Administer, s.managerFailover))
-		s.mux.HandleFunc("POST /settings/migration", s.requireOrg(s.managerMigrationSettings))
 	}
-	for _, hr := range hostRoutes {
-		h := hr.h
-		s.hostRoute(hr, func(w http.ResponseWriter, r *http.Request) { h(s, w, r) })
+	for _, rt := range s.routes() {
+		s.mux.HandleFunc(rt.pattern, s.guard(rt.priv, rt.h))
 	}
-	if s.manager != nil {
-		return s, nil
-	}
-	s.mux.HandleFunc("GET /events", s.require(auth.ReadOnly, s.eventsPage))
-	s.mux.HandleFunc("GET /volumes", s.require(auth.ReadOnly, s.volumesPage))
-	s.mux.HandleFunc("POST /volumes/{op}", s.require(auth.Operator, s.volumeAction))
-	s.mux.HandleFunc("GET /images", s.require(auth.ReadOnly, s.images))
-	s.mux.HandleFunc("POST /images", s.require(auth.Operator, s.importImage))
-	s.mux.HandleFunc("POST /images/upload", s.require(auth.Operator, s.uploadImage))
-	s.mux.HandleFunc("POST /images/{name}/delete", s.require(auth.Operator, s.deleteImage))
-	s.mux.HandleFunc("GET /networks", s.require(auth.ReadOnly, s.networks))
-	s.mux.HandleFunc("POST /networks", s.requireOrg(s.createNetwork))
-	s.mux.HandleFunc("POST /networks/{name}/delete", s.requireOrg(s.deleteNetwork))
-	s.mux.HandleFunc("GET /host", s.require(auth.Admin, s.host))
-	s.mux.HandleFunc("POST /host/settings", s.require(auth.Admin, s.hostSettingsForm))
-	s.mux.HandleFunc("POST /host/backup-targets/{op}", s.require(auth.Admin, s.backupTargetForm))
-	s.mux.HandleFunc("POST /host/{action}", s.require(auth.Admin, s.hostRequest))
-	s.mux.HandleFunc("POST /tokens", s.require(auth.Admin, s.createToken))
-	s.mux.HandleFunc("POST /tokens/{name}/delete", s.require(auth.Admin, s.deleteToken))
-	s.mux.HandleFunc("GET /ca.pem", s.caCert)
-	s.mux.HandleFunc("GET /export/{ns}/{export}/{volume}", s.exportPassthrough)
-	s.mux.HandleFunc("GET /backups/{vm}/{stamp}/{file}", s.serveBackup)
-	s.mux.HandleFunc("GET /esxi-import/{disk}", s.serveESXi)
-	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/backups", s.require(auth.Admin, s.apiVMBackups))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/backups/{op}", s.require(auth.Admin, s.apiVMBackupOp))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/schedule/{op}", s.require(auth.Admin, s.apiScheduleOp))
-	s.hostAPIRoutes()
-	s.flrAPIRoutes()
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/media", s.require(auth.Admin, s.apiMedia))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/media/{op}", s.require(auth.Admin, s.apiMedia))
-	s.cbtRoutes()
-	s.mux.HandleFunc("GET /api/host/network", s.require(auth.Admin, s.apiHostNetwork))
-	s.mux.HandleFunc("GET /api/host/status", s.require(auth.Admin, s.apiHostStatus))
-	s.mux.HandleFunc("GET /api/images", s.require(auth.Admin, s.apiImages))
-	s.mux.HandleFunc("GET /api/alarms", s.require(auth.Admin, s.apiAlarms))
-	s.mux.HandleFunc("GET /api/prometheus", s.require(auth.Admin, s.apiPrometheus))
-	s.mux.HandleFunc("POST /api/images/import", s.require(auth.Admin, s.apiImportImage))
-	s.mux.HandleFunc("POST /api/images/{name}/{op}", s.require(auth.Admin, s.apiImageOp))
-	s.mux.HandleFunc("GET /api/host/settings", s.require(auth.Admin, s.apiHostSettings))
-	s.mux.HandleFunc("POST /api/host/settings", s.require(auth.Admin, s.apiApplyHostSettings))
-	s.mux.HandleFunc("GET /api/host/backup-targets", s.require(auth.Admin, s.apiBackupTargets))
-	s.mux.HandleFunc("POST /api/tokens/rotate", s.require(auth.Admin, s.apiRotateToken))
-	s.mux.HandleFunc("POST /api/tokens/retire", s.require(auth.Admin, s.apiRetireToken))
-	s.mux.HandleFunc("POST /api/host/backup-targets/{op}", s.require(auth.Admin, s.apiBackupTargetOp))
-	s.mux.HandleFunc("POST /api/host/power/{action}", s.require(auth.Admin, s.apiHostRequest))
-	s.mux.HandleFunc("GET /api/node", s.require(auth.Admin, s.apiNode))
-	s.mux.HandleFunc("GET /api/vms", s.require(auth.Admin, s.apiVMs))
-	s.mux.HandleFunc("GET /api/metrics", s.require(auth.Admin, s.apiMetrics))
-	s.mux.HandleFunc("GET /api/events", s.require(auth.Admin, s.apiEvents))
-	s.mux.HandleFunc("GET /api/storage", s.require(auth.Admin, s.apiStorage))
-	s.mux.HandleFunc("POST /api/volumes/{op}", s.require(auth.Admin, s.apiVolumeOp))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/disks/{disk}/delete", s.require(auth.Admin, s.apiRemoveDisk))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/disks/move", s.require(auth.Admin, s.apiMoveDisk))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/tags", s.require(auth.Admin, s.apiSetTags))
-	s.mux.HandleFunc("GET /api/networks", s.require(auth.Admin, s.apiNetworks))
-	s.mux.HandleFunc("POST /api/networks/{op}", s.require(auth.Admin, s.apiNetworkOp))
-	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/disks", s.require(auth.Admin, s.apiDisks))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/export", s.require(auth.Admin, s.apiExport))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/unexport", s.require(auth.Admin, s.apiUnexport))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/delete", s.require(auth.Admin, s.apiDelete))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/imported", s.require(auth.Admin, s.apiImported))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/{action}", s.require(auth.Admin, s.apiAction))
-	s.mux.HandleFunc("POST /api/import", s.require(auth.Admin, s.apiImport))
-	s.mux.HandleFunc("POST /api/heartbeat", s.require(auth.Admin, s.apiHeartbeat))
-	s.mux.HandleFunc("GET /api/probe", s.require(auth.Admin, s.apiProbe))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/ha", s.require(auth.Admin, s.apiSetHA))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/replica/{op}", s.require(auth.Admin, s.apiReplica))
-	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/zfs", s.require(auth.Admin, s.apiZFSDisks))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/zfs/snapshot", s.require(auth.Admin, s.apiZFSSnapshot))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/zfs/prune", s.require(auth.Admin, s.apiZFSPrune))
-	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/zfs/send", s.require(auth.Admin, s.apiZFSSend))
-	s.mux.HandleFunc("PUT /api/vms/{ns}/{name}/zfs/recv", s.require(auth.Admin, s.apiZFSRecv))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/snapshot-export", s.require(auth.Admin, s.apiSnapshotExport))
-	s.mux.HandleFunc("GET /api/kubevirt-ca", s.require(auth.Admin, s.apiKubeVirtCA))
-	s.mux.HandleFunc("POST /api/kubevirt-external-ca", s.require(auth.Admin, s.apiExternalCA))
-	s.mux.HandleFunc("POST /api/migration-network", s.require(auth.Admin, s.apiMigrationNetwork))
-	s.mux.HandleFunc("POST /api/migration-network/remove", s.require(auth.Admin, s.apiRemoveMigrationNetwork))
-	s.mux.HandleFunc("POST /api/sync-controller", s.require(auth.Admin, s.apiSyncController))
-	s.mux.HandleFunc("POST /api/receive", s.require(auth.Admin, s.apiReceive))
-	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/spec", s.require(auth.Admin, s.apiVMSpec))
-	s.mux.HandleFunc("GET /api/vms/{ns}/{name}", s.require(auth.Admin, s.apiVM))
-	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/events", s.require(auth.Admin, s.apiEvents))
-	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/snapshots", s.require(auth.Admin, s.apiSnapshots))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/snapshots", s.require(auth.Admin, s.apiSnapshotOp))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/snapshots/{snap}/{op}", s.require(auth.Admin, s.apiSnapshotOp))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/meta/{op}", s.require(auth.Admin, s.apiRenameClone))
-	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/ws/{kind}", s.require(auth.Admin, s.consoleWS))
-	s.mux.HandleFunc("GET /api/vms/{ns}/{name}/migration", s.require(auth.Admin, s.apiMigrationPhase))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/send", s.require(auth.Admin, s.apiSend))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/migration-cleanup", s.require(auth.Admin, s.apiMigrationCleanup))
-	s.mux.HandleFunc("POST /api/vms/{ns}/{name}/abort", s.require(auth.Admin, s.apiAbort))
-	s.mux.HandleFunc("GET /{$}", s.require(auth.ReadOnly, s.vms))
-	s.mux.HandleFunc("GET /vms", s.require(auth.ReadOnly, s.vmTable))
-	s.mux.HandleFunc("GET /vms/{ns}/{name}", s.require(auth.ReadOnly, s.vms))
-	s.mux.HandleFunc("GET /vms/{ns}/{name}/drawer", s.require(auth.ReadOnly, s.vmDrawer))
-	s.mux.HandleFunc("GET /nav/vms", s.require(auth.ReadOnly, s.navVMs))
-	s.mux.HandleFunc("POST /vms/bulk/{action}", s.require(auth.Operator, s.bulk))
-	s.mux.HandleFunc("POST /vms/{ns}/{name}/delete", s.require(auth.Operator, s.deleteVM))
-	s.mux.HandleFunc("POST /vms/{ns}/{name}/disks", s.require(auth.Operator, s.addDisk))
-	s.mux.HandleFunc("POST /vms/{ns}/{name}/disks/move", s.require(auth.Operator, s.moveDiskForm))
-	s.mux.HandleFunc("POST /vms/{ns}/{name}/tags", s.require(auth.Operator, s.setTags))
-	s.mux.HandleFunc("GET /vms/{ns}/{name}/disks/new", s.require(auth.Operator, s.newDisk))
-	s.mux.HandleFunc("POST /vms/{ns}/{name}/disks/{disk}/delete", s.require(auth.Operator, s.removeDisk))
-	s.mux.HandleFunc("POST /vms/{ns}/{name}/snapshots", s.require(auth.Operator, s.snapshot))
-	s.mux.HandleFunc("POST /vms/{ns}/{name}/backups/{op}", s.require(auth.Operator, s.vmBackupForm))
-	s.mux.HandleFunc("POST /vms/{ns}/{name}/schedule/{op}", s.require(auth.Operator, s.scheduleForm))
-	s.mux.HandleFunc("POST /vms/{ns}/{name}/snapshots/{snap}/restore", s.require(auth.Operator, s.restoreSnapshot))
-	s.mux.HandleFunc("POST /vms/{ns}/{name}/snapshots/{snap}/delete", s.require(auth.Operator, s.deleteSnapshot))
-	s.mux.HandleFunc("POST /vms/{ns}/{name}/{action}", s.require(auth.Operator, s.action))
-	s.mux.HandleFunc("GET /vms/{ns}/{name}/console", s.require(auth.Operator, s.console))
-	s.mux.HandleFunc("GET /ws/{ns}/{name}/{kind}", s.require(auth.Operator, s.consoleWS))
 	return s, nil
 }
 
@@ -384,67 +187,6 @@ func sameOrigin(r *http.Request) bool {
 	return origin == "https://"+r.Host
 }
 
-type hostRouteDef struct {
-	pattern string
-	role    auth.Role
-	priv    auth.Privilege
-	h       func(*Server, http.ResponseWriter, *http.Request)
-}
-
-var hostRoutes = []hostRouteDef{
-	{"GET /dashboard", auth.ReadOnly, auth.HostView, (*Server).dashboard},
-	{"GET /dashboard/stats", auth.ReadOnly, auth.HostView, (*Server).dashboardStats},
-	{"GET /disks", auth.Admin, auth.HostConfig, (*Server).disksPage},
-	{"GET /disks/{name}", auth.Admin, auth.HostConfig, (*Server).diskModal},
-	{"POST /disks/{name}/{action}", auth.Admin, auth.HostConfig, (*Server).diskAction},
-	{"GET /devices", auth.Admin, auth.HostConfig, (*Server).devicesPage},
-	{"POST /devices", auth.Admin, auth.HostConfig, (*Server).deviceAction},
-	{"GET /network/host", auth.Admin, auth.HostConfig, (*Server).hostNetworkPage},
-	{"GET /network/host/iface/{name}", auth.Admin, auth.HostConfig, (*Server).ifaceModal},
-	{"POST /network/host/{op}", auth.Admin, auth.HostConfig, (*Server).hostNetworkAction},
-	{"GET /pools", auth.Admin, auth.HostConfig, (*Server).poolsPage},
-	{"GET /pools/new", auth.Admin, auth.HostConfig, (*Server).poolModal},
-	{"GET /pools/{name}/add", auth.Admin, auth.HostConfig, (*Server).poolModal},
-	{"POST /pools", auth.Admin, auth.HostConfig, (*Server).createPool},
-	{"POST /pools/{name}/{op}", auth.Admin, auth.HostConfig, (*Server).poolAction},
-	{"GET /vms/new", auth.Operator, auth.VMProvision, (*Server).newVM},
-	{"POST /vms", auth.Operator, auth.VMProvision, (*Server).createVM},
-	{"GET /vms/import", auth.Operator, auth.VMProvision, (*Server).importModal},
-	{"POST /vms/import/{source}", auth.Operator, auth.VMProvision, (*Server).importVM},
-	{"POST /vms/import/vcenter-vms", auth.Operator, auth.VMProvision, (*Server).vcenterVMsOptions},
-	{"GET /vms/{ns}/{name}/hardware", auth.Operator, auth.VMConfig, (*Server).hardwareModal},
-	{"POST /vms/{ns}/{name}/hardware/{op}", auth.Operator, auth.VMConfig, (*Server).hardwareAction},
-	{"POST /vms/{ns}/{name}/disks/{disk}/download", auth.Operator, auth.VMBackup, (*Server).downloadLink},
-	{"GET /vms/{ns}/{name}/disks/{disk}/download", auth.Operator, auth.VMBackup, (*Server).downloadDisk},
-	{"GET /vms/{ns}/{name}/export.ovf", auth.Operator, auth.VMBackup, (*Server).exportOVF},
-	{"GET /vms/{ns}/{name}/files", auth.Operator, auth.VMBackup, (*Server).filesPage},
-	{"POST /vms/{ns}/{name}/files", auth.Operator, auth.VMBackup, (*Server).filesStart},
-	{"GET /vms/{ns}/{name}/files/download", auth.Operator, auth.VMBackup, (*Server).filesDownload},
-	{"POST /vms/{ns}/{name}/files/close", auth.Operator, auth.VMBackup, (*Server).filesClose},
-	{"GET /volumes/{vol}/files", auth.Operator, auth.VMBackup, (*Server).filesPage},
-	{"POST /volumes/{vol}/files", auth.Operator, auth.VMBackup, (*Server).filesStart},
-	{"GET /volumes/{vol}/files/download", auth.Operator, auth.VMBackup, (*Server).filesDownload},
-	{"POST /volumes/{vol}/files/close", auth.Operator, auth.VMBackup, (*Server).filesClose},
-	{"POST /vms/{ns}/{name}/media", auth.Operator, auth.VMConfig, (*Server).mediaMount},
-	{"POST /vms/{ns}/{name}/media/eject", auth.Operator, auth.VMConfig, (*Server).mediaEject},
-}
-
-func (s *Server) hostRoute(hr hostRouteDef, h http.HandlerFunc) {
-	if s.manager == nil {
-		s.mux.HandleFunc(hr.pattern, s.require(hr.role, h))
-		return
-	}
-	method, path, _ := strings.Cut(hr.pattern, " ")
-	s.mux.HandleFunc(method+" /hosts/{node}"+path, s.need(hr.priv, func(w http.ResponseWriter, r *http.Request) {
-		n, err := s.orgNode(r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-		h(w, onHost(r, n))
-	}))
-}
-
 func onHost(r *http.Request, n manager.Node) *http.Request {
 	ctx := context.WithValue(r.Context(), baseKey{}, "/hosts/"+n.Name)
 	ctx = context.WithValue(ctx, opsKey{}, remoteOps{n})
@@ -503,8 +245,8 @@ func session(r *http.Request) reqAuth {
 }
 
 func (s *Server) requireOrg(h http.HandlerFunc) http.HandlerFunc {
-	return s.require(auth.Admin, func(w http.ResponseWriter, r *http.Request) {
-		if len(session(r).Scopes) > 0 {
+	return s.authenticate(func(w http.ResponseWriter, r *http.Request) {
+		if !session(r).Role.Can(auth.Admin) || len(session(r).Scopes) > 0 {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -525,7 +267,7 @@ func validSegments(r *http.Request) bool {
 	return true
 }
 
-func (s *Server) require(min auth.Role, h http.HandlerFunc) http.HandlerFunc {
+func (s *Server) authenticate(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !validSegments(r) {
 			http.Error(w, "invalid path", http.StatusBadRequest)
@@ -544,10 +286,6 @@ func (s *Server) require(min auth.Role, h http.HandlerFunc) http.HandlerFunc {
 			sess, who, err := s.tokenSession(r.Context(), t)
 			if err != nil {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
-			}
-			if !sess.Role.Can(min) {
-				http.Error(w, "forbidden", http.StatusForbidden)
 				return
 			}
 			r2 := r.WithContext(context.WithValue(r.Context(), ctxKey{}, reqAuth{Session: sess}))
@@ -570,10 +308,6 @@ func (s *Server) require(min auth.Role, h http.HandlerFunc) http.HandlerFunc {
 		}
 		if sess.MustChange && r.URL.Path != "/password" {
 			redirect(w, r, "/password")
-			return
-		}
-		if !sess.Role.Can(min) {
-			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
 		r2 := r.WithContext(context.WithValue(r.Context(), ctxKey{}, reqAuth{Session: sess, Token: c.Value}))

@@ -104,38 +104,33 @@ type v1Task struct {
 	Failed  bool      `json:"failed"`
 }
 
-func (s *Server) apiV1Routes() {
-	for pattern, r := range map[string]struct {
-		role auth.Privilege
-		h    http.HandlerFunc
-	}{
-		"GET /api/v1/openapi.json":                                              {auth.VMView, s.v1Spec},
-		"GET /api/v1/hosts":                                                     {auth.HostView, s.v1Hosts},
-		"GET /api/v1/vms":                                                       {auth.VMView, s.v1VMs},
-		"GET /api/v1/tasks":                                                     {auth.VMView, s.v1Tasks},
-		"POST /api/v1/hosts/{node}/vms":                                         {auth.VMProvision, s.v1CreateVM},
-		"GET /api/v1/hosts/{node}/vms/{name}":                                   {auth.VMView, s.v1VM},
-		"PATCH /api/v1/hosts/{node}/vms/{name}":                                 {auth.VMConfig, s.v1UpdateVM},
-		"GET /api/v1/hosts/{node}/images":                                       {auth.VMView, s.v1Images},
-		"GET /api/v1/networks":                                                  {auth.VMView, s.v1Networks},
-		"POST /api/v1/networks":                                                 {auth.NetworkConfig, s.v1SaveNetwork},
-		"GET /api/v1/networks/{name}":                                           {auth.VMView, s.v1Network},
-		"PUT /api/v1/networks/{name}":                                           {auth.NetworkConfig, s.v1SaveNetwork},
-		"DELETE /api/v1/networks/{name}":                                        {auth.NetworkConfig, s.v1DeleteNetwork},
-		"DELETE /api/v1/hosts/{node}/vms/{name}":                                {auth.VMDelete, s.v1VMCall("delete")},
-		"POST /api/v1/hosts/{node}/vms/{name}/power":                            {auth.VMPower, s.v1Power},
-		"POST /api/v1/hosts/{node}/vms/{name}/migrate":                          {auth.VMMigrate, s.v1Migrate},
-		"GET /api/v1/hosts/{node}/vms/{name}/snapshots":                         {auth.VMView, s.v1Snapshots},
-		"POST /api/v1/hosts/{node}/vms/{name}/snapshots":                        {auth.VMSnapshot, s.v1VMCall("snapshots")},
-		"POST /api/v1/hosts/{node}/vms/{name}/snapshots/{snap}/restore":         {auth.VMSnapshot, s.v1SnapshotOp("restore")},
-		"DELETE /api/v1/hosts/{node}/vms/{name}/snapshots/{snap}":               {auth.VMSnapshot, s.v1SnapshotOp("delete")},
-		"POST /api/v1/hosts/{node}/vms/{name}/backups":                          {auth.VMBackup, s.v1Backup},
-		"GET /api/v1/hosts/{node}/vms/{name}/backups":                           {auth.VMView, s.v1Backup},
-		"DELETE /api/v1/hosts/{node}/vms/{name}/backups/{id}":                   {auth.VMBackup, s.v1Backup},
-		"GET /api/v1/hosts/{node}/vms/{name}/backups/{id}/disks/{disk}/changes": {auth.VMBackup, s.v1Backup},
-		"GET /api/v1/hosts/{node}/vms/{name}/backups/{id}/disks/{disk}/data":    {auth.VMBackup, s.v1Backup},
-	} {
-		s.mux.HandleFunc(pattern, s.need(r.role, r.h))
+func (s *Server) apiV1Routes() []route {
+	return []route{
+		{"GET /api/v1/openapi.json", auth.VMView, s.v1Spec},
+		{"GET /api/v1/hosts", auth.HostView, s.v1Hosts},
+		{"GET /api/v1/vms", auth.VMView, s.v1VMs},
+		{"GET /api/v1/tasks", auth.VMView, s.v1Tasks},
+		{"POST /api/v1/hosts/{node}/vms", auth.VMProvision, s.v1CreateVM},
+		{"GET /api/v1/hosts/{node}/vms/{name}", auth.VMView, s.v1VM},
+		{"PATCH /api/v1/hosts/{node}/vms/{name}", auth.VMConfig, s.v1UpdateVM},
+		{"GET /api/v1/hosts/{node}/images", auth.VMView, s.v1Images},
+		{"GET /api/v1/networks", auth.VMView, s.v1Networks},
+		{"POST /api/v1/networks", auth.NetworkConfig, s.v1SaveNetwork},
+		{"GET /api/v1/networks/{name}", auth.VMView, s.v1Network},
+		{"PUT /api/v1/networks/{name}", auth.NetworkConfig, s.v1SaveNetwork},
+		{"DELETE /api/v1/networks/{name}", auth.NetworkConfig, s.v1DeleteNetwork},
+		{"DELETE /api/v1/hosts/{node}/vms/{name}", auth.VMDelete, s.v1VMCall("delete")},
+		{"POST /api/v1/hosts/{node}/vms/{name}/power", auth.VMPower, s.v1Power},
+		{"POST /api/v1/hosts/{node}/vms/{name}/migrate", auth.VMMigrate, s.v1Migrate},
+		{"GET /api/v1/hosts/{node}/vms/{name}/snapshots", auth.VMView, s.v1Snapshots},
+		{"POST /api/v1/hosts/{node}/vms/{name}/snapshots", auth.VMSnapshot, s.v1VMCall("snapshots")},
+		{"POST /api/v1/hosts/{node}/vms/{name}/snapshots/{snap}/restore", auth.VMSnapshot, s.v1SnapshotOp("restore")},
+		{"DELETE /api/v1/hosts/{node}/vms/{name}/snapshots/{snap}", auth.VMSnapshot, s.v1SnapshotOp("delete")},
+		{"POST /api/v1/hosts/{node}/vms/{name}/backups", auth.VMBackup, s.v1Backup},
+		{"GET /api/v1/hosts/{node}/vms/{name}/backups", auth.VMView, s.v1Backup},
+		{"DELETE /api/v1/hosts/{node}/vms/{name}/backups/{id}", auth.VMBackup, s.v1Backup},
+		{"GET /api/v1/hosts/{node}/vms/{name}/backups/{id}/disks/{disk}/changes", auth.VMBackup, s.v1Backup},
+		{"GET /api/v1/hosts/{node}/vms/{name}/backups/{id}/disks/{disk}/data", auth.VMBackup, s.v1Backup},
 	}
 }
 

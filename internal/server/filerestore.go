@@ -342,7 +342,7 @@ func (s *Server) filesClose(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) flrAPIRoutes() {
+func (s *Server) flrAPIRoutes() []route {
 	l := localOps{s}
 	start := func(w http.ResponseWriter, r *http.Request) {
 		var req struct{ Store, Stamp string }
@@ -375,11 +375,15 @@ func (s *Server) flrAPIRoutes() {
 	closeSession := func(w http.ResponseWriter, r *http.Request) {
 		s.apiOp(w, r, nil, func() (any, error) { return nil, l.FLRClose(r.Context(), ownerOf(r), r.PathValue("id")) })
 	}
+	var rs []route
 	for _, prefix := range []string{"/api/vms/{ns}/{name}/flr", "/api/volumes/{vol}/flr"} {
-		s.mux.HandleFunc("POST "+prefix, s.require(auth.Admin, start))
-		s.mux.HandleFunc("GET "+prefix+"/{id}", s.require(auth.Admin, status))
-		s.mux.HandleFunc("GET "+prefix+"/{id}/ls", s.require(auth.Admin, list))
-		s.mux.HandleFunc("GET "+prefix+"/{id}/file", s.require(auth.Admin, file))
-		s.mux.HandleFunc("POST "+prefix+"/{id}/close", s.require(auth.Admin, closeSession))
+		rs = append(rs,
+			route{"POST " + prefix, auth.Administer, start},
+			route{"GET " + prefix + "/{id}", auth.Administer, status},
+			route{"GET " + prefix + "/{id}/ls", auth.Administer, list},
+			route{"GET " + prefix + "/{id}/file", auth.Administer, file},
+			route{"POST " + prefix + "/{id}/close", auth.Administer, closeSession},
+		)
 	}
+	return rs
 }

@@ -18,9 +18,13 @@ type perms struct {
 }
 
 func (s *Server) need(p auth.Privilege, h http.HandlerFunc) http.HandlerFunc {
-	return s.require(auth.ReadOnly, func(w http.ResponseWriter, r *http.Request) {
+	return s.authenticate(func(w http.ResponseWriter, r *http.Request) {
 		sess := session(r)
-		grants, err := s.auth.ForOrg(sess.Org).Grants(r.Context(), sess.User)
+		grants := auth.RoleGrants(sess.Role)
+		var err error
+		if s.manager != nil {
+			grants, err = s.auth.ForOrg(sess.Org).Grants(r.Context(), sess.User)
+		}
 		if err != nil || !auth.AllowsAnywhere(grants, p) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
@@ -39,6 +43,11 @@ func (s *Server) can(r *http.Request, p auth.Privilege, n manager.Node, vm strin
 		return inScope(session(r).Scopes, n)
 	}
 	return auth.Allows(pm.grants, p, objectOf(n, vm))
+}
+
+func granted(r *http.Request, p auth.Privilege) bool {
+	pm, _ := r.Context().Value(permKey{}).(perms)
+	return auth.AllowsAnywhere(pm.grants, p)
 }
 
 func pathVM(r *http.Request) string {
@@ -101,7 +110,7 @@ func actionPrivilege(act string) auth.Privilege {
 		return auth.VMSnapshot
 	case "rename", "tags":
 		return auth.VMConfig
-	case "clone", "template", "untemplate":
+	case "clone", "template", "untemplate", "template-copy":
 		return auth.VMProvision
 	}
 	return auth.VMPower

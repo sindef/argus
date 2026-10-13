@@ -170,6 +170,10 @@ func privilegesOf(r Role, custom []CustomRole) []Privilege {
 	return nil
 }
 
+func RoleGrants(r Role) []Grant {
+	return []Grant{{Privileges: privilegesOf(r, nil)}}
+}
+
 func tier(r Role, custom []CustomRole) Role {
 	if r.Valid() {
 		return r
