@@ -288,6 +288,26 @@ func (c *Client) Get(ctx context.Context, key string) (*http.Response, error) {
 	return c.do(ctx, http.MethodGet, key, nil, nil, "")
 }
 
+var ErrLocked = errors.New("locked by S3 Object Lock")
+
+func (c *Client) RetainUntil(ctx context.Context, key string) (time.Time, error) {
+	resp, err := c.do(ctx, http.MethodGet, key, url.Values{"retention": {""}}, nil, "")
+	if err != nil {
+		for _, code := range []string{"NoSuchObjectLockConfiguration", "ObjectLockConfigurationNotFound", "InvalidRequest", "NotImplemented"} {
+			if strings.Contains(err.Error(), code) {
+				return time.Time{}, nil
+			}
+		}
+		return time.Time{}, err
+	}
+	defer resp.Body.Close()
+	var r struct{ RetainUntilDate time.Time }
+	if err := xml.NewDecoder(resp.Body).Decode(&r); err != nil {
+		return time.Time{}, nil
+	}
+	return r.RetainUntilDate, nil
+}
+
 func (c *Client) Delete(ctx context.Context, key string) error {
 	resp, err := c.do(ctx, http.MethodDelete, key, nil, nil, "")
 	if err == nil {

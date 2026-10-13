@@ -26,6 +26,7 @@ import (
 	"argus/internal/hostui"
 	"argus/internal/kube"
 	"argus/internal/lifecycle"
+	"argus/internal/s3"
 	"argus/internal/store"
 	"argus/internal/ui"
 	"argus/internal/vmdk"
@@ -281,7 +282,9 @@ func (s *Server) backupVM(ctx context.Context, ns, name string, p wire.BackupPol
 	}
 	for i, b := range bs {
 		if i >= max(p.BackupKeep, 1) {
-			lifecycle.LogCleanup("backup "+b.VM+"/"+b.Stamp, st.Delete(ctx, b.VM+"/"+b.Stamp))
+			if err := st.Delete(ctx, b.VM+"/"+b.Stamp); !errors.Is(err, s3.ErrLocked) {
+				lifecycle.LogCleanup("backup "+b.VM+"/"+b.Stamp, err)
+			}
 		}
 	}
 	return nil

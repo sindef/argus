@@ -62,3 +62,22 @@ func TestSpooledMultipart(t *testing.T) {
 		t.Errorf("got %d parts, reassembled correctly: %v", len(parts), bytes.Equal(bytes.Join(parts, nil), data))
 	}
 }
+
+func TestRetainUntil(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/b/locked" {
+			w.Write([]byte("<Retention><Mode>COMPLIANCE</Mode><RetainUntilDate>2999-01-01T00:00:00Z</RetainUntilDate></Retention>"))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("<Error><Code>NoSuchObjectLockConfiguration</Code><Message>none</Message></Error>"))
+	}))
+	defer srv.Close()
+	c := &Client{Endpoint: srv.URL, Bucket: "b", AccessKey: "a", SecretKey: "s"}
+	if until, err := c.RetainUntil(context.Background(), "locked"); err != nil || until.Year() != 2999 {
+		t.Errorf("locked object: %v %v", until, err)
+	}
+	if until, err := c.RetainUntil(context.Background(), "free"); err != nil || !until.IsZero() {
+		t.Errorf("unlocked object: %v %v", until, err)
+	}
+}

@@ -14,6 +14,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"argus/internal/hostd"
 	"argus/internal/s3"
@@ -256,6 +257,15 @@ func (s s3Store) Delete(ctx context.Context, rel string) error {
 	objs, err := s.c.List(ctx, s.prefix+rel+"/")
 	if err != nil {
 		return err
+	}
+	for _, o := range objs {
+		until, err := s.c.RetainUntil(ctx, o.Key)
+		if err != nil && s.c.LockDays > 0 {
+			return err
+		}
+		if until.After(time.Now()) {
+			return fmt.Errorf("%w until %s", s3.ErrLocked, until.Local().Format("2006-01-02 15:04"))
+		}
 	}
 	for _, o := range objs {
 		if err := s.c.Delete(ctx, o.Key); err != nil {
