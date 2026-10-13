@@ -648,6 +648,9 @@ func (s *Server) backupOp(ctx context.Context, ns, name, op string, f func(strin
 	case "restore":
 		return s.restoreBackup(ctx, f("store"), name, f("stamp"), strings.TrimSpace(f("target")))
 	case "delete":
+		if s.backups.status(ns+"/"+name) == "Running" {
+			return errors.New("a backup of this VM is running; delete it after the backup finishes")
+		}
 		st, err := s.store(ctx, f("store"))
 		if err != nil {
 			return err
