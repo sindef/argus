@@ -46,14 +46,22 @@ func (s *Server) nodeAlarms(ctx context.Context) []ui.Alarm {
 		}
 		out = append(out, s.smartAlarms(ctx)...)
 	}
-	s.backups.mu.Lock()
-	for vm, last := range s.backups.last {
-		if strings.HasPrefix(last, "Failed") {
-			add("backup:"+vm, "warning", "VM "+vm, "last "+strings.ToLower(last))
+	vms, err := s.kube.ListVMs(ctx)
+	if err == nil {
+		exists := map[string]bool{}
+		for _, v := range vms {
+			exists[v.Namespace+"/"+v.Name] = true
 		}
-	}
-	s.backups.mu.Unlock()
-	if vms, err := s.kube.ListVMs(ctx); err == nil {
+		s.backups.mu.Lock()
+		for vm, last := range s.backups.last {
+			switch {
+			case !exists[vm]:
+				delete(s.backups.last, vm)
+			case strings.HasPrefix(last, "Failed"):
+				add("backup:"+vm, "warning", "VM "+vm, "last "+strings.ToLower(last))
+			}
+		}
+		s.backups.mu.Unlock()
 		for _, v := range vms {
 			switch v.Status {
 			case "ErrorUnschedulable", "CrashLoopBackOff", "DataVolumeError", "ErrImagePull", "ErrorPvcNotFound":
