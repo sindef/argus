@@ -162,7 +162,7 @@ func (s *Server) v1VMs(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) v1Tasks(w http.ResponseWriter, r *http.Request) {
 	out := []v1Task{}
-	for _, j := range s.manager.Jobs(ui.Session(r).Org) {
+	for _, j := range s.visibleJobs(r) {
 		out = append(out, v1Task{ID: j.ID, Kind: j.Kind, VM: j.VM, From: j.From, To: j.To, Started: j.Started, Status: j.Status, Done: j.Done, Failed: j.Failed})
 	}
 	ui.WriteJSON(w, out)

@@ -26,7 +26,7 @@ type switchPort struct {
 
 func (s *Server) switchHosts(r *http.Request, name string) []string {
 	var hosts []string
-	for _, h := range s.fleetHostNets(ui.Session(r).Org) {
+	for _, h := range s.fleetHostNets(r) {
 		if slices.ContainsFunc(h.Bridges, func(b hostd.Iface) bool { return b.Name == name }) {
 			hosts = append(hosts, h.Node.Name)
 		}

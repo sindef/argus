@@ -35,9 +35,12 @@ type freePort struct {
 	Hosts []string
 }
 
-func (s *Server) fleetHostNets(org string) []hostNetRow {
+func (s *Server) fleetHostNets(r *http.Request) []hostNetRow {
 	var rows []hostNetRow
-	for _, st := range s.manager.Inventory(org) {
+	for _, st := range s.inventory(r) {
+		if !s.can(r, auth.HostView, st.Node, "") {
+			continue
+		}
 		row := hostNetRow{Node: st.Node, Info: st.HostNet, Error: st.Error}
 		for _, i := range row.Info.Net.Ifaces {
 			if i.Kind == "bridge" {
@@ -57,7 +60,7 @@ func (s *Server) fleetHostNets(org string) []hostNetRow {
 }
 
 func (s *Server) managerHostNets(w http.ResponseWriter, r *http.Request) {
-	rows := s.fleetHostNets(ui.Session(r).Org)
+	rows := s.fleetHostNets(r)
 	pre := map[string]bool{}
 	if dc := r.FormValue("dc"); dc != "" {
 		for _, row := range rows {

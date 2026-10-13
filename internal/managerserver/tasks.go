@@ -34,18 +34,24 @@ func (s *Server) jobTask(j manager.Job) wire.Task {
 	return wire.Task{ID: j.ID, Kind: kind, VM: j.VM, Host: host + j.To, User: j.User, Status: j.Status, Started: j.Started, Ended: j.Ended, Done: j.Done, Failed: j.Failed, Hold: j.Attention}
 }
 
-func (s *Server) Tasks(r *http.Request) []wire.Task {
-	grants, err := s.Grants(r.Context(), ui.Session(r).Session)
-	if err != nil {
-		return nil
-	}
-	seeVM := func(host, vm string) bool {
+func (s *Server) seeVM(r *http.Request) func(host, vm string) bool {
+	grants := s.UserGrants(r)
+	return func(host, vm string) bool {
 		st, ok := s.manager.NodeState(host)
 		return ok && auth.Allows(grants, auth.VMView, objectOf(st.Node, vm))
 	}
+}
+
+func (s *Server) visibleJobs(r *http.Request) []manager.Job {
+	seeVM := s.seeVM(r)
+	return slices.DeleteFunc(s.jobs(r), func(j manager.Job) bool { return j.VM != "" && !seeVM(cmp.Or(j.From, j.To), j.VM) })
+}
+
+func (s *Server) Tasks(r *http.Request) []wire.Task {
+	seeVM := s.seeVM(r)
 	var out []wire.Task
-	for _, j := range s.jobs(r) {
-		if !j.Dismissed && (j.VM == "" || seeVM(cmp.Or(j.From, j.To), j.VM)) {
+	for _, j := range s.visibleJobs(r) {
+		if !j.Dismissed {
 			out = append(out, s.jobTask(j))
 		}
 	}

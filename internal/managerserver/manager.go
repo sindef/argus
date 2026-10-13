@@ -192,7 +192,7 @@ func (s *Server) managerData(r *http.Request) map[string]any {
 		"Subfolders":   subfolders,
 		"Protected":    protected,
 		"HAList":       haList,
-		"Jobs":         s.jobs(r),
+		"Jobs":         s.visibleJobs(r),
 		"VMs":          vms,
 		"VMCount":      vmCount,
 		"HostCount":    hostCount,
@@ -891,7 +891,7 @@ func (s *Server) managerEvents(w http.ResponseWriter, r *http.Request) {
 		errs = err.Error()
 	}
 	_, grants, _ := ui.Perms(r)
-	s.Render(w, r, "events.html", "layout", map[string]any{"Events": evs, "Error": errs, "Nav": "events", "Jobs": s.jobs(r),
+	s.Render(w, r, "events.html", "layout", map[string]any{"Events": evs, "Error": errs, "Nav": "events", "Jobs": s.visibleJobs(r),
 		"AlarmRules": rules, "AlarmMetrics": manager.AlarmMetrics, "EditAlarms": auth.AllowsAnywhere(grants, auth.Administer)})
 }
 
