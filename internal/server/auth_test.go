@@ -75,7 +75,7 @@ func newHarness(t *testing.T, managed bool) *harness {
 	for _, scope := range []string{"", auth.ReadScope, auth.MetricsScope} {
 		tk := auth.Token{Name: "t-" + scope, Scope: scope}
 		if managed {
-			tk.Org, tk.User = manager.DefaultOrg, "admin"
+			tk.Org, tk.User = manager.DefaultOrg, "operator"
 		}
 		tok, err := store.AddToken(ctx, tk)
 		if err != nil {
@@ -173,6 +173,8 @@ func TestManagerRouteAuth(t *testing.T) {
 		{"POST", "/alarm-rules/save", "operator", "", forbidden},
 		{"POST", "/alarm-rules/save", "admin", "", reached},
 		{"GET", "/api/v1/vms", "token:", "", reached},
+		{"DELETE", "/api/v1/hosts/node-01/vms/web", "token:", "", reached},
+		{"POST", "/api/v1/networks", "token:", "", forbidden},
 		{"PATCH", "/api/v1/hosts/node-01/vms/web", "token:read", "", forbidden},
 		{"GET", "/api/v1/hosts", "token:metrics", "", forbidden},
 	})

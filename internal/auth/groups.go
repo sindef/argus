@@ -104,6 +104,9 @@ func (s *Store) SaveGroup(ctx context.Context, old string, g Group) error {
 	if !s.ValidRole(ctx, g.Role) {
 		return errors.New("invalid role")
 	}
+	if err := ValidScopes(g.Scopes); err != nil {
+		return err
+	}
 	us, err := s.Users(ctx)
 	if err != nil {
 		return err

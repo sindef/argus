@@ -39,7 +39,7 @@ var PrivilegeLabels = []struct {
 
 var builtinPrivileges = map[Role][]Privilege{
 	ReadOnly: {VMView, HostView},
-	Operator: {VMView, HostView, VMPower, VMConsole, VMConfig, VMProvision, VMSnapshot, VMBackup, ImageConfig},
+	Operator: {VMView, HostView, VMPower, VMConsole, VMConfig, VMProvision, VMDelete, VMSnapshot, VMBackup, ImageConfig},
 }
 
 func allPrivileges() []Privilege {
@@ -212,6 +212,26 @@ func (s *Store) Grants(ctx context.Context, user string) ([]Grant, error) {
 		}
 	}
 	return out, nil
+}
+
+func ValidScopes(scopes []string) error {
+	for _, sc := range scopes {
+		var ok bool
+		switch {
+		case strings.HasPrefix(sc, "vm:"):
+			host, vm, cut := strings.Cut(strings.TrimPrefix(sc, "vm:"), "/")
+			ok = cut && host != "" && vm != "" && !strings.Contains(vm, "/")
+		case strings.HasPrefix(sc, "host:"):
+			ok = strings.TrimPrefix(sc, "host:") != ""
+		default:
+			dc, cl, cut := strings.Cut(sc, "/")
+			ok = dc != "" && !strings.Contains(dc, ":") && (!cut || cl != "" && !strings.Contains(cl, "/"))
+		}
+		if !ok {
+			return fmt.Errorf("invalid scope %q: use datacenter, datacenter/cluster, host:NAME or vm:HOST/VM", sc)
+		}
+	}
+	return nil
 }
 
 func ScopeCovers(scope string, o Object) bool {

@@ -42,7 +42,7 @@
       <label>Username <input name="name" pattern="[a-z][a-z0-9._-]{0,31}" required></label>
       <label>Role <select name="role">{{range .Roles}}<option value="{{.}}"{{if eq . "read-only"}} selected{{end}}>{{.}}</option>{{end}}</select></label>
     </div>
-    {{if .Manager}}<label>Scope <span class="help" title="Comma separated datacenters or datacenter/cluster. Empty means the whole organization.">?</span><input name="scopes" list="scope-names" placeholder="All"></label>{{end}}
+    {{if .Manager}}<label>Scope <span class="help" title="Comma separated: datacenter, datacenter/cluster, host:NAME or vm:HOST/VM. Empty means the whole organization.">?</span><input name="scopes" list="scope-names" placeholder="All"></label>{{end}}
     <div class="actions"><button class="btn" type="button" data-close-dialog>Cancel</button><button class="btn primary" type="submit">Add user</button></div>
   </form>
 </dialog>
@@ -55,7 +55,7 @@
       <label>Role <span class="help" title="Group membership can raise this; the highest role applies.">?</span><select name="role">{{range .Roles}}<option value="{{.}}">{{.}}</option>{{end}}</select></label>
     </div>
     {{if .Manager}}
-    <label>Scope <span class="help" title="Comma separated datacenters or datacenter/cluster. Empty means the whole organization.">?</span><input name="scopes" list="scope-names" placeholder="All"></label>
+    <label>Scope <span class="help" title="Comma separated: datacenter, datacenter/cluster, host:NAME or vm:HOST/VM. Empty means the whole organization.">?</span><input name="scopes" list="scope-names" placeholder="All"></label>
     <div class="field">Groups</div>
     {{with .Groups}}<div class="table-wrap picks"><table><tbody>{{range .}}<tr><td><label class="check"><input type="checkbox" name="groups" value="{{.Name}}"> {{.Name}}</label></td><td class="muted">{{.Role}}</td></tr>{{end}}</tbody></table></div>{{else}}<p class="muted">No groups yet.</p>{{end}}
     {{end}}

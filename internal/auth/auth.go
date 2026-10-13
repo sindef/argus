@@ -382,6 +382,9 @@ func (s *Store) SetRole(ctx context.Context, name string, role Role) error {
 }
 
 func (s *Store) SetScopes(ctx context.Context, name string, scopes []string) error {
+	if err := ValidScopes(scopes); err != nil {
+		return err
+	}
 	err := s.update(ctx, name, func(u *User) error {
 		if u.SSO {
 			return ErrSSO
