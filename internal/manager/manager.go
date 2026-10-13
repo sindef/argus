@@ -319,7 +319,7 @@ func (n Node) do(ctx context.Context, method, path string, in, out any) error {
 		if json.NewDecoder(resp.Body).Decode(&e) != nil || e.Error == "" {
 			e.Error = resp.Status
 		}
-		return fmt.Errorf("%s: %s", n.Name, e.Error)
+		return fmt.Errorf("%s: %s%w", n.Name, e.Error, errRejected)
 	}
 	if out != nil {
 		return json.NewDecoder(resp.Body).Decode(out)
@@ -545,18 +545,20 @@ func (c *Manager) carry(ctx context.Context, src, dst Node, ns, vm string) (map[
 
 func (c *Manager) importAndWait(ctx context.Context, j *Job, dst Node, name, pool string, template bool, ex kube.Export, meta map[string]string) error {
 	c.progress(j, "Importing")
-	if err := dst.do(ctx, http.MethodPost, "/api/import", wire.ImportRequest{Name: name, Operation: j.ID, Export: ex, Pool: pool, Template: template, Metadata: meta}, nil); err != nil {
-		return err
-	}
 	rollback := func(cause error) error {
 		cctx, cancel := lifecycle.CleanupContext()
 		defer cancel()
 		err := dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, name, "abort"), wire.OperationRequest{Operation: j.ID}, nil)
 		lifecycle.LogCleanup("import of "+name, dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, name, "imported"), nil, nil))
 		if err != nil {
-			return fmt.Errorf("%w; target cleanup failed: %w", cause, err)
+			return fmt.Errorf("%w: %w; target cleanup failed: %w", errUnknown, cause, err)
 		}
 		return cause
+	}
+	if err := dst.do(ctx, http.MethodPost, "/api/import", wire.ImportRequest{Name: name, Operation: j.ID, Export: ex, Pool: pool, Template: template, Metadata: meta}, nil); errors.Is(err, errRejected) {
+		return err
+	} else if err != nil {
+		return rollback(err)
 	}
 	if err := c.waitDisks(ctx, j, dst, name); err != nil {
 		return rollback(err)
@@ -621,12 +623,20 @@ func (c *Manager) migrate(ctx context.Context, j *Job, src, dst Node, ns, vm str
 	}
 
 	if err := c.importAndWait(ctx, j, dst, vm, "", false, ex, meta); err != nil {
-		unexport()
+		if !errors.Is(err, errUnknown) {
+			unexport()
+		}
 		return err
 	}
 	unexport()
 	return src.do(ctx, http.MethodPost, vmPathIn(ns, vm, "delete"), nil, nil)
 }
+
+type rejected struct{}
+
+func (rejected) Error() string { return "" }
+
+var errRejected = rejected{}
 
 func (n Node) Call(ctx context.Context, method, path string, in, out any) error {
 	return n.do(ctx, method, path, in, out)
