@@ -6,13 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"mime"
 	"mime/multipart"
 	"net/http"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
+	"argus/internal/hostui"
 	"argus/internal/lifecycle"
 	"argus/internal/manager"
 	"argus/internal/registry"
@@ -74,41 +74,13 @@ func (o remoteOps) EjectMedia(ctx context.Context, ns, name string) error {
 	return o.post(ctx, manager.APIPath("/api/vms/%s/%s/media/eject", ns, name), nil)
 }
 
-func mediaSize(r *http.Request) int64 {
-	var n int64
-	if _, err := fmt.Sscan(r.Header.Get("X-Media-Size"), &n); err == nil && n > 0 {
-		return n
-	}
-	return r.ContentLength
-}
-
-func (s *Server) mediaMount(w http.ResponseWriter, r *http.Request) {
-	ns, name := r.PathValue("ns"), r.PathValue("name")
-	if err := s.ops(r).MountMedia(r.Context(), ns, name, r.Header.Get("Content-Type"), mediaSize(r), r.Body); err != nil {
-		ui.Flash(w, r, err)
-		return
-	}
-	log.Printf("%s: mounted local media on %s/%s", ui.Session(r).User, ns, name)
-	w.Write([]byte("Media inserted"))
-}
-
-func (s *Server) mediaEject(w http.ResponseWriter, r *http.Request) {
-	ns, name := r.PathValue("ns"), r.PathValue("name")
-	if err := s.ops(r).EjectMedia(r.Context(), ns, name); err != nil {
-		ui.Flash(w, r, err)
-		return
-	}
-	log.Printf("%s: ejected media from %s/%s", ui.Session(r).User, ns, name)
-	w.Write([]byte("Media ejected"))
-}
-
 func (s *Server) apiMedia(w http.ResponseWriter, r *http.Request) {
 	l := localOps{s}
 	var err error
 	if r.PathValue("op") == "eject" {
 		err = l.EjectMedia(r.Context(), r.PathValue("ns"), r.PathValue("name"))
 	} else {
-		err = l.MountMedia(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.Header.Get("Content-Type"), mediaSize(r), r.Body)
+		err = l.MountMedia(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.Header.Get("Content-Type"), hostui.MediaSize(r), r.Body)
 	}
 	if err != nil {
 		ui.APIError(w, r, http.StatusConflict, err)

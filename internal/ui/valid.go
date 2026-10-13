@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 var ValidObject = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
@@ -25,3 +26,5 @@ func NewToken() string {
 	rand.Read(b)
 	return hex.EncodeToString(b)
 }
+
+func Fields(v string) []string { return strings.Fields(strings.ReplaceAll(v, ",", " ")) }

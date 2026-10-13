@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -16,133 +15,27 @@ import (
 
 	"argus/internal/auth"
 	"argus/internal/hostd"
+	"argus/internal/hostui"
 	"argus/internal/kube"
 	"argus/internal/manager"
 	"argus/internal/ui"
 	"argus/internal/vsphere"
 	"argus/internal/wire"
-
-	"github.com/gorilla/websocket"
 )
-
-type dashStats struct {
-	Host    hostd.Stats `json:"host"`
-	VMs     int         `json:"vms"`
-	Running int         `json:"running"`
-	VCPUs   int         `json:"vcpus"`
-	VMMem   int64       `json:"vmMem"`
-}
-
-type poolsView struct {
-	Pools      []poolRow          `json:"pools"`
-	Importable []hostd.Importable `json:"importable"`
-}
-
-type poolOpReq struct {
-	Spec    hostd.PoolSpec `json:"spec"`
-	Confirm string         `json:"confirm"`
-}
-
-type netOpReq struct {
-	Bridge     hostd.BridgeSpec  `json:"bridge"`
-	Delete     string            `json:"delete"`
-	Address    hostd.AddressSpec `json:"address"`
-	Iface      string            `json:"iface"`
-	Migration  bool              `json:"migration"`
-	Management bool              `json:"management"`
-	Teaming    hostd.Teaming     `json:"teaming"`
-}
-
-type vmForm struct {
-	Images    []kube.Image    `json:"images"`
-	Templates []kube.Template `json:"templates"`
-	Networks  []kube.Network  `json:"networks"`
-	Pools     []kube.Pool     `json:"pools"`
-	Arch      string          `json:"arch"`
-}
-
-type createVMReq struct {
-	Spec kube.VMSpec `json:"spec"`
-	Pool string      `json:"pool"`
-}
-
-type hwOpReq struct {
-	Hardware kube.Hardware `json:"hardware"`
-	Network  string        `json:"network"`
-	NIC      string        `json:"nic"`
-	Disk     string        `json:"disk"`
-	SizeGiB  int64         `json:"sizeGiB"`
-	Device   string        `json:"device"`
-	Thick    bool          `json:"thick"`
-}
-
-type hostOps interface {
-	DashStats(ctx context.Context) (dashStats, error)
-	Disks(ctx context.Context) ([]hostd.Disk, error)
-	Disk(ctx context.Context, name string) (hostd.DiskDetail, error)
-	DiskAction(ctx context.Context, name, action, confirm, test string) error
-	Pools(ctx context.Context) (poolsView, error)
-	PoolOp(ctx context.Context, name, op string, req poolOpReq) error
-	Network(ctx context.Context) (HostNetInfo, error)
-	NetworkOp(ctx context.Context, op string, req netOpReq) error
-	VMForm(ctx context.Context) (vmForm, error)
-	CreateVM(ctx context.Context, req createVMReq) error
-	Hardware(ctx context.Context, ns, name string) (kube.Hardware, error)
-	HardwareOp(ctx context.Context, ns, name, op string, req hwOpReq) error
-	Import(ctx context.Context, source, contentType string, body io.Reader) (string, error)
-	VCenterVMs(ctx context.Context, fields map[string]string) ([]vsphere.VM, error)
-	DownloadDisk(ctx context.Context, ns, name, disk, format string) (download, error)
-	OVF(ctx context.Context, ns, name string) (string, error)
-	Devices(ctx context.Context) (hostd.Devices, error)
-	FLRStart(ctx context.Context, ns, name, store, stamp string) (string, error)
-	FLRVolume(ctx context.Context, name string) (string, error)
-	FLR(ctx context.Context, owner, id string) (flrSession, error)
-	FLRList(ctx context.Context, owner, id, part, dir string) ([]hostd.FLREntry, error)
-	FLRFile(ctx context.Context, owner, id, part, file string) (download, error)
-	FLRClose(ctx context.Context, owner, id string) error
-	MountMedia(ctx context.Context, ns, name, contentType string, size int64, body io.Reader) error
-	EjectMedia(ctx context.Context, ns, name string) error
-	DeviceOp(ctx context.Context, req deviceReq) error
-	Power(ctx context.Context, ns, name, act string) error
-	DeleteVM(ctx context.Context, ns, name string) error
-	SnapshotOp(ctx context.Context, ns, name, snap, op string) error
-	Meta(ctx context.Context, ns, name, op string, req wire.MetaRequest) error
-	RemoveDisk(ctx context.Context, ns, name, disk string) error
-	MoveDisk(ctx context.Context, ns, name string, req wire.MoveDiskRequest) error
-	SetTags(ctx context.Context, ns, name string, req wire.TagsRequest) error
-	BackupOp(ctx context.Context, ns, name, op string, form map[string]string) error
-	ScheduleOp(ctx context.Context, ns, name, op string, form map[string]string) error
-	DialConsole(ctx context.Context, ns, name, kind string) (*websocket.Conn, error)
-}
-
-type deviceReq struct {
-	Kind string `json:"kind"`
-	ID   string `json:"id"`
-	On   bool   `json:"on"`
-}
-
-type opsKey struct{}
-
-func (s *Server) ops(r *http.Request) hostOps {
-	if o, ok := r.Context().Value(opsKey{}).(hostOps); ok {
-		return o
-	}
-	return localOps{s}
-}
 
 type localOps struct{ s *Server }
 
 var errNoHostd = errors.New("host helper not available")
 
-func (l localOps) DashStats(ctx context.Context) (dashStats, error) {
+func (l localOps) DashStats(ctx context.Context) (hostui.DashStats, error) {
 	if l.s.hostd == nil {
-		return dashStats{}, errNoHostd
+		return hostui.DashStats{}, errNoHostd
 	}
 	st, err := l.s.hostd.Stats(ctx)
 	if err != nil {
-		return dashStats{}, err
+		return hostui.DashStats{}, err
 	}
-	out := dashStats{Host: st}
+	out := hostui.DashStats{Host: st}
 	vms, _ := l.s.kube.ListVMs(ctx)
 	out.VMs = len(vms)
 	for _, v := range vms {
@@ -176,16 +69,16 @@ func (l localOps) DiskAction(ctx context.Context, name, action, confirm, test st
 	return l.s.hostd.DiskAction(ctx, name, action, confirm, test)
 }
 
-func (l localOps) Pools(ctx context.Context) (poolsView, error) {
+func (l localOps) Pools(ctx context.Context) (hostui.PoolsView, error) {
 	if l.s.hostd == nil {
-		return poolsView{}, errNoHostd
+		return hostui.PoolsView{}, errNoHostd
 	}
 	hp, err := l.s.hostd.Pools(ctx)
 	kp, _ := l.s.kube.Pools(ctx)
 	classes, _ := l.s.kube.PoolClasses(ctx)
-	out := poolsView{Importable: hp.Importable}
+	out := hostui.PoolsView{Importable: hp.Importable}
 	for _, p := range hp.Pools {
-		row := poolRow{Pool: p, Class: classes[p.Name]}
+		row := hostui.PoolRow{Pool: p, Class: classes[p.Name]}
 		if row.Class == "" && !p.System {
 			if cerr := l.s.kube.EnsurePoolClass(ctx, p.Name); cerr == nil {
 				row.Class = p.Name
@@ -201,7 +94,7 @@ func (l localOps) Pools(ctx context.Context) (poolsView, error) {
 	return out, err
 }
 
-func (l localOps) PoolOp(ctx context.Context, name, op string, req poolOpReq) error {
+func (l localOps) PoolOp(ctx context.Context, name, op string, req hostui.PoolOpReq) error {
 	s := l.s
 	if s.hostd == nil {
 		return errNoHostd
@@ -228,15 +121,15 @@ func (l localOps) PoolOp(ctx context.Context, name, op string, req poolOpReq) er
 	return errors.New("unknown pool operation")
 }
 
-func (l localOps) Network(ctx context.Context) (HostNetInfo, error) {
+func (l localOps) Network(ctx context.Context) (hostui.HostNetInfo, error) {
 	if l.s.hostd == nil {
-		return HostNetInfo{}, errNoHostd
+		return hostui.HostNetInfo{}, errNoHostd
 	}
 	hn, err := l.s.hostd.Network(ctx)
-	return HostNetInfo{Net: hn, Migration: l.s.kube.MigrationBridge(ctx)}, err
+	return hostui.HostNetInfo{Net: hn, Migration: l.s.kube.MigrationBridge(ctx)}, err
 }
 
-func (l localOps) NetworkOp(ctx context.Context, op string, req netOpReq) error {
+func (l localOps) NetworkOp(ctx context.Context, op string, req hostui.NetOpReq) error {
 	s := l.s
 	if s.hostd == nil {
 		return errNoHostd
@@ -270,7 +163,7 @@ func (l localOps) NetworkOp(ctx context.Context, op string, req netOpReq) error 
 	return errors.New("unknown network operation")
 }
 
-func (l localOps) setRoles(ctx context.Context, req netOpReq) error {
+func (l localOps) setRoles(ctx context.Context, req hostui.NetOpReq) error {
 	hn, err := l.s.hostd.Network(ctx)
 	if err != nil {
 		return err
@@ -288,20 +181,20 @@ func (l localOps) setRoles(ctx context.Context, req netOpReq) error {
 			return err
 		}
 	}
-	if req.Management != management(hn, iface) {
+	if req.Management != hostui.Management(hn, iface) {
 		return l.s.hostd.SetManagement(ctx, iface.Name, req.Management)
 	}
 	return nil
 }
 
-func (l localOps) VMForm(ctx context.Context) (vmForm, error) {
+func (l localOps) VMForm(ctx context.Context) (hostui.VMForm, error) {
 	imgs, err := l.s.kube.ListImages(ctx)
 	nets, nerr := l.s.kube.ListNetworks(ctx)
 	tpls, _ := l.s.kube.Templates(ctx)
-	return vmForm{Images: imgs, Templates: tpls, Networks: nets, Pools: l.s.poolChoices(ctx), Arch: runtime.GOARCH}, errors.Join(err, nerr)
+	return hostui.VMForm{Images: imgs, Templates: tpls, Networks: nets, Pools: l.s.poolChoices(ctx), Arch: runtime.GOARCH}, errors.Join(err, nerr)
 }
 
-func (l localOps) CreateVM(ctx context.Context, req createVMReq) error {
+func (l localOps) CreateVM(ctx context.Context, req hostui.CreateVMReq) error {
 	spec := req.Spec
 	var err error
 	if spec.StorageClass, err = l.s.poolClass(ctx, req.Pool); err != nil {
@@ -364,7 +257,7 @@ func (l localOps) Devices(ctx context.Context) (hostd.Devices, error) {
 	return l.s.hostd.Devices(ctx)
 }
 
-func (l localOps) DeviceOp(ctx context.Context, req deviceReq) error {
+func (l localOps) DeviceOp(ctx context.Context, req hostui.DeviceReq) error {
 	if l.s.hostd == nil {
 		return errNoHostd
 	}
@@ -389,7 +282,7 @@ func (l localOps) DeviceOp(ctx context.Context, req deviceReq) error {
 	return l.s.kube.SetPermittedDevices(ctx, pci, usb)
 }
 
-func (l localOps) HardwareOp(ctx context.Context, ns, name, op string, req hwOpReq) error {
+func (l localOps) HardwareOp(ctx context.Context, ns, name, op string, req hostui.HWOpReq) error {
 	k := l.s.kube
 	switch op {
 	case "save":
@@ -454,7 +347,7 @@ func (l localOps) VCenterVMs(ctx context.Context, fields map[string]string) ([]v
 	return l.s.vcenterVMs(ctx, func(k string) string { return fields[k] })
 }
 
-func (l localOps) DownloadDisk(ctx context.Context, ns, name, disk, format string) (download, error) {
+func (l localOps) DownloadDisk(ctx context.Context, ns, name, disk, format string) (hostui.Download, error) {
 	return l.s.openDisk(ctx, ns, name, disk, format)
 }
 
@@ -468,8 +361,8 @@ func (o remoteOps) post(ctx context.Context, path string, in any) error {
 	return o.n.Call(ctx, http.MethodPost, path, in, nil)
 }
 
-func (o remoteOps) DashStats(ctx context.Context) (dashStats, error) {
-	var out dashStats
+func (o remoteOps) DashStats(ctx context.Context) (hostui.DashStats, error) {
+	var out hostui.DashStats
 	return out, o.get(ctx, "/api/host/dashboard", &out)
 }
 
@@ -478,7 +371,7 @@ func (o remoteOps) Devices(ctx context.Context) (hostd.Devices, error) {
 	return out, o.get(ctx, "/api/host/devices", &out)
 }
 
-func (o remoteOps) DeviceOp(ctx context.Context, req deviceReq) error {
+func (o remoteOps) DeviceOp(ctx context.Context, req hostui.DeviceReq) error {
 	return o.post(ctx, "/api/host/devices", req)
 }
 
@@ -496,36 +389,36 @@ func (o remoteOps) DiskAction(ctx context.Context, name, action, confirm, test s
 	return o.post(ctx, manager.APIPath("/api/host/disks/%s/%s", name, action), map[string]string{"confirm": confirm, "test": test})
 }
 
-func (o remoteOps) Pools(ctx context.Context) (poolsView, error) {
-	var out poolsView
+func (o remoteOps) Pools(ctx context.Context) (hostui.PoolsView, error) {
+	var out hostui.PoolsView
 	return out, o.get(ctx, "/api/host/pools", &out)
 }
 
-func (o remoteOps) PoolOp(ctx context.Context, name, op string, req poolOpReq) error {
+func (o remoteOps) PoolOp(ctx context.Context, name, op string, req hostui.PoolOpReq) error {
 	if name == "" {
 		name = req.Spec.Name
 	}
 	return o.post(ctx, manager.APIPath("/api/host/pools/%s/%s", name, op), req)
 }
 
-func (o remoteOps) Network(ctx context.Context) (HostNetInfo, error) {
-	var out HostNetInfo
+func (o remoteOps) Network(ctx context.Context) (hostui.HostNetInfo, error) {
+	var out hostui.HostNetInfo
 	return out, o.get(ctx, "/api/host/network", &out)
 }
 
-func (o remoteOps) NetworkOp(ctx context.Context, op string, req netOpReq) error {
+func (o remoteOps) NetworkOp(ctx context.Context, op string, req hostui.NetOpReq) error {
 	if op == "bridge" {
 		return o.post(ctx, "/api/host/network/bridge", req.Bridge)
 	}
 	return o.post(ctx, manager.APIPath("/api/host/network/%s", op), req)
 }
 
-func (o remoteOps) VMForm(ctx context.Context) (vmForm, error) {
-	var out vmForm
+func (o remoteOps) VMForm(ctx context.Context) (hostui.VMForm, error) {
+	var out hostui.VMForm
 	return out, o.get(ctx, "/api/host/vm-form", &out)
 }
 
-func (o remoteOps) CreateVM(ctx context.Context, req createVMReq) error {
+func (o remoteOps) CreateVM(ctx context.Context, req hostui.CreateVMReq) error {
 	return o.post(ctx, "/api/vms", req)
 }
 
@@ -534,7 +427,7 @@ func (o remoteOps) Hardware(ctx context.Context, ns, name string) (kube.Hardware
 	return out, o.get(ctx, manager.APIPath("/api/vms/%s/%s/hardware", ns, name), &out)
 }
 
-func (o remoteOps) HardwareOp(ctx context.Context, ns, name, op string, req hwOpReq) error {
+func (o remoteOps) HardwareOp(ctx context.Context, ns, name, op string, req hostui.HWOpReq) error {
 	return o.post(ctx, manager.APIPath("/api/vms/%s/%s/hardware/%s", ns, name, op), req)
 }
 
@@ -553,68 +446,12 @@ func (o remoteOps) VCenterVMs(ctx context.Context, fields map[string]string) ([]
 	return out, o.n.Call(ctx, http.MethodPost, "/api/vms/import/vcenter-vms", fields, &out)
 }
 
-func (o remoteOps) DownloadDisk(ctx context.Context, ns, name, disk, format string) (download, error) {
+func (o remoteOps) DownloadDisk(ctx context.Context, ns, name, disk, format string) (hostui.Download, error) {
 	path := manager.APIPath("/api/vms/%s/%s/disks/%s/download", ns, name, disk)
 	if format == "vmdk" {
 		path += "?format=vmdk"
 	}
-	return remoteDownload(o.n.Open(ctx, http.MethodGet, path, nil, nil))
-}
-
-type download struct {
-	io.ReadCloser
-	Type, Length, Name string
-}
-
-type readCloser struct {
-	io.Reader
-	close func() error
-}
-
-func (c readCloser) Close() error { return c.close() }
-
-type statusError struct {
-	code int
-	err  error
-}
-
-func (e statusError) Error() string { return e.err.Error() }
-
-func (e statusError) Unwrap() error { return e.err }
-
-func remoteDownload(resp *http.Response, err error) (download, error) {
-	if err != nil {
-		return download{}, err
-	}
-	_, params, _ := mime.ParseMediaType(resp.Header.Get("Content-Disposition"))
-	return download{resp.Body, resp.Header.Get("Content-Type"), resp.Header.Get("Content-Length"), params["filename"]}, nil
-}
-
-func serveDownload(w http.ResponseWriter, r *http.Request, d download, err error) {
-	if err != nil {
-		code := http.StatusBadGateway
-		var se statusError
-		if errors.As(err, &se) {
-			code = se.code
-		}
-		log.Printf("%s: %s: %v", ui.Session(r).User, r.URL.Path, err)
-		http.Error(w, err.Error(), code)
-		return
-	}
-	defer d.Close()
-	w.Header().Set("Content-Type", d.Type)
-	if d.Length != "" {
-		w.Header().Set("Content-Length", d.Length)
-	}
-	if d.Name != "" {
-		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": d.Name}))
-	}
-	n, err := io.Copy(w, d)
-	if err != nil {
-		log.Printf("%s: %s: %v after %d bytes", ui.Session(r).User, r.URL.Path, err, n)
-		panic(http.ErrAbortHandler)
-	}
-	log.Printf("%s: %s: %d bytes", ui.Session(r).User, r.URL.Path, n)
+	return hostui.RemoteDownload(o.n.Open(ctx, http.MethodGet, path, nil, nil))
 }
 
 func (s *Server) hostAPIRoutes() []ui.Route {
@@ -627,7 +464,7 @@ func (s *Server) hostAPIRoutes() []ui.Route {
 			s.APIOp(w, r, nil, func() (any, error) { return l.Devices(r.Context()) })
 		},
 		"POST /api/host/devices": func(w http.ResponseWriter, r *http.Request) {
-			var req deviceReq
+			var req hostui.DeviceReq
 			s.APIOp(w, r, &req, func() (any, error) { return nil, l.DeviceOp(r.Context(), req) })
 		},
 		"GET /api/host/disks": func(w http.ResponseWriter, r *http.Request) {
@@ -646,16 +483,16 @@ func (s *Server) hostAPIRoutes() []ui.Route {
 			s.APIOp(w, r, nil, func() (any, error) { return l.Pools(r.Context()) })
 		},
 		"POST /api/host/pools/{name}/{op}": func(w http.ResponseWriter, r *http.Request) {
-			var req poolOpReq
+			var req hostui.PoolOpReq
 			s.APIOp(w, r, &req, func() (any, error) { return nil, l.PoolOp(r.Context(), r.PathValue("name"), r.PathValue("op"), req) })
 		},
 		"POST /api/host/network/{op}": func(w http.ResponseWriter, r *http.Request) {
-			var req netOpReq
+			var req hostui.NetOpReq
 			var in any = &req
 			if r.PathValue("op") == "bridge" {
 				in = &req.Bridge
 			}
-			s.APIOp(w, r, in, func() (any, error) { return nil, l.NetworkOp(accessCtx(r), r.PathValue("op"), req) })
+			s.APIOp(w, r, in, func() (any, error) { return nil, l.NetworkOp(hostui.AccessCtx(r), r.PathValue("op"), req) })
 		},
 		"GET /api/host/network/bridges/{name}/ports": func(w http.ResponseWriter, r *http.Request) {
 			s.APIOp(w, r, nil, func() (any, error) {
@@ -682,14 +519,14 @@ func (s *Server) hostAPIRoutes() []ui.Route {
 			s.APIOp(w, r, nil, func() (any, error) { return l.VMForm(r.Context()) })
 		},
 		"POST /api/vms": func(w http.ResponseWriter, r *http.Request) {
-			var req createVMReq
+			var req hostui.CreateVMReq
 			s.APIOp(w, r, &req, func() (any, error) { return nil, l.CreateVM(r.Context(), req) })
 		},
 		"GET /api/vms/{ns}/{name}/hardware": func(w http.ResponseWriter, r *http.Request) {
 			s.APIOp(w, r, nil, func() (any, error) { return l.Hardware(r.Context(), r.PathValue("ns"), r.PathValue("name")) })
 		},
 		"POST /api/vms/{ns}/{name}/hardware/{op}": func(w http.ResponseWriter, r *http.Request) {
-			var req hwOpReq
+			var req hostui.HWOpReq
 			s.APIOp(w, r, &req, func() (any, error) {
 				return nil, l.HardwareOp(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.PathValue("op"), req)
 			})
@@ -715,7 +552,7 @@ func (s *Server) hostAPIRoutes() []ui.Route {
 		},
 		"GET /api/vms/{ns}/{name}/disks/{disk}/download": func(w http.ResponseWriter, r *http.Request) {
 			d, err := l.DownloadDisk(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.PathValue("disk"), r.URL.Query().Get("format"))
-			serveDownload(w, r, d, err)
+			hostui.ServeDownload(w, r, d, err)
 		},
 	}
 	var rs []ui.Route
@@ -723,8 +560,4 @@ func (s *Server) hostAPIRoutes() []ui.Route {
 		rs = append(rs, ui.Route{Pattern: pattern, Priv: auth.Administer, H: h})
 	}
 	return rs
-}
-
-func accessCtx(r *http.Request) context.Context {
-	return hostd.WithAccess(r.Context(), r.Host)
 }

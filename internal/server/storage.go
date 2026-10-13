@@ -163,62 +163,6 @@ func (s *Server) apiVolumeOp(w http.ResponseWriter, r *http.Request) {
 	ui.WriteJSON(w, map[string]string{})
 }
 
-func (s *Server) disksPage(w http.ResponseWriter, r *http.Request) {
-	ds, err := s.ops(r).Disks(r.Context())
-	s.Render(w, r, "disks.html", "layout", map[string]any{"Nav": "disks", "Disks": ds, "Error": ui.ErrText(err)})
-}
-
-func (s *Server) devicesPage(w http.ResponseWriter, r *http.Request) {
-	devs, err := s.ops(r).Devices(r.Context())
-	s.Render(w, r, "devices.html", "layout", map[string]any{"Nav": "devices", "D": devs, "Error": ui.ErrText(err)})
-}
-
-func (s *Server) deviceAction(w http.ResponseWriter, r *http.Request) {
-	req := deviceReq{Kind: r.FormValue("kind"), ID: r.FormValue("id"), On: r.FormValue("on") == "true"}
-	if err := s.ops(r).DeviceOp(r.Context(), req); err != nil {
-		ui.Flash(w, r, err)
-		return
-	}
-	log.Printf("%s: passthrough %s %s %v", ui.Session(r).User, req.Kind, req.ID, req.On)
-	w.Header().Set("HX-Refresh", "true")
-}
-
-func (s *Server) diskModal(w http.ResponseWriter, r *http.Request) {
-	dd, err := s.ops(r).Disk(r.Context(), r.PathValue("name"))
-	if err != nil {
-		ui.Flash(w, r, err)
-		return
-	}
-	s.Render(w, r, "disks.html", "disk-modal", map[string]any{"D": dd})
-}
-
-func (s *Server) diskAction(w http.ResponseWriter, r *http.Request) {
-	name, action := r.PathValue("name"), r.PathValue("action")
-	confirm := r.FormValue("confirm")
-	if confirm == "" {
-		confirm = r.Header.Get("HX-Prompt")
-	}
-	if err := s.ops(r).DiskAction(r.Context(), name, action, confirm, r.FormValue("test")); err != nil {
-		ui.Flash(w, r, err)
-		return
-	}
-	log.Printf("%s: disk %s %s %s", ui.Session(r).User, name, action, r.FormValue("test"))
-	w.Header().Set("HX-Refresh", "true")
-}
-
-func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
-	s.Render(w, r, "dashboard.html", "layout", map[string]any{"Nav": "dashboard"})
-}
-
-func (s *Server) dashboardStats(w http.ResponseWriter, r *http.Request) {
-	st, err := s.ops(r).DashStats(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	ui.WriteJSON(w, st)
-}
-
 func (s *Server) moveDisk(ctx context.Context, ns, name, disk, pool string) error {
 	class, err := s.poolClass(ctx, pool)
 	if err != nil {

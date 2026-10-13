@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"argus/internal/hostd"
+	"argus/internal/hostui"
 	"argus/internal/manager"
 	"argus/internal/ui"
 )
@@ -98,7 +99,7 @@ func (s *Server) managerSwitchTeaming(w http.ResponseWriter, r *http.Request) {
 	for i, h := range hosts {
 		n, err := s.nodeIn(r, h)
 		if err == nil {
-			err = s.rolloutHostNet(r.Context(), n, "/api/host/network/teaming", netOpReq{Iface: name, Teaming: t})
+			err = s.rolloutHostNet(r.Context(), n, "/api/host/network/teaming", hostui.NetOpReq{Iface: name, Teaming: t})
 		}
 		if err != nil {
 			out = append(out, h+": "+strings.TrimPrefix(err.Error(), h+": "))

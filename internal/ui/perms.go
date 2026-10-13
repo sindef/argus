@@ -26,9 +26,19 @@ func (s *Core) Need(p auth.Privilege, h http.HandlerFunc) http.HandlerFunc {
 	})
 }
 
-func Granted(r *http.Request, p auth.Privilege) bool {
-	pm, _ := r.Context().Value(permKey{}).(perms)
-	return auth.AllowsAnywhere(pm.grants, p)
+type objectKey struct{}
+
+func WithObject(ctx context.Context, o auth.Object) context.Context {
+	return context.WithValue(ctx, objectKey{}, o)
+}
+
+func Permits(r *http.Request, p auth.Privilege) bool {
+	_, grants, _ := Perms(r)
+	if o, ok := r.Context().Value(objectKey{}).(auth.Object); ok {
+		o.VM = r.PathValue("name")
+		return auth.Allows(grants, p, o)
+	}
+	return auth.AllowsAnywhere(grants, p)
 }
 
 func Perms(r *http.Request) (auth.Privilege, []auth.Grant, bool) {

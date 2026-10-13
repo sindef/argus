@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"argus/internal/hostd"
+	"argus/internal/hostui"
 	"argus/internal/manager"
 	"argus/internal/ui"
 )
@@ -21,7 +22,7 @@ var hostTabs = []struct{ Path, Label, Icon string }{{"dashboard", "Summary", "ga
 
 type hostNetRow struct {
 	Node    manager.Node
-	Info    HostNetInfo
+	Info    hostui.HostNetInfo
 	Bridges []hostd.Iface
 	Mgmt    []string
 	Free    []string
@@ -78,7 +79,7 @@ func (s *Server) managerHostNets(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) managerBridgeRollout(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
-	spec := bridgeSpec(r)
+	spec := hostui.BridgeSpec(r)
 	hosts := r.Form["hosts"]
 	sort.Strings(hosts)
 	if len(hosts) == 0 || spec.Name == "" || len(spec.Ports) == 0 {
@@ -112,11 +113,11 @@ func (s *Server) rolloutHostNet(ctx context.Context, n manager.Node, path string
 	time.Sleep(5 * time.Second)
 	pctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	var info HostNetInfo
+	var info hostui.HostNetInfo
 	if err := n.Call(pctx, http.MethodGet, "/api/host/network", nil, &info); err != nil {
 		return fmt.Errorf("unreachable after the change, it rolls back automatically: %w", err)
 	}
-	return n.Call(ctx, http.MethodPost, "/api/host/network/confirm", netOpReq{}, nil)
+	return n.Call(ctx, http.MethodPost, "/api/host/network/confirm", hostui.NetOpReq{}, nil)
 }
 
 func (s *Server) managerNewVM(w http.ResponseWriter, r *http.Request) {
@@ -141,8 +142,8 @@ func (s *Server) managerNewVM(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.FormValue("what") == "import" {
-		s.importModal(w, onHost(r, n))
+		s.ImportModal(w, onHost(r, n))
 		return
 	}
-	s.newVM(w, onHost(r, n))
+	s.NewVM(w, onHost(r, n))
 }

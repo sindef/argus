@@ -5,11 +5,10 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"strings"
 
 	"github.com/gorilla/websocket"
 
-	"argus/internal/auth"
+	"argus/internal/hostui"
 	"argus/internal/kube"
 	"argus/internal/manager"
 	"argus/internal/ui"
@@ -120,22 +119,6 @@ func (o remoteOps) ScheduleOp(ctx context.Context, ns, name, op string, form map
 	return o.post(ctx, manager.APIPath("/api/vms/%s/%s/schedule/%s", ns, name, op), form)
 }
 
-func vmAction(ctx context.Context, o hostOps, ns, name, act, prompt string) error {
-	switch {
-	case kube.ValidAction(act):
-		return o.Power(ctx, ns, name, act)
-	case act == "delete":
-		return o.DeleteVM(ctx, ns, name)
-	case act == "snapshot":
-		return o.SnapshotOp(ctx, ns, name, "", "")
-	case act == "rename":
-		return o.Meta(ctx, ns, name, act, wire.MetaRequest{Value: prompt})
-	case act == "clone", act == "template-copy":
-		return o.Meta(ctx, ns, name, "clone", wire.MetaRequest{Value: prompt, Template: act == "template-copy"})
-	}
-	return ui.ErrUnknownAction
-}
-
 func (s *Server) onNode(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		n, err := s.orgNode(r)
@@ -147,78 +130,12 @@ func (s *Server) onNode(h http.HandlerFunc) http.HandlerFunc {
 			ui.Flash(w, r, err)
 			return
 		}
-		h(w, r.WithContext(context.WithValue(r.Context(), opsKey{}, remoteOps{n})))
+		ctx := ui.WithObject(hostui.WithOps(r.Context(), remoteOps{n}), objectOf(n, ""))
+		h(w, r.WithContext(ctx))
 		if change {
 			go s.manager.Refresh(n.Name)
 		}
 	}
-}
-
-func (s *Server) permits(r *http.Request, p auth.Privilege) bool {
-	if o, ok := s.ops(r).(remoteOps); ok {
-		return s.can(r, p, o.n, r.PathValue("name"))
-	}
-	return ui.Granted(r, p)
-}
-
-func formMap(r *http.Request) map[string]string {
-	r.ParseForm()
-	m := map[string]string{}
-	for k := range r.Form {
-		m[k] = r.FormValue(k)
-	}
-	return m
-}
-
-func (s *Server) vmDone(w http.ResponseWriter, r *http.Request, err error, what string) {
-	if err != nil {
-		ui.Flash(w, r, err)
-		return
-	}
-	log.Printf("%s: %s %s/%s", ui.Session(r).User, what, r.PathValue("ns"), r.PathValue("name"))
-	w.Header().Set("HX-Refresh", "true")
-}
-
-func (s *Server) action(w http.ResponseWriter, r *http.Request) {
-	ns, name, act := r.PathValue("ns"), r.PathValue("name"), r.PathValue("action")
-	if !s.permits(r, actionPrivilege(act)) {
-		http.Error(w, "you do not have permission for this action", http.StatusForbidden)
-		return
-	}
-	prompt := strings.TrimSpace(r.Header.Get("HX-Prompt"))
-	err := vmAction(r.Context(), s.ops(r), ns, name, act, prompt)
-	if err == nil && act == "delete" {
-		log.Printf("%s: delete %s/%s", ui.Session(r).User, ns, name)
-		ui.Redirect(w, r, "/")
-		return
-	}
-	s.vmDone(w, r, err, act+" "+prompt)
-}
-
-func (s *Server) snapshotOp(w http.ResponseWriter, r *http.Request) {
-	s.vmDone(w, r, s.ops(r).SnapshotOp(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.PathValue("snap"), r.PathValue("op")), "snapshot "+r.PathValue("op")+" "+r.PathValue("snap"))
-}
-
-func (s *Server) removeDisk(w http.ResponseWriter, r *http.Request) {
-	s.vmDone(w, r, s.ops(r).RemoveDisk(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.PathValue("disk")), "remove disk "+r.PathValue("disk"))
-}
-
-func (s *Server) moveDiskForm(w http.ResponseWriter, r *http.Request) {
-	req := wire.MoveDiskRequest{Disk: r.FormValue("disk"), Pool: r.FormValue("pool")}
-	s.vmDone(w, r, s.ops(r).MoveDisk(r.Context(), r.PathValue("ns"), r.PathValue("name"), req), "move disk "+req.Disk+" to "+req.Pool)
-}
-
-func (s *Server) setTags(w http.ResponseWriter, r *http.Request) {
-	req := wire.TagsRequest{Tags: r.FormValue("tags"), Folder: r.FormValue("folder"), Attributes: r.FormValue("attributes")}
-	s.vmDone(w, r, s.ops(r).SetTags(r.Context(), r.PathValue("ns"), r.PathValue("name"), req), "organize")
-}
-
-func (s *Server) vmBackupForm(w http.ResponseWriter, r *http.Request) {
-	s.vmDone(w, r, s.ops(r).BackupOp(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.PathValue("op"), formMap(r)), "backup "+r.PathValue("op"))
-}
-
-func (s *Server) scheduleForm(w http.ResponseWriter, r *http.Request) {
-	s.vmDone(w, r, s.ops(r).ScheduleOp(r.Context(), r.PathValue("ns"), r.PathValue("name"), r.PathValue("op"), formMap(r)), "schedule "+r.PathValue("op"))
 }
 
 func (s *Server) apiVMOp(w http.ResponseWriter, r *http.Request, in any, fn func(ctx context.Context, l localOps, ns, name string) error) {

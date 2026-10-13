@@ -73,17 +73,3 @@ func (s *Server) nodeIn(r *http.Request, name string) (manager.Node, error) {
 	}
 	return n, nil
 }
-
-func actionPrivilege(act string) auth.Privilege {
-	switch act {
-	case "delete":
-		return auth.VMDelete
-	case "snapshot":
-		return auth.VMSnapshot
-	case "rename", "tags":
-		return auth.VMConfig
-	case "clone", "template", "untemplate", "template-copy":
-		return auth.VMProvision
-	}
-	return auth.VMPower
-}

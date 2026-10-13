@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"argus/internal/auth"
+	"argus/internal/hostui"
 	"argus/internal/kube"
 	"argus/internal/manager"
 	"argus/internal/ui"
@@ -299,11 +300,11 @@ func (s *Server) v1CreateVM(w http.ResponseWriter, r *http.Request) {
 		spec.Windows = &kube.WindowsGuest{ComputerName: w.ComputerName, AdminPassword: w.AdminPassword, TimeZone: w.TimeZone, ProductKey: w.ProductKey,
 			Domain: w.Domain, DomainUser: w.DomainUser, DomainPassword: w.DomainPassword, Commands: w.Commands, VirtIO: w.VirtIO}
 	}
-	if err := checkVMSpec(spec); err != nil {
+	if err := hostui.CheckVMSpec(spec); err != nil {
 		ui.APIError(w, r, http.StatusBadRequest, err)
 		return
 	}
-	if err := (remoteOps{n}).CreateVM(r.Context(), createVMReq{Spec: spec, Pool: req.Pool}); err != nil {
+	if err := (remoteOps{n}).CreateVM(r.Context(), hostui.CreateVMReq{Spec: spec, Pool: req.Pool}); err != nil {
 		ui.APIError(w, r, http.StatusConflict, err)
 		return
 	}

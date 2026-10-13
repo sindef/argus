@@ -289,13 +289,11 @@ func (s *Server) apiApplyHostSettings(w http.ResponseWriter, r *http.Request) {
 	ui.WriteJSON(w, map[string]string{})
 }
 
-func fields(v string) []string { return strings.Fields(strings.ReplaceAll(v, ",", " ")) }
-
 func (s *Server) hostSettingsForm(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	var u HostSettingsUpdate
 	if _, ok := r.Form["dns"]; ok {
-		dns, ntp, syslog := fields(r.FormValue("dns")), fields(r.FormValue("ntp")), strings.TrimSpace(r.FormValue("syslog"))
+		dns, ntp, syslog := ui.Fields(r.FormValue("dns")), ui.Fields(r.FormValue("ntp")), strings.TrimSpace(r.FormValue("syslog"))
 		u.DNS, u.NTP, u.Syslog = &dns, &ntp, &syslog
 	}
 	if _, ok := r.Form["unsigned_set"]; ok {

@@ -91,14 +91,3 @@ func (o remoteOps) OVF(ctx context.Context, ns, name string) (string, error) {
 	b, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	return string(b), err
 }
-
-func (s *Server) exportOVF(w http.ResponseWriter, r *http.Request) {
-	x, err := s.ops(r).OVF(r.Context(), r.PathValue("ns"), r.PathValue("name"))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-	w.Header().Set("Content-Type", "application/xml")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.ovf"`, r.PathValue("name")))
-	io.WriteString(w, x)
-}

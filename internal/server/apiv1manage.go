@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"argus/internal/hostui"
 	"argus/internal/kube"
 	"argus/internal/manager"
 	"argus/internal/ui"
@@ -70,7 +71,7 @@ func (s *Server) v1UpdateVM(w http.ResponseWriter, r *http.Request) {
 				err = errors.New("memory must be 128-262144 MiB")
 			default:
 				hw.DeviceChoices = nil
-				err = ops.HardwareOp(ctx, ns, name, "save", hwOpReq{Hardware: hw})
+				err = ops.HardwareOp(ctx, ns, name, "save", hostui.HWOpReq{Hardware: hw})
 			}
 		}
 		if err != nil {

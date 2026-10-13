@@ -1,14 +1,11 @@
 package server
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
-	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -16,8 +13,6 @@ import (
 	"argus/internal/auth"
 	"argus/internal/kube"
 	"argus/internal/ui"
-
-	"github.com/gorilla/websocket"
 )
 
 type selection map[string]bool
@@ -121,155 +116,12 @@ func (s *Server) vmDrawer(w http.ResponseWriter, r *http.Request) {
 	s.Render(w, r, "vms.html", "drawer", data)
 }
 
-func (s *Server) bulk(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
-	act, sel := r.PathValue("action"), r.Form["sel"]
-	if !s.permits(r, actionPrivilege(act)) {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return
-	}
-	if len(sel) == 0 {
-		ui.Flash(w, r, errors.New("select at least one VM"))
-		return
-	}
-	single := act == "clone" || act == "rename" || act == "template-copy"
-	if single && len(sel) != 1 {
-		ui.Flash(w, r, errors.New("select exactly one VM"))
-		return
-	}
-	prompt := strings.TrimSpace(r.Header.Get("HX-Prompt"))
-	var errs []string
-	for _, v := range sel {
-		ns, name, ok := strings.Cut(v, "/")
-		if !ok {
-			continue
-		}
-		err := vmAction(r.Context(), s.ops(r), ns, name, act, prompt)
-		if err != nil {
-			errs = append(errs, err.Error())
-			continue
-		}
-		log.Printf("%s: %s %s/%s %s", ui.Session(r).User, act, ns, name, prompt)
-	}
-	if len(errs) > 0 {
-		ui.Flash(w, r, errors.New(strings.Join(errs, "; ")))
-		return
-	}
-	w.Header().Set("HX-Refresh", "true")
-}
-
 func (s *Server) console(w http.ResponseWriter, r *http.Request) {
 	kind := "vnc"
 	if r.URL.Query().Get("type") == "serial" {
 		kind = "console"
 	}
 	s.Render(w, r, "console.html", "layout", map[string]any{"Namespace": r.PathValue("ns"), "Name": r.PathValue("name"), "Kind": kind, "Page": "/vms/" + r.PathValue("ns") + "/" + r.PathValue("name"), "Media": "/vms/" + r.PathValue("ns") + "/" + r.PathValue("name") + "/media", "WS": "/ws/" + r.PathValue("ns") + "/" + r.PathValue("name") + "/"})
-}
-
-func (s *Server) consoleWS(w http.ResponseWriter, r *http.Request) {
-	ns, name, kind := r.PathValue("ns"), r.PathValue("name"), r.PathValue("kind")
-	s.Record(s.AuditUser(ui.Session(r).Org, ui.Session(r).User), "open console of "+path.Join(r.PathValue("node"), ns, name), true, "")
-	backend, err := s.ops(r).DialConsole(r.Context(), ns, name, kind)
-	if err != nil {
-		log.Printf("%s: %v", ui.Session(r).User, err)
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	defer backend.Close()
-	up := websocket.Upgrader{Subprotocols: websocket.Subprotocols(r)}
-	client, err := up.Upgrade(w, r, nil)
-	if err == nil {
-		client.SetReadLimit(1 << 20)
-	}
-	if err != nil {
-		return
-	}
-	defer client.Close()
-	log.Printf("%s: %s %s/%s", ui.Session(r).User, kind, ns, name)
-	done := make(chan struct{}, 2)
-	go pipe(client, backend, done)
-	go pipe(backend, client, done)
-	s.WaitConsole(r, done)
-}
-
-func pipe(dst, src *websocket.Conn, done chan<- struct{}) {
-	defer func() { done <- struct{}{} }()
-	for {
-		_, msg, err := src.ReadMessage()
-		if err != nil {
-			return
-		}
-		if err := dst.WriteMessage(websocket.BinaryMessage, msg); err != nil {
-			return
-		}
-	}
-}
-
-func (s *Server) newVM(w http.ResponseWriter, r *http.Request) {
-	f, err := s.ops(r).VMForm(r.Context())
-	tmpl := "layout"
-	if r.Header.Get("HX-Request") != "" {
-		tmpl = "modal"
-	}
-	slices.SortStableFunc(f.Pools, func(a, b kube.Pool) int { return cmp.Compare(b.Free, a.Free) })
-	s.Render(w, r, "vmnew.html", tmpl, map[string]any{"Images": f.Images, "Templates": f.Templates, "Networks": f.Networks, "Pools": f.Pools, "Error": ui.ErrText(err)})
-}
-
-func (s *Server) createVM(w http.ResponseWriter, r *http.Request) {
-	spec := kube.VMSpec{
-		Name:     r.FormValue("name"),
-		Image:    r.FormValue("image"),
-		CDROM:    r.FormValue("cdrom"),
-		Network:  r.FormValue("network"),
-		UserData: r.FormValue("userdata"),
-		Start:    r.FormValue("start") != "",
-		Guest: kube.Guest{
-			Hostname: strings.TrimSpace(r.FormValue("hostname")),
-			User:     strings.TrimSpace(r.FormValue("user")),
-			SSHKeys:  slices.DeleteFunc(strings.Split(strings.TrimSpace(r.FormValue("ssh_keys")), "\n"), func(k string) bool { return strings.TrimSpace(k) == "" }),
-			Password: r.FormValue("password"),
-			Address:  map[bool]string{true: strings.TrimSpace(r.FormValue("address"))}[r.FormValue("ipmode") == "static"],
-			Gateway:  strings.TrimSpace(r.FormValue("gateway")),
-			DNS:      fields(r.FormValue("dns")),
-		},
-	}
-	if r.FormValue("os") == "windows" {
-		spec.Guest = kube.Guest{}
-		spec.Windows = &kube.WindowsGuest{
-			ComputerName:   strings.TrimSpace(r.FormValue("computer_name")),
-			AdminPassword:  r.FormValue("admin_password"),
-			TimeZone:       strings.TrimSpace(r.FormValue("time_zone")),
-			ProductKey:     strings.TrimSpace(r.FormValue("product_key")),
-			Domain:         strings.TrimSpace(r.FormValue("domain")),
-			DomainUser:     strings.TrimSpace(r.FormValue("domain_user")),
-			DomainPassword: r.FormValue("domain_password"),
-			Commands:       slices.DeleteFunc(strings.Split(strings.ReplaceAll(r.FormValue("commands"), "\r", ""), "\n"), func(c string) bool { return strings.TrimSpace(c) == "" }),
-			VirtIO:         r.FormValue("virtio") != "",
-		}
-	}
-	err := ui.IntField(r, "cores", 1, 64, &spec.Cores)
-	if err == nil {
-		err = ui.IntField(r, "memory", 128, 262144, &spec.MemoryMiB)
-	}
-	if err == nil {
-		err = ui.IntField(r, "disk", 1, 4096, &spec.DiskGiB)
-	}
-	if err == nil {
-		err = checkVMSpec(spec)
-	}
-	if err == nil {
-		err = s.ops(r).CreateVM(r.Context(), createVMReq{Spec: spec, Pool: r.FormValue("pool")})
-	}
-	if err != nil {
-		ui.Flash(w, r, err)
-		return
-	}
-	log.Printf("%s: create vm %s", ui.Session(r).User, spec.Name)
-	if base := ui.Base(r); base != "" {
-		ui.Redirect(w, r, strings.Replace(base, "/hosts/", "/nodes/", 1)+"/vms/"+kube.Namespace+"/"+spec.Name)
-		return
-	}
-	ui.Redirect(w, r, "/vms/"+kube.Namespace+"/"+spec.Name)
 }
 
 func (s *Server) addDisk(w http.ResponseWriter, r *http.Request) {
@@ -311,57 +163,6 @@ func (s *Server) newDisk(w http.ResponseWriter, r *http.Request) {
 func (s *Server) eventsPage(w http.ResponseWriter, r *http.Request) {
 	evs, err := s.kube.Events(r.Context(), kube.Namespace, "", 200)
 	s.Render(w, r, "events.html", "layout", map[string]any{"Events": evs, "Error": ui.ErrText(err), "Nav": "events"})
-}
-
-var validHostname = regexp.MustCompile(`^[a-z0-9]([-a-z0-9.]{0,62}[a-z0-9])?$`)
-
-func checkVMSpec(spec kube.VMSpec) error {
-	switch {
-	case !ui.ValidObject.MatchString(spec.Name):
-		return errors.New("invalid name")
-	case spec.Network == "":
-		return errors.New("network required")
-	case spec.Cores < 1 || spec.Cores > 64:
-		return errors.New("cores must be 1-64")
-	case spec.MemoryMiB < 128 || spec.MemoryMiB > 262144:
-		return errors.New("memory must be 128-262144 MiB")
-	case spec.DiskGiB < 1 || spec.DiskGiB > 4096:
-		return errors.New("disk must be 1-4096 GiB")
-	}
-	if spec.Windows != nil {
-		return spec.Windows.Validate()
-	}
-	return validGuest(spec.Guest)
-}
-
-func validGuest(g kube.Guest) error {
-	switch {
-	case g.Hostname != "" && !validHostname.MatchString(g.Hostname):
-		return errors.New("invalid hostname")
-	case g.User != "" && !ui.ValidName.MatchString(g.User):
-		return errors.New("invalid user name")
-	case (len(g.SSHKeys) > 0 || g.Password != "") && g.User == "":
-		return errors.New("SSH keys and password need a user")
-	}
-	if g.Address != "" {
-		if _, _, err := net.ParseCIDR(g.Address); err != nil {
-			return errors.New("address must be a CIDR, e.g. 192.168.1.20/24")
-		}
-	}
-	if g.Gateway != "" && net.ParseIP(g.Gateway) == nil {
-		return errors.New("invalid gateway")
-	}
-	for _, d := range g.DNS {
-		if net.ParseIP(d) == nil {
-			return fmt.Errorf("invalid DNS server %q", d)
-		}
-	}
-	for _, k := range g.SSHKeys {
-		if !strings.HasPrefix(strings.TrimSpace(k), "ssh-") && !strings.HasPrefix(strings.TrimSpace(k), "ecdsa-") {
-			return errors.New("SSH keys must be OpenSSH public keys")
-		}
-	}
-	return nil
 }
 
 var validTag = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,39}$`)
@@ -410,51 +211,4 @@ func (s *Server) organize(ctx context.Context, ns, name, tagList, folder, attrs 
 		return errors.New("at most 32 attributes")
 	}
 	return s.kube.SetTags(ctx, ns, name, tags, folder, m)
-}
-
-func (s *Server) hardwareModal(w http.ResponseWriter, r *http.Request) {
-	ns, name := r.PathValue("ns"), r.PathValue("name")
-	hw, err := s.ops(r).Hardware(r.Context(), ns, name)
-	if err != nil {
-		ui.Flash(w, r, err)
-		return
-	}
-	f, _ := s.ops(r).VMForm(r.Context())
-	s.Render(w, r, "vms.html", "hardware-modal", map[string]any{"HW": hw, "NS": ns, "Name": name, "Images": f.Images, "Networks": f.Networks, "Firmwares": kube.FirmwaresFor(f.Arch)})
-}
-
-func (s *Server) hardwareAction(w http.ResponseWriter, r *http.Request) {
-	ns, name, op := r.PathValue("ns"), r.PathValue("name"), r.PathValue("op")
-	req := hwOpReq{Hardware: kube.Hardware{Firmware: r.FormValue("firmware"), TPM: r.FormValue("tpm") != "", Monitor: r.FormValue("monitor") != "", CDROM: r.FormValue("cdrom"), CPUReserve: strings.TrimSpace(r.FormValue("cpu_reserve")), CPULimit: strings.TrimSpace(r.FormValue("cpu_limit"))}, Network: r.FormValue("network"), NIC: r.FormValue("nic"), Disk: r.FormValue("disk"), Device: r.FormValue("device"), Thick: r.FormValue("thick") == "true"}
-	var err error
-	switch op {
-	case "save":
-		var cores, mem int
-		var cps int
-		if err = ui.IntField(r, "cores", 1, 64, &cores); err == nil {
-			err = ui.IntField(r, "memory", 128, 262144, &mem)
-		}
-		if err == nil {
-			err = ui.IntField(r, "cores_per_socket", 1, 64, &cps)
-		}
-		req.Hardware.Cores, req.Hardware.MemoryMiB, req.Hardware.CoresPerSocket = int64(cores), int64(mem), int64(cps)
-		if v := strings.TrimSpace(r.FormValue("memory_reserve")); v != "" && err == nil {
-			var reserve int
-			err = ui.IntField(r, "memory_reserve", 64, 262144, &reserve)
-			req.Hardware.MemoryReserve = int64(reserve)
-		}
-	case "resize":
-		var size int
-		err = ui.IntField(r, "size", 1, 65536, &size)
-		req.SizeGiB = int64(size)
-	}
-	if err == nil {
-		err = s.ops(r).HardwareOp(r.Context(), ns, name, op, req)
-	}
-	if err != nil {
-		ui.Flash(w, r, err)
-		return
-	}
-	log.Printf("%s: hardware %s %s/%s", ui.Session(r).User, r.PathValue("op"), ns, name)
-	w.Header().Set("HX-Refresh", "true")
 }

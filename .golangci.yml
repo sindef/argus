@@ -27,4 +27,4 @@ linters:
       - path: _test\.go
         linters: [errcheck, bodyclose]
       - linters: [bodyclose]
-        source: "remoteDownload\\("
+        source: "RemoteDownload\\("

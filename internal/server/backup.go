@@ -25,6 +25,7 @@ import (
 	"argus/internal/auth"
 	"argus/internal/config"
 	"argus/internal/hostd"
+	"argus/internal/hostui"
 	"argus/internal/kube"
 	"argus/internal/lifecycle"
 	"argus/internal/ui"
@@ -79,12 +80,6 @@ type backupState struct {
 	last     map[string]string
 	lastCopy map[string]time.Time
 	restores map[string]restoreJob
-	links    map[string]downloadGrant
-}
-
-type downloadGrant struct {
-	path    string
-	expires time.Time
 }
 
 type restoreJob struct {
@@ -692,51 +687,18 @@ func (s *Server) apiVMBackups(w http.ResponseWriter, r *http.Request) {
 	ui.WriteJSON(w, s.vmBackupInfo(r.Context(), r.PathValue("ns"), r.PathValue("name")))
 }
 
-func (s *Server) downloadLink(w http.ResponseWriter, r *http.Request) {
-	tok := ui.NewToken()
-	path := strings.TrimSuffix(r.URL.Path, "/download")
-	s.backups.mu.Lock()
-	if s.backups.links == nil {
-		s.backups.links = map[string]downloadGrant{}
-	}
-	for k, g := range s.backups.links {
-		if time.Now().After(g.expires) {
-			delete(s.backups.links, k)
-		}
-	}
-	s.backups.links[tok] = downloadGrant{path: path, expires: time.Now().Add(5 * time.Minute)}
-	s.backups.mu.Unlock()
-	base := ui.Base(r)
-	w.Header().Set("HX-Redirect", base+"/vms/"+r.PathValue("ns")+"/"+r.PathValue("name")+"/disks/"+r.PathValue("disk")+"/download?t="+tok+map[bool]string{true: "&format=vmdk"}[r.FormValue("format") == "vmdk"])
-}
-
-func (s *Server) downloadDisk(w http.ResponseWriter, r *http.Request) {
-	ns, name, disk := r.PathValue("ns"), r.PathValue("name"), r.PathValue("disk")
-	s.backups.mu.Lock()
-	g, ok := s.backups.links[r.URL.Query().Get("t")]
-	delete(s.backups.links, r.URL.Query().Get("t"))
-	s.backups.mu.Unlock()
-	if !ok || time.Now().After(g.expires) || g.path != strings.TrimSuffix(r.URL.Path, "/download") {
-		http.Error(w, "this download link has expired; start the download again", http.StatusForbidden)
-		return
-	}
-	s.Record(s.AuditUser(ui.Session(r).Org, ui.Session(r).User), "download disk "+disk+" of "+ns+"/"+name, true, "")
-	d, err := s.ops(r).DownloadDisk(r.Context(), ns, name, disk, r.URL.Query().Get("format"))
-	serveDownload(w, r, d, err)
-}
-
-func (s *Server) openDisk(ctx context.Context, ns, name, disk, format string) (download, error) {
+func (s *Server) openDisk(ctx context.Context, ns, name, disk, format string) (hostui.Download, error) {
 	hw, err := s.kube.Hardware(ctx, ns, name)
 	if err != nil {
-		return download{}, statusError{http.StatusNotFound, err}
+		return hostui.Download{}, hostui.StatusError{Code: http.StatusNotFound, Err: err}
 	}
 	i := slices.IndexFunc(hw.Disks, func(d kube.HardwareDisk) bool { return d.Name == disk })
 	if i < 0 {
-		return download{}, statusError{http.StatusNotFound, errors.New("disk not found")}
+		return hostui.Download{}, hostui.StatusError{Code: http.StatusNotFound, Err: errors.New("disk not found")}
 	}
 	key := ns + "/" + name
 	if !s.backups.start(key) {
-		return download{}, statusError{http.StatusConflict, errors.New("a backup or download of this VM is already running")}
+		return hostui.Download{}, hostui.StatusError{Code: http.StatusConflict, Err: errors.New("a backup or download of this VM is already running")}
 	}
 	release := func() {
 		cctx, cancel := lifecycle.CleanupContext()
@@ -749,48 +711,48 @@ func (s *Server) openDisk(ctx context.Context, ns, name, disk, format string) (d
 	src, err := s.openDiskExport(ctx, ns, name, hw.Disks[i].PVC)
 	if err != nil {
 		release()
-		return download{}, err
+		return hostui.Download{}, err
 	}
-	body := readCloser{src, func() error {
+	body := hostui.ReadCloser{Reader: src, OnClose: func() error {
 		err := src.Close()
 		release()
 		return err
 	}}
 	if format != "vmdk" {
-		return download{body, "application/gzip", src.Length, fmt.Sprintf("%s-%s.img.gz", name, disk)}, nil
+		return hostui.Download{ReadCloser: body, Type: "application/gzip", Length: src.Length, Name: fmt.Sprintf("%s-%s.img.gz", name, disk)}, nil
 	}
 	gz, err := gzip.NewReader(src)
 	if err != nil {
 		body.Close()
-		return download{}, err
+		return hostui.Download{}, err
 	}
 	file := fmt.Sprintf("%s-%s.vmdk", name, disk)
 	pr, pw := io.Pipe()
 	go func() { pw.CloseWithError(vmdk.Write(pw, gz, hw.Disks[i].SizeGiB<<30, file)) }()
-	return download{readCloser{pr, func() error {
+	return hostui.Download{ReadCloser: hostui.ReadCloser{Reader: pr, OnClose: func() error {
 		pr.Close()
 		return body.Close()
-	}}, "application/octet-stream", "", file}, nil
+	}}, Type: "application/octet-stream", Name: file}, nil
 }
 
-func (s *Server) openDiskExport(ctx context.Context, ns, name, pvc string) (download, error) {
+func (s *Server) openDiskExport(ctx context.Context, ns, name, pvc string) (hostui.Download, error) {
 	ex, err := s.kube.BackupExport(ctx, ns, name)
 	if err != nil {
-		return download{}, statusError{http.StatusConflict, err}
+		return hostui.Download{}, hostui.StatusError{Code: http.StatusConflict, Err: err}
 	}
 	src, cert, err := s.kube.BackupSource(ctx, ns, name, pvc)
 	if err != nil {
-		return download{}, err
+		return hostui.Download{}, err
 	}
 	resp, err := openExport(ctx, src, cert, ex.Token)
 	if err != nil {
-		return download{}, err
+		return hostui.Download{}, err
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		return download{}, errors.New("export returned " + resp.Status)
+		return hostui.Download{}, errors.New("export returned " + resp.Status)
 	}
-	return download{ReadCloser: resp.Body, Length: resp.Header.Get("Content-Length")}, nil
+	return hostui.Download{ReadCloser: resp.Body, Length: resp.Header.Get("Content-Length")}, nil
 }
 
 func openExport(ctx context.Context, src, ca, token string) (*http.Response, error) {

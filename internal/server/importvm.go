@@ -443,22 +443,3 @@ func (s *Server) serveESXi(w http.ResponseWriter, r *http.Request) {
 	n, _ := io.Copy(w, resp.Body)
 	log.Printf("esxi import %s: %s %d bytes", st.files[i], r.Method, n)
 }
-
-func (s *Server) importModal(w http.ResponseWriter, r *http.Request) {
-	f, _ := s.ops(r).VMForm(r.Context())
-	s.Render(w, r, "vmnew.html", "import-modal", map[string]any{"Networks": f.Networks, "Pools": f.Pools, "Images": f.Images, "Arch": f.Arch})
-}
-
-func (s *Server) importVM(w http.ResponseWriter, r *http.Request) {
-	name, err := s.ops(r).Import(r.Context(), r.PathValue("source"), r.Header.Get("Content-Type"), r.Body)
-	if err != nil {
-		ui.Flash(w, r, err)
-		return
-	}
-	log.Printf("%s: import vm %s from %s", ui.Session(r).User, name, r.PathValue("source"))
-	if base := ui.Base(r); base != "" {
-		ui.Redirect(w, r, strings.Replace(base, "/hosts/", "/nodes/", 1)+"/vms/"+kube.Namespace+"/"+name)
-		return
-	}
-	ui.Redirect(w, r, "/vms/"+kube.Namespace+"/"+name)
-}

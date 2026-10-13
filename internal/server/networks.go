@@ -13,8 +13,8 @@ import (
 
 	"argus/internal/auth"
 	"argus/internal/hostd"
+	"argus/internal/hostui"
 	"argus/internal/kube"
-	"argus/internal/manager"
 	"argus/internal/ui"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -161,84 +161,11 @@ func (s *Server) hostNet(r *http.Request) (hostd.HostNet, error) {
 	return s.hostd.Network(hostd.WithAccess(r.Context(), r.Host))
 }
 
-func management(hn hostd.HostNet, i hostd.Iface) bool {
-	if !hn.Restricted {
-		return i.Master == ""
-	}
-	return i.Master == "" && slices.Contains(hn.Management, i.Name)
-}
-
-func (s *Server) hostNetworkPage(w http.ResponseWriter, r *http.Request) {
-	info, err := s.ops(r).Network(accessCtx(r))
-	var free []hostd.Iface
-	for _, i := range info.Net.Ifaces {
-		if i.Kind == "ether" && !i.Mgmt {
-			free = append(free, i)
-		}
-	}
-	s.Render(w, r, "hostnet.html", "layout", map[string]any{"Nav": "hostnet", "Net": info.Net, "Ports": free, "Migration": info.Migration, "Error": ui.ErrText(err)})
-}
-
-func (s *Server) ifaceModal(w http.ResponseWriter, r *http.Request) {
-	info, err := s.ops(r).Network(accessCtx(r))
-	hn := info.Net
-	var iface *hostd.Iface
-	for i := range hn.Ifaces {
-		if hn.Ifaces[i].Name == r.PathValue("name") {
-			iface = &hn.Ifaces[i]
-		}
-	}
-	if err == nil && iface == nil {
-		err = fmt.Errorf("interface %s not found", r.PathValue("name"))
-	}
-	if err != nil {
-		ui.Flash(w, r, err)
-		return
-	}
-	s.Render(w, r, "hostnet.html", "iface-modal", map[string]any{"I": iface, "DNS": hn.DNS, "Management": management(hn, *iface), "Migration": info.Migration == iface.Name})
-}
-
-func (s *Server) hostNetworkAction(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
-	req := netOpReq{
-		Bridge: bridgeSpec(r),
-		Delete: r.FormValue("bridge"),
-		Address: hostd.AddressSpec{
-			Iface: r.FormValue("iface"), IPv4: r.FormValue("ipv4"), IPv6: r.FormValue("ipv6"),
-			Address: strings.TrimSpace(r.FormValue("address")), Gateway: strings.TrimSpace(r.FormValue("gateway")),
-			Address6: strings.TrimSpace(r.FormValue("address6")), Gateway6: strings.TrimSpace(r.FormValue("gateway6")),
-			DNS: fields(r.FormValue("dns")),
-		},
-		Iface:      r.FormValue("iface"),
-		Migration:  r.FormValue("migration") != "",
-		Management: r.FormValue("management") != "",
-	}
-	err := s.ops(r).NetworkOp(accessCtx(r), r.PathValue("op"), req)
-	if err != nil {
-		ui.Flash(w, r, err)
-		return
-	}
-	log.Printf("%s: host network %s %s", ui.Session(r).User, r.PathValue("op"), r.FormValue("iface"))
-	w.Header().Set("HX-Refresh", "true")
-}
-
-type HostNetInfo = manager.HostNetwork
-
 func (s *Server) apiHostNetwork(w http.ResponseWriter, r *http.Request) {
 	hn, err := s.hostNet(r)
 	if err != nil {
 		ui.APIError(w, r, http.StatusBadGateway, err)
 		return
 	}
-	ui.WriteJSON(w, HostNetInfo{Net: hn, Migration: s.kube.MigrationBridge(r.Context())})
-}
-
-func bridgeSpec(r *http.Request) hostd.BridgeSpec {
-	spec := hostd.BridgeSpec{Name: r.FormValue("name"), Ports: r.Form["ports"], BondMode: r.FormValue("bond_mode"), Hash: r.FormValue("hash")}
-	spec.MTU, _ = strconv.Atoi(r.FormValue("mtu"))
-	if len(spec.Ports) > 1 {
-		spec.Bond = "bond-" + spec.Name
-		spec.Bond = spec.Bond[:min(len(spec.Bond), 15)]
-	}
-	return spec
+	ui.WriteJSON(w, hostui.HostNetInfo{Net: hn, Migration: s.kube.MigrationBridge(r.Context())})
 }

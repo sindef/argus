@@ -14,6 +14,7 @@ import (
 
 	"argus/internal/auth"
 	"argus/internal/hostd"
+	"argus/internal/hostui"
 	"argus/internal/kube"
 	"argus/internal/lifecycle"
 	"argus/internal/manager"
@@ -23,7 +24,7 @@ import (
 )
 
 type Server struct {
-	*ui.Core
+	*hostui.UI
 	kube        *kube.Client
 	runDir      string
 	hostd       *hostd.Client
@@ -63,8 +64,11 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{Core: core, kube: k, runDir: o.RunDir, releaseFile: o.ReleaseFile, caPEM: o.CAPEM, manager: o.Manager, certs: o.Certs, dataDir: o.DataDir}
+	s := &Server{UI: &hostui.UI{Core: core}, kube: k, runDir: o.RunDir, releaseFile: o.ReleaseFile, caPEM: o.CAPEM, manager: o.Manager, certs: o.Certs, dataDir: o.DataDir}
 	core.Mode = s
+	if o.Manager == nil {
+		s.Local = localOps{s}
+	}
 	if k != nil {
 		k.Guard = s.maintenance
 	}
@@ -121,7 +125,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func onHost(r *http.Request, n manager.Node) *http.Request {
 	ctx := ui.WithBase(r.Context(), "/hosts/"+n.Name)
-	ctx = context.WithValue(ctx, opsKey{}, remoteOps{n})
+	ctx = hostui.WithOps(ctx, remoteOps{n})
 	return r.WithContext(context.WithValue(ctx, hostNodeKey{}, n))
 }
 

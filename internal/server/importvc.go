@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -178,18 +177,4 @@ func (s *Server) vcenterCopy(ctx context.Context, c *vsphere.Client, tc *tls.Con
 	}
 	ok = true
 	return lease.Complete(ctx)
-}
-
-func (s *Server) vcenterVMsOptions(w http.ResponseWriter, r *http.Request) {
-	fields := map[string]string{}
-	for _, k := range []string{"host", "user", "password", "fingerprint"} {
-		fields[k] = r.FormValue(k)
-	}
-	vms, err := s.ops(r).VCenterVMs(r.Context(), fields)
-	if err != nil {
-		w.Header().Set("HX-Retarget", "#import-vm-error")
-		ui.Flash(w, r, err)
-		return
-	}
-	s.Render(w, r, "vmnew.html", "vcenter-vms", map[string]any{"VMs": vms})
 }
