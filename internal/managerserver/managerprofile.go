@@ -58,7 +58,7 @@ func profileDiffs(p manager.Profile, st wire.HostSettings, nets []kube.Network, 
 			switch {
 			case i < 0:
 				d = append(d, "network "+def.Name+" missing")
-			case nets[i].VLAN != def.VLAN || nets[i].Bridge != def.BridgeName():
+			case !sameNetwork(nets[i], def):
 				d = append(d, "network "+def.Name+" differs")
 			}
 		}
@@ -149,11 +149,31 @@ func (s *Server) profileApply(w http.ResponseWriter, r *http.Request) {
 		if err := n.Call(ctx, http.MethodPost, "/api/host/settings", u, nil); err != nil {
 			return err
 		}
-		if p.Networks {
-			for _, d := range networksFor(defs, n) {
-				if err := n.Call(ctx, http.MethodPost, "/api/networks/create", netReq(d), nil); err != nil {
-					return err
-				}
+		if !p.Networks {
+			return nil
+		}
+		var have []kube.Network
+		if err := n.Call(ctx, http.MethodGet, "/api/networks", nil, &have); err != nil {
+			return err
+		}
+		for _, d := range networksFor(defs, n) {
+			i := slices.IndexFunc(have, func(x kube.Network) bool { return x.Name == d.Name })
+			op := "create"
+			if i >= 0 && sameNetwork(have[i], d) {
+				continue
+			} else if i >= 0 {
+				op = "update"
+			}
+			if err := n.Call(ctx, http.MethodPost, "/api/networks/"+op, netReq(d), nil); err != nil {
+				return err
+			}
+		}
+		if err := n.Call(ctx, http.MethodGet, "/api/networks", nil, &have); err != nil {
+			return err
+		}
+		for _, d := range networksFor(defs, n) {
+			if i := slices.IndexFunc(have, func(x kube.Network) bool { return x.Name == d.Name }); i < 0 || !sameNetwork(have[i], d) {
+				return fmt.Errorf("network %s does not match the definition after applying", d.Name)
 			}
 		}
 		return nil
@@ -164,4 +184,8 @@ func (s *Server) profileApply(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("%s: host profile for %s/%s applied", ui.Session(r).User, dc, cl)
 	w.Header().Set("HX-Refresh", "true")
+}
+
+func sameNetwork(have kube.Network, want manager.Network) bool {
+	return have.VLAN == want.VLAN && have.Bridge == want.BridgeName() && have.SpoofCheck == want.SpoofCheck && have.RateMbps == want.RateMbps
 }
