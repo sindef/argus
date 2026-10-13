@@ -206,10 +206,18 @@ func (c *Manager) evacuate(ctx context.Context, j *Job, n Node, shutdown bool) e
 			if err := c.startJob(ctx, mj, 6*time.Hour, func(ctx context.Context, mj *Job) error {
 				return c.liveMigrate(ctx, mj, n, dst, v.Namespace, v.Name)
 			}); err != nil {
-				return fmt.Errorf("%s: %w", v.Name, err)
+				c.progress(j, v.Name+" did not move to "+dst.Name+": "+err.Error())
+				continue
 			}
 			if err := c.waitJob(ctx, mj); err != nil {
-				return fmt.Errorf("%s: %w", v.Name, err)
+				c.st.mu.Lock()
+				unsure := mj.Attention
+				c.st.mu.Unlock()
+				if unsure || ctx.Err() != nil {
+					return fmt.Errorf("%s: %w", v.Name, err)
+				}
+				c.progress(j, v.Name+" did not move to "+dst.Name+": "+err.Error())
+				continue
 			}
 			moved = true
 			break
