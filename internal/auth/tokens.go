@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"slices"
 	"sort"
 	"time"
 )
@@ -81,6 +82,18 @@ func (s *Store) RemoveToken(ctx context.Context, org, user, name string) error {
 	}
 	if len(out) == len(ts) {
 		return ErrNotFound
+	}
+	return s.saveTokens(ctx, out, rv)
+}
+
+func (s *Store) dropTokens(ctx context.Context, user string) error {
+	ts, rv, err := s.tokens(ctx)
+	if err != nil {
+		return err
+	}
+	out := slices.DeleteFunc(slices.Clone(ts), func(t Token) bool { return t.Org == s.org && t.User == user })
+	if len(out) == len(ts) {
+		return nil
 	}
 	return s.saveTokens(ctx, out, rv)
 }

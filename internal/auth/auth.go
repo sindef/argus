@@ -374,10 +374,14 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 		}
 		return out, checkAdmins(out)
 	})
-	if err == nil {
-		s.dropSessions(name)
+	if err != nil {
+		return err
 	}
-	return err
+	s.dropSessions(name)
+	if err := s.dropTokens(ctx, name); err != nil {
+		return err
+	}
+	return s.SetMembership(ctx, name, nil)
 }
 
 func (s *Store) SetRole(ctx context.Context, name string, role Role) error {

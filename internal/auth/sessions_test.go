@@ -112,3 +112,32 @@ func TestCustomRoleChangeRefreshesSessions(t *testing.T) {
 		t.Errorf("role after downgrade: %s", sess.Role)
 	}
 }
+
+func TestDeletedUserLosesTokensAndGroups(t *testing.T) {
+	ctx := context.Background()
+	s := NewStore(&memSecrets{m: map[string]map[string][]byte{}}).ForOrg("acme")
+	for _, n := range []string{"root", "worker"} {
+		if err := s.Add(ctx, n, Admin, "pw-"+n+"-12345"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tok, err := s.AddToken(ctx, Token{Name: "ci", Org: "acme", User: "worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveGroup(ctx, "", Group{Name: "ops", Role: Admin, Members: []string{"worker"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Delete(ctx, "worker"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Add(ctx, "worker", ReadOnly, "pw-worker-67890"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s.CheckToken(ctx, tok); ok {
+		t.Error("deleted user's token still valid")
+	}
+	if gs, _ := s.Groups(ctx); len(gs) != 1 || len(gs[0].Members) != 0 {
+		t.Errorf("deleted user's group membership kept: %+v", gs)
+	}
+}
