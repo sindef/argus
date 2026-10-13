@@ -15,6 +15,7 @@ import (
 
 	"argus/internal/auth"
 	"argus/internal/kube"
+	"argus/internal/lifecycle"
 	"argus/internal/netguard"
 	"argus/internal/registry"
 	"argus/internal/wire"
@@ -105,7 +106,7 @@ func (s *Server) streamUpload(r *http.Request) error {
 		}
 		log.Printf("%s: upload image %s", session(r).User, name)
 		if err := s.kube.Upload(r.Context(), name, body); err != nil {
-			cctx, cancel := cleanupCtx()
+			cctx, cancel := lifecycle.CleanupContext()
 			defer cancel()
 			return errors.Join(err, s.kube.DeleteImage(cctx, name))
 		}

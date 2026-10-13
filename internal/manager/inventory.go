@@ -72,11 +72,16 @@ func (m *Manager) NodeState(name string) (NodeState, bool) {
 	return s, ok
 }
 
-func (m *Manager) pollLoop() {
+func (m *Manager) pollLoop(ctx context.Context) {
 	for {
-		m.PollAll(context.Background())
-		m.tel.save()
-		time.Sleep(pollEvery + time.Duration(rand.Intn(5000))*time.Millisecond)
+		m.PollAll(ctx)
+		m.tel.save(false)
+		select {
+		case <-ctx.Done():
+			m.tel.save(true)
+			return
+		case <-time.After(pollEvery + time.Duration(rand.Intn(5000))*time.Millisecond):
+		}
 	}
 }
 

@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"argus/internal/lifecycle"
 	"argus/internal/manager"
 )
 
@@ -178,17 +179,16 @@ func (s *Server) activeAlarms() []Alarm {
 	return out
 }
 
-func (s *Server) alarmLoop() {
-	for {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+func (s *Server) alarmLoop(ctx context.Context) {
+	lifecycle.Every(ctx, time.Minute, true, "alarms", func(ctx context.Context) {
+		ctx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
 		if s.manager != nil {
 			s.applyAlarms(s.fleetAlarms(ctx))
 		} else {
 			s.applyAlarms(s.nodeAlarms(ctx))
 		}
-		cancel()
-		time.Sleep(time.Minute)
-	}
+	})
 }
 
 func (s *Server) nodeAlarms(ctx context.Context) []Alarm {

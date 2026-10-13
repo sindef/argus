@@ -16,6 +16,7 @@ import (
 	"argus/internal/auth"
 	"argus/internal/config"
 	"argus/internal/kube"
+	"argus/internal/lifecycle"
 	"argus/internal/wire"
 )
 
@@ -126,7 +127,7 @@ func (c *Manager) Unprotect(ctx context.Context, node, vm string) error {
 		return err
 	}
 	if o, err := c.Node(ctx, p.Owner); err == nil {
-		logCleanup("HA flag of "+vm, o.do(ctx, http.MethodPost, vmPath(vm, "ha"), wire.HARequest{Enabled: false}, nil))
+		lifecycle.LogCleanup("HA flag of "+vm, o.do(ctx, http.MethodPost, vmPath(vm, "ha"), wire.HARequest{Enabled: false}, nil))
 	}
 	if r, err := c.Node(ctx, p.Replica); err == nil {
 		return r.do(ctx, http.MethodPost, vmPath(vm, "abort"), wire.OperationRequest{Operation: kube.HAReplicaOperation}, nil)
@@ -134,30 +135,25 @@ func (c *Manager) Unprotect(ctx context.Context, node, vm string) error {
 	return nil
 }
 
-func (c *Manager) Start() {
+func (c *Manager) Prepare(ctx context.Context) {
 	c.started = time.Now()
-	c.loadJobs(context.Background())
-	go c.pollLoop()
-	go func() {
-		for range time.Tick(heartbeatEvery) {
-			recovering("heartbeat", func() {
-				ctx, cancel := context.WithTimeout(context.Background(), heartbeatEvery)
-				defer cancel()
-				c.heartbeat(ctx)
-				c.failover(ctx)
-			})
-		}
-	}()
-	go func() {
-		for range time.Tick(30 * time.Second) {
-			recovering("replication", c.replicate)
-		}
-	}()
-	go func() {
-		for range time.Tick(drsEvery) {
-			recovering("drs", func() { c.drsTick(context.Background()) })
-		}
-	}()
+	c.loadJobs(ctx)
+}
+
+func (c *Manager) Run(ctx context.Context) {
+	var g lifecycle.Group
+	g.Go(ctx, c.pollLoop)
+	g.Go(ctx, func(ctx context.Context) {
+		lifecycle.Every(ctx, heartbeatEvery, false, "heartbeat", func(ctx context.Context) {
+			ctx, cancel := context.WithTimeout(ctx, heartbeatEvery)
+			defer cancel()
+			c.heartbeat(ctx)
+			c.failover(ctx)
+		})
+	})
+	g.Go(ctx, func(ctx context.Context) { lifecycle.Every(ctx, 30*time.Second, false, "replication", c.replicate) })
+	g.Go(ctx, func(ctx context.Context) { lifecycle.Every(ctx, drsEvery, false, "drs", c.drsTick) })
+	g.Wait()
 }
 
 func (c *Manager) LastSeen(node string) time.Time {
@@ -307,8 +303,7 @@ func (c *Manager) failover(ctx context.Context) {
 
 var replications = make(chan struct{}, config.Int("ARGUS_REPLICATIONS", 2))
 
-func (c *Manager) replicate() {
-	ctx := context.Background()
+func (c *Manager) replicate(ctx context.Context) {
 	ps, err := c.Protected(ctx)
 	if err != nil {
 		return
@@ -383,9 +378,9 @@ func (c *Manager) sync(ctx context.Context, p Protected) error {
 		return err
 	}
 	defer func() {
-		cctx, cancel := cleanupCtx()
+		cctx, cancel := lifecycle.CleanupContext()
 		defer cancel()
-		logCleanup("export of "+p.VM, owner.do(cctx, http.MethodPost, vmPath(p.VM, "unexport"), nil, nil))
+		lifecycle.LogCleanup("export of "+p.VM, owner.do(cctx, http.MethodPost, vmPath(p.VM, "unexport"), nil, nil))
 	}()
 	if !exists {
 		return c.firstReplica(ctx, p, replica, ex)
@@ -395,9 +390,9 @@ func (c *Manager) sync(ctx context.Context, p Protected) error {
 		return err
 	}
 	abort := func(cause error) error {
-		cctx, cancel := cleanupCtx()
+		cctx, cancel := lifecycle.CleanupContext()
 		defer cancel()
-		logCleanup("replica refresh of "+p.VM, replica.do(cctx, http.MethodPost, vmPath(p.VM, "replica/abort"), wire.ReplicaRequest{Mapping: mapping}, nil))
+		lifecycle.LogCleanup("replica refresh of "+p.VM, replica.do(cctx, http.MethodPost, vmPath(p.VM, "replica/abort"), wire.ReplicaRequest{Mapping: mapping}, nil))
 		return cause
 	}
 	failed, err := kube.WaitDisks(ctx, 5*time.Second, nodeDisks(replica, vmPath(p.VM, "replica/status"), wire.ReplicaRequest{Mapping: mapping}), nil)
@@ -418,9 +413,9 @@ func (c *Manager) firstReplica(ctx context.Context, p Protected, replica Node, e
 		return err
 	}
 	defer func() {
-		cctx, cancel := cleanupCtx()
+		cctx, cancel := lifecycle.CleanupContext()
 		defer cancel()
-		logCleanup("import of "+p.VM, replica.do(cctx, http.MethodPost, vmPath(p.VM, "imported"), nil, nil))
+		lifecycle.LogCleanup("import of "+p.VM, replica.do(cctx, http.MethodPost, vmPath(p.VM, "imported"), nil, nil))
 	}()
 	if err := replica.do(ctx, http.MethodPost, vmPath(p.VM, "ha"), wire.HARequest{Enabled: true}, nil); err != nil {
 		return err
@@ -430,15 +425,6 @@ func (c *Manager) firstReplica(ctx context.Context, p Protected, replica Node, e
 		return fmt.Errorf("disk %s failed to copy", failed)
 	}
 	return err
-}
-
-func recovering(name string, fn func()) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("%s: recovered from panic: %v", name, r)
-		}
-	}()
-	fn()
 }
 
 func (c *Manager) admit(ps []Protected, owner, vm, replica string) error {

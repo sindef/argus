@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"argus/internal/kube"
+	"argus/internal/lifecycle"
 	"argus/internal/wire"
 )
 
@@ -23,9 +24,9 @@ func (c *Manager) CopyImage(org, image string, src Node, targets []Node) error {
 			return err
 		}
 		defer func() {
-			cctx, cancel := cleanupCtx()
+			cctx, cancel := lifecycle.CleanupContext()
 			defer cancel()
-			logCleanup("export of image "+image, src.do(cctx, http.MethodPost, APIPath("/api/images/%s/unexport", image), nil, nil))
+			lifecycle.LogCleanup("export of image "+image, src.do(cctx, http.MethodPost, APIPath("/api/images/%s/unexport", image), nil, nil))
 		}()
 		size, _ := ex.Spec["size"].(string)
 		for _, t := range targets {
@@ -70,7 +71,7 @@ func (c *Manager) importTo(ctx context.Context, j *Job, t Node, image string, re
 		c.update(j, "Copying to "+t.Name+" "+imgs[i].Progress, false, false)
 		return imgs[i].Phase == "Succeeded", nil
 	})
-	logCleanup("import of image "+image+" on "+t.Name, t.do(ctx, http.MethodPost, APIPath("/api/images/%s/imported", image), nil, nil))
+	lifecycle.LogCleanup("import of image "+image+" on "+t.Name, t.do(ctx, http.MethodPost, APIPath("/api/images/%s/imported", image), nil, nil))
 	if err != nil {
 		return fmt.Errorf("%s: %w", t.Name, err)
 	}

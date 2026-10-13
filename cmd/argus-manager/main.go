@@ -14,7 +14,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -22,6 +21,7 @@ import (
 
 	"argus/internal/auth"
 	"argus/internal/dbstore"
+	"argus/internal/lifecycle"
 	"argus/internal/manager"
 	"argus/internal/sealed"
 	"argus/internal/server"
@@ -85,7 +85,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	mgr.Start()
+	mgr.Prepare(ctx)
 	certs := tlscert.NewHolder(pki.Cert)
 	certs.Load(ctx, fs)
 	cancel()
@@ -101,17 +101,7 @@ func main() {
 		IdleTimeout:       2 * time.Minute,
 	}
 	log.Printf("listening on %s", addr)
-	go func() {
-		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
-		defer stop()
-		<-ctx.Done()
-		sctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
-		if err := hs.Shutdown(sctx); err != nil {
-			log.Printf("shutdown: %v", err)
-		}
-	}()
-	if err := hs.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
+	if err := lifecycle.Serve(hs, mgr.Run, srv.Run); err != nil {
 		log.Fatal(err)
 	}
 }

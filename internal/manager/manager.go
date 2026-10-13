@@ -20,6 +20,7 @@ import (
 
 	"argus/internal/auth"
 	"argus/internal/kube"
+	"argus/internal/lifecycle"
 	"argus/internal/tlscert"
 	"argus/internal/wire"
 
@@ -487,26 +488,16 @@ func vmPathIn(ns, vm, action string) string {
 	return APIPath("/api/vms/%s/%s/", ns, vm) + action
 }
 
-func cleanupCtx() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), 2*time.Minute)
-}
-
-func logCleanup(what string, err error) {
-	if err != nil {
-		log.Printf("cleanup %s: %v", what, err)
-	}
-}
-
 func (c *Manager) importAndWait(ctx context.Context, j *Job, dst Node, name, pool string, template bool, ex kube.Export) error {
 	c.update(j, "Importing", false, false)
 	if err := dst.do(ctx, http.MethodPost, "/api/import", wire.ImportRequest{Name: name, Operation: j.ID, Export: ex, Pool: pool, Template: template}, nil); err != nil {
 		return err
 	}
 	rollback := func(cause error) error {
-		cctx, cancel := cleanupCtx()
+		cctx, cancel := lifecycle.CleanupContext()
 		defer cancel()
 		err := dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, name, "abort"), wire.OperationRequest{Operation: j.ID}, nil)
-		logCleanup("import of "+name, dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, name, "imported"), nil, nil))
+		lifecycle.LogCleanup("import of "+name, dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, name, "imported"), nil, nil))
 		if err != nil {
 			return fmt.Errorf("%w; target cleanup failed: %w", cause, err)
 		}
@@ -563,7 +554,7 @@ func (c *Manager) migrate(ctx context.Context, j *Job, src, dst Node, ns, vm str
 		return err
 	}
 	unexport := func() {
-		cctx, cancel := cleanupCtx()
+		cctx, cancel := lifecycle.CleanupContext()
 		defer cancel()
 		if err := src.do(cctx, http.MethodPost, vmPathIn(ns, vm, "unexport"), nil, nil); err != nil {
 			log.Printf("migrate %s: unexport: %v", vm, err)

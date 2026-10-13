@@ -27,6 +27,7 @@ import (
 	"argus/internal/config"
 	"argus/internal/hostd"
 	"argus/internal/kube"
+	"argus/internal/lifecycle"
 	"argus/internal/vmdk"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -144,29 +145,24 @@ func (b *backupState) status(key string) string {
 	return b.last[key]
 }
 
-func (s *Server) backupLoop() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	if left := s.kube.CleanupInterrupted(ctx); len(left) > 0 {
+func (s *Server) backupLoop(ctx context.Context) {
+	cctx, cancel := context.WithTimeout(ctx, time.Minute)
+	if left := s.kube.CleanupInterrupted(cctx); len(left) > 0 {
 		log.Printf("removed leftovers of interrupted operations: %v", left)
 	}
 	cancel()
 	s.resumeRestores()
-	for range time.Tick(time.Minute) {
-		recovering("backups", s.backupTick)
-	}
+	lifecycle.Every(ctx, time.Minute, false, "backups", s.backupTick)
 }
 
-func (s *Server) storageLoop() {
-	for ; ; time.Sleep(10 * time.Minute) {
-		recovering("storage", s.storageTick)
-	}
+func (s *Server) storageLoop(ctx context.Context) {
+	lifecycle.Every(ctx, 10*time.Minute, true, "storage", s.storageTick)
 }
 
-func (s *Server) storageTick() {
+func (s *Server) storageTick(ctx context.Context) {
 	if s.hostd == nil {
 		return
 	}
-	ctx := context.Background()
 	orphans, keep, err := s.kube.ZFSOrphans(ctx)
 	if err != nil {
 		log.Printf("storage cleanup: %v", err)
@@ -185,8 +181,7 @@ func (s *Server) storageTick() {
 	s.flrSweep(ctx)
 }
 
-func (s *Server) backupTick() {
-	ctx := context.Background()
+func (s *Server) backupTick(ctx context.Context) {
 	vms, err := s.kube.ListVMs(ctx)
 	if err != nil {
 		return
@@ -210,15 +205,6 @@ func (s *Server) backupTick() {
 	}
 }
 
-func recovering(name string, fn func()) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("%s: recovered from panic: %v", name, r)
-		}
-	}()
-	fn()
-}
-
 func (s *Server) snapshotDue(ctx context.Context, ns, name string, p BackupPolicy) {
 	snaps, err := s.kube.ListSnapshots(ctx, ns, name)
 	if err != nil {
@@ -240,7 +226,7 @@ func (s *Server) snapshotDue(ctx context.Context, ns, name string, p BackupPolic
 	}
 	for i, sn := range auto {
 		if i >= max(p.SnapKeep, 1) && sn.Name != "" {
-			logCleanup("snapshot "+sn.Name, s.kube.DeleteSnapshot(ctx, ns, sn.Name))
+			lifecycle.LogCleanup("snapshot "+sn.Name, s.kube.DeleteSnapshot(ctx, ns, sn.Name))
 		}
 	}
 }
@@ -315,7 +301,7 @@ func (s *Server) backupVM(ctx context.Context, ns, name string, p BackupPolicy) 
 	}
 	for i, b := range bs {
 		if i >= max(p.BackupKeep, 1) {
-			logCleanup("backup "+b.VM+"/"+b.Stamp, st.Delete(ctx, b.VM+"/"+b.Stamp))
+			lifecycle.LogCleanup("backup "+b.VM+"/"+b.Stamp, st.Delete(ctx, b.VM+"/"+b.Stamp))
 		}
 	}
 	return nil
@@ -332,9 +318,9 @@ func (s *Server) offsite(ctx context.Context, st backupStore, ns, name string) e
 	}
 	ex, err := s.kube.BackupExport(ctx, ns, name)
 	defer func() {
-		cctx, cancel := cleanupCtx()
+		cctx, cancel := lifecycle.CleanupContext()
 		defer cancel()
-		logCleanup("backup export of "+name, s.kube.DeleteBackupExport(cctx, ns, name))
+		lifecycle.LogCleanup("backup export of "+name, s.kube.DeleteBackupExport(cctx, ns, name))
 	}()
 	if err != nil {
 		return err
@@ -344,7 +330,7 @@ func (s *Server) offsite(ctx context.Context, st backupStore, ns, name string) e
 	meta := backupMeta{Namespace: ns, Spec: ex.Spec, Created: time.Now()}
 	man := hostd.Manifest{Files: map[string]hostd.ManifestFile{}}
 	fail := func(err error) error {
-		cctx, cancel := cleanupCtx()
+		cctx, cancel := lifecycle.CleanupContext()
 		defer cancel()
 		return errors.Join(err, st.Delete(cctx, rel))
 	}
@@ -519,8 +505,8 @@ func (s *Server) watchRestore(token string, job restoreJob) {
 		disks, _ := s.kube.DiskStatus(ctx, job.Namespace, job.Target)
 		return disks, ctx.Err()
 	}, nil)
-	cctx, cancel := cleanupCtx()
-	logCleanup("restore of "+job.Target, s.kube.FinishImport(cctx, job.Namespace, job.Target))
+	cctx, cancel := lifecycle.CleanupContext()
+	lifecycle.LogCleanup("restore of "+job.Target, s.kube.FinishImport(cctx, job.Namespace, job.Target))
 	cancel()
 	switch {
 	case errors.Is(err, errRestoreAborted):
@@ -791,9 +777,9 @@ func (s *Server) streamDisk(w http.ResponseWriter, r *http.Request, ns, name, di
 	}()
 	ex, err := s.kube.BackupExport(r.Context(), ns, name)
 	defer func() {
-		cctx, cancel := cleanupCtx()
+		cctx, cancel := lifecycle.CleanupContext()
 		defer cancel()
-		logCleanup("backup export of "+name, s.kube.DeleteBackupExport(cctx, ns, name))
+		lifecycle.LogCleanup("backup export of "+name, s.kube.DeleteBackupExport(cctx, ns, name))
 	}()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)

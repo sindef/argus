@@ -7,14 +7,13 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"argus/internal/auth"
 	"argus/internal/kube"
+	"argus/internal/lifecycle"
 	"argus/internal/server"
 	"argus/internal/tlscert"
 )
@@ -69,17 +68,7 @@ func main() {
 		IdleTimeout:       2 * time.Minute,
 	}
 	log.Printf("listening on %s", addr)
-	go func() {
-		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
-		defer stop()
-		<-ctx.Done()
-		sctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
-		if err := hs.Shutdown(sctx); err != nil {
-			log.Printf("shutdown: %v", err)
-		}
-	}()
-	if err := hs.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
+	if err := lifecycle.Serve(hs, srv.Run); err != nil {
 		log.Fatal(err)
 	}
 }

@@ -143,6 +143,11 @@ func (s *Store) PersistSessions(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			fctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := s.flushSessions(fctx); err != nil {
+				log.Printf("sessions: %v", err)
+			}
 			return
 		case <-t.C:
 			if err := s.flushSessions(ctx); err != nil {

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"argus/internal/kube"
+	"argus/internal/lifecycle"
 	"argus/internal/netguard"
 	"argus/internal/vsphere"
 )
@@ -128,9 +129,9 @@ func (s *Server) vcenterCopy(ctx context.Context, c *vsphere.Client, tc *tls.Con
 			return err
 		}
 		defer func() {
-			cctx, cancel := cleanupCtx()
+			cctx, cancel := lifecycle.CleanupContext()
 			defer cancel()
-			logCleanup("vCenter snapshot of "+vm, c.RemoveSnapshot(cctx, snap))
+			lifecycle.LogCleanup("vCenter snapshot of "+vm, c.RemoveSnapshot(cctx, snap))
 		}()
 	}
 	lease, err := c.Export(ctx, vm, snap)
@@ -140,9 +141,9 @@ func (s *Server) vcenterCopy(ctx context.Context, c *vsphere.Client, tc *tls.Con
 	ok := false
 	defer func() {
 		if !ok {
-			cctx, cancel := cleanupCtx()
+			cctx, cancel := lifecycle.CleanupContext()
 			defer cancel()
-			logCleanup("vCenter export of "+vm, lease.Abort(cctx))
+			lifecycle.LogCleanup("vCenter export of "+vm, lease.Abort(cctx))
 		}
 	}()
 	if len(lease.Disks) != len(dvs) {

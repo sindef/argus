@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"argus/internal/auth"
+	"argus/internal/lifecycle"
 )
 
 const (
@@ -94,33 +95,37 @@ func auditResult(aw *auditWriter, h http.Header) (bool, string) {
 	return false, body
 }
 
-func (s *Server) auditLoop() {
+func (s *Server) auditLoop(ctx context.Context) {
 	store := s.auth.Secrets()
-	ctx := context.Background()
 	var es []AuditEntry
 	if _, err := auth.LoadJSON(ctx, store, auditKey, "entries", &es); err == nil {
 		s.auditLog.mu.Lock()
 		s.auditLog.entries = append(es, s.auditLog.entries...)
 		s.auditLog.mu.Unlock()
 	}
-	for range time.Tick(10 * time.Second) {
-		s.auditLog.mu.Lock()
-		if !s.auditLog.dirty {
-			s.auditLog.mu.Unlock()
-			continue
-		}
-		b, err := json.Marshal(s.auditLog.entries)
-		s.auditLog.dirty = false
+	lifecycle.Every(ctx, 10*time.Second, false, "audit", s.flushAudit)
+	cctx, cancel := lifecycle.CleanupContext()
+	defer cancel()
+	s.flushAudit(cctx)
+}
+
+func (s *Server) flushAudit(ctx context.Context) {
+	s.auditLog.mu.Lock()
+	if !s.auditLog.dirty {
 		s.auditLog.mu.Unlock()
-		if err != nil {
-			continue
-		}
-		if err := auth.PutJSON(ctx, store, auditKey, "entries", json.RawMessage(b)); err != nil {
-			log.Printf("audit: save: %v", err)
-			s.auditLog.mu.Lock()
-			s.auditLog.dirty = true
-			s.auditLog.mu.Unlock()
-		}
+		return
+	}
+	b, err := json.Marshal(s.auditLog.entries)
+	s.auditLog.dirty = false
+	s.auditLog.mu.Unlock()
+	if err != nil {
+		return
+	}
+	if err := auth.PutJSON(ctx, s.auth.Secrets(), auditKey, "entries", json.RawMessage(b)); err != nil {
+		log.Printf("audit: save: %v", err)
+		s.auditLog.mu.Lock()
+		s.auditLog.dirty = true
+		s.auditLog.mu.Unlock()
 	}
 }
 

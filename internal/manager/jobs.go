@@ -14,6 +14,7 @@ import (
 
 	"argus/internal/auth"
 	"argus/internal/kube"
+	"argus/internal/lifecycle"
 	"argus/internal/wire"
 )
 
@@ -205,14 +206,14 @@ func (c *Manager) Resolve(ctx context.Context, org, id string) error {
 		return fmt.Errorf("%s is running on %s; check both hosts manually", j.VM, j.To)
 	}
 	op := wire.OperationRequest{Operation: j.ID}
-	logCleanup("migration of "+j.VM+" on "+src.Name, src.do(ctx, http.MethodPost, vmPathIn(ns, j.VM, "migration-cleanup"), op, nil))
-	logCleanup("migration of "+j.VM+" on "+dst.Name, dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, j.VM, "migration-cleanup"), op, nil))
+	lifecycle.LogCleanup("migration of "+j.VM+" on "+src.Name, src.do(ctx, http.MethodPost, vmPathIn(ns, j.VM, "migration-cleanup"), op, nil))
+	lifecycle.LogCleanup("migration of "+j.VM+" on "+dst.Name, dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, j.VM, "migration-cleanup"), op, nil))
 	if err := dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, j.VM, "abort"), op, nil); err != nil {
 		return err
 	}
 	if !j.Live {
-		logCleanup("import of "+j.VM+" on "+dst.Name, dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, j.VM, "imported"), nil, nil))
-		logCleanup("export of "+j.VM+" on "+src.Name, src.do(ctx, http.MethodPost, vmPathIn(ns, j.VM, "unexport"), nil, nil))
+		lifecycle.LogCleanup("import of "+j.VM+" on "+dst.Name, dst.do(ctx, http.MethodPost, vmPathIn(kube.Namespace, j.VM, "imported"), nil, nil))
+		lifecycle.LogCleanup("export of "+j.VM+" on "+src.Name, src.do(ctx, http.MethodPost, vmPathIn(ns, j.VM, "unexport"), nil, nil))
 	}
 	c.mu.Lock()
 	j.Attention = false

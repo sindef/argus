@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"argus/internal/kube"
+	"argus/internal/lifecycle"
 	"argus/internal/netguard"
 	"argus/internal/wire"
 )
@@ -96,7 +97,7 @@ func (s *Server) apiSnapshotExport(w http.ResponseWriter, r *http.Request) {
 	}
 	ex, err := s.kube.ExportVMSnapshot(r.Context(), ns, name, req.BaseURL, string(s.caPEM))
 	if err != nil {
-		cctx, cancel := cleanupCtx()
+		cctx, cancel := lifecycle.CleanupContext()
 		defer cancel()
 		apiError(w, r, http.StatusConflict, errors.Join(err, s.kube.DeleteExport(cctx, ns, name)))
 		return
@@ -121,20 +122,18 @@ func reachable(raw string) bool {
 	return true
 }
 
-func (s *Server) haLoop() {
-	for range time.Tick(haInterval) {
-		recovering("ha", s.haTick)
-	}
+func (s *Server) haLoop(ctx context.Context) {
+	lifecycle.Every(ctx, haInterval, false, "ha", s.haTick)
 }
 
-func (s *Server) haTick() {
+func (s *Server) haTick(ctx context.Context) {
 	s.ha.mu.Lock()
 	last, owned, replicas := s.ha.last, s.ha.owned, s.ha.replicas
 	s.ha.mu.Unlock()
 	if last.IsZero() {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), haInterval)
+	ctx, cancel := context.WithTimeout(ctx, haInterval)
 	defer cancel()
 	vms, err := s.kube.HAVMs(ctx)
 	if err != nil {

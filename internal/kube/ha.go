@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"time"
 
+	"argus/internal/lifecycle"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -243,7 +245,9 @@ func (c *Client) RefreshReplicaDisks(ctx context.Context, ns, vm string, ex Expo
 			},
 		}}
 		if _, err := c.dyn.Resource(dvGVR).Namespace(ns).Create(ctx, dv, metav1.CreateOptions{}); err != nil {
-			c.AbortReplicaRefresh(context.Background(), ns, vm, mapping)
+			cctx, cancel := lifecycle.CleanupContext()
+			defer cancel()
+			c.AbortReplicaRefresh(cctx, ns, vm, mapping)
 			return nil, err
 		}
 		mapping[d.DataVolume] = name

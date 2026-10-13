@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"argus/internal/kube"
+	"argus/internal/lifecycle"
 	"argus/internal/manager"
 )
 
@@ -93,9 +94,9 @@ func (s *Server) saveToLibrary(org string, src manager.Node, ns, vm, name string
 			return err
 		}
 		defer func() {
-			cctx, cancel := cleanupCtx()
+			cctx, cancel := lifecycle.CleanupContext()
 			defer cancel()
-			logCleanup("export of "+vm, src.Call(cctx, http.MethodPost, manager.APIPath("/api/vms/%s/%s/unexport", ns, vm), nil, nil))
+			lifecycle.LogCleanup("export of "+vm, src.Call(cctx, http.MethodPost, manager.APIPath("/api/vms/%s/%s/unexport", ns, vm), nil, nil))
 		}()
 		t := libTemplate{Name: name, SourceVM: vm, SourceHost: src.Name, Arch: st.Arch(), Created: time.Now(), Spec: ex.Spec}
 		for _, d := range ex.Disks {

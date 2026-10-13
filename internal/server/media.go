@@ -13,6 +13,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
+	"argus/internal/lifecycle"
 	"argus/internal/manager"
 	"argus/internal/registry"
 )
@@ -43,7 +44,7 @@ func (l localOps) MountMedia(ctx context.Context, ns, name, contentType string, 
 		return err
 	}
 	if err := s.kube.Upload(ctx, img, in); err != nil {
-		cctx, cancel := cleanupCtx()
+		cctx, cancel := lifecycle.CleanupContext()
 		defer cancel()
 		return errors.Join(err, s.kube.DeleteImage(cctx, img))
 	}

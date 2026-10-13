@@ -15,6 +15,7 @@ import (
 
 	"argus/internal/auth"
 	"argus/internal/kube"
+	"argus/internal/lifecycle"
 	"argus/internal/wire"
 )
 
@@ -239,11 +240,11 @@ func (c *Manager) liveMigrate(ctx context.Context, j *Job, src, dst Node, ns, vm
 	}
 	op := wire.OperationRequest{Operation: j.ID}
 	cleanup := func(cctx context.Context) {
-		logCleanup("migration of "+vm+" on "+src.Name, src.do(cctx, http.MethodPost, vmPathIn(ns, vm, "migration-cleanup"), op, nil))
-		logCleanup("migration of "+vm+" on "+dst.Name, dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, vm, "migration-cleanup"), op, nil))
+		lifecycle.LogCleanup("migration of "+vm+" on "+src.Name, src.do(cctx, http.MethodPost, vmPathIn(ns, vm, "migration-cleanup"), op, nil))
+		lifecycle.LogCleanup("migration of "+vm+" on "+dst.Name, dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, vm, "migration-cleanup"), op, nil))
 	}
 	abort := func(cause error) error {
-		cctx, cancel := cleanupCtx()
+		cctx, cancel := lifecycle.CleanupContext()
 		defer cancel()
 		cleanup(cctx)
 		if err := dst.do(cctx, http.MethodPost, vmPathIn(kube.Namespace, vm, "abort"), op, nil); err != nil {
@@ -285,7 +286,7 @@ func (c *Manager) liveMigrate(ctx context.Context, j *Job, src, dst Node, ns, vm
 		default:
 			var tst struct{ Phase string }
 			if dst.do(ctx, http.MethodGet, vmPathIn(kube.Namespace, vm, "migration")+"?operation="+j.ID, nil, &tst) == nil && tst.Phase == "Failed" {
-				cctx, cancel := cleanupCtx()
+				cctx, cancel := lifecycle.CleanupContext()
 				err := src.do(cctx, http.MethodPost, vmPathIn(ns, vm, "migration-cleanup"), op, nil)
 				running := err == nil && sourceRunning(cctx)
 				cancel()
@@ -298,8 +299,8 @@ func (c *Manager) liveMigrate(ctx context.Context, j *Job, src, dst Node, ns, vm
 				lastPhase, since = st.Phase, time.Now()
 			} else if (st.Phase == "Pending" || st.Phase == "Scheduling") && time.Since(since) > 90*time.Second {
 				c.update(j, "Migrating (stalled in "+st.Phase+", checking sync controllers)", false, false)
-				logCleanup("sync controller on "+src.Name, src.do(ctx, http.MethodPost, "/api/sync-controller", nil, nil))
-				logCleanup("sync controller on "+dst.Name, dst.do(ctx, http.MethodPost, "/api/sync-controller", nil, nil))
+				lifecycle.LogCleanup("sync controller on "+src.Name, src.do(ctx, http.MethodPost, "/api/sync-controller", nil, nil))
+				lifecycle.LogCleanup("sync controller on "+dst.Name, dst.do(ctx, http.MethodPost, "/api/sync-controller", nil, nil))
 				since = time.Now()
 			}
 			c.update(j, "Migrating ("+st.Phase+")", false, false)
@@ -331,7 +332,7 @@ func (c *Manager) finishLive(ctx context.Context, j *Job, src, dst Node, ns, vm 
 
 func (c *Manager) cancelLive(j *Job, src, dst Node, ns, vm string, op wire.OperationRequest, abort func(error) error, sourceRunning func(context.Context) bool) error {
 	c.update(j, "Cancelling", false, false)
-	cctx, cancel := cleanupCtx()
+	cctx, cancel := lifecycle.CleanupContext()
 	defer cancel()
 	if err := src.do(cctx, http.MethodPost, vmPathIn(ns, vm, "migration-cleanup"), op, nil); err != nil {
 		return fmt.Errorf("cancel failed: %w: %w", err, errUnknown)

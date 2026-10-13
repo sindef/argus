@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"argus/internal/kube"
+	"argus/internal/lifecycle"
 	"argus/internal/tlscert"
 	"argus/internal/wire"
 )
@@ -118,7 +119,7 @@ func (s *Server) apiExport(w http.ResponseWriter, r *http.Request) {
 	}
 	ex, err := s.kube.ExportVM(r.Context(), ns, name, req.BaseURL, string(s.caPEM))
 	if err != nil {
-		cctx, cancel := cleanupCtx()
+		cctx, cancel := lifecycle.CleanupContext()
 		defer cancel()
 		apiError(w, r, http.StatusConflict, errors.Join(err, s.kube.DeleteExport(cctx, ns, name)))
 		return

@@ -9,13 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/url"
 	"regexp"
 	"slices"
 	"sort"
 	"strings"
-	"time"
 
 	"argus/internal/hostd"
 	"argus/internal/s3"
@@ -35,16 +33,6 @@ func (s *Server) nfsPassphrase(ctx context.Context) (string, error) {
 	var n nfsSettings
 	_, err := s.loadJSON(ctx, nfsKey, &n)
 	return n.Passphrase, err
-}
-
-func cleanupCtx() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), 2*time.Minute)
-}
-
-func logCleanup(what string, err error) {
-	if err != nil {
-		log.Printf("cleanup %s: %v", what, err)
-	}
 }
 
 func (s *Server) setNFSPassphrase(ctx context.Context, pass string) error {

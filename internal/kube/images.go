@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"argus/internal/lifecycle"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -293,7 +295,9 @@ func (c *Client) ImportImage(ctx context.Context, name, size string, ex Export) 
 		},
 	}}
 	if _, err := c.dyn.Resource(dvGVR).Namespace(Namespace).Create(ctx, dv, metav1.CreateOptions{}); err != nil {
-		return errors.Join(err, c.FinishImageImport(context.Background(), name))
+		cctx, cancel := lifecycle.CleanupContext()
+		defer cancel()
+		return errors.Join(err, c.FinishImageImport(cctx, name))
 	}
 	return nil
 }
@@ -320,7 +324,9 @@ func (c *Client) ImportRegistryImage(ctx context.Context, name, size string, src
 	}
 	if src.User != "" {
 		if err := c.Secrets(Namespace).Create(ctx, ref, "Opaque", map[string][]byte{"accessKeyId": []byte(src.User), "secretKey": []byte(src.Pass)}); err != nil {
-			return errors.Join(err, c.FinishImageImport(context.Background(), name))
+			cctx, cancel := lifecycle.CleanupContext()
+			defer cancel()
+			return errors.Join(err, c.FinishImageImport(cctx, name))
 		}
 		reg["secretRef"] = ref
 	}
@@ -334,7 +340,9 @@ func (c *Client) ImportRegistryImage(ctx context.Context, name, size string, src
 		},
 	}}
 	if _, err := c.dyn.Resource(dvGVR).Namespace(Namespace).Create(ctx, dv, metav1.CreateOptions{}); err != nil {
-		return errors.Join(err, c.FinishImageImport(context.Background(), name))
+		cctx, cancel := lifecycle.CleanupContext()
+		defer cancel()
+		return errors.Join(err, c.FinishImageImport(cctx, name))
 	}
 	return nil
 }
@@ -354,7 +362,9 @@ func (c *Client) CreateTokenSource(ctx context.Context, name, ca, token string) 
 	}
 	cm := &unstructured.Unstructured{Object: obj{"apiVersion": "v1", "kind": "ConfigMap", "metadata": obj{"name": name}, "data": obj{"ca.pem": ca}}}
 	if _, err := c.dyn.Resource(cmGVR).Namespace(Namespace).Create(ctx, cm, metav1.CreateOptions{}); err != nil {
-		c.DeleteTokenSource(context.Background(), name)
+		cctx, cancel := lifecycle.CleanupContext()
+		defer cancel()
+		c.DeleteTokenSource(cctx, name)
 		return err
 	}
 	return nil

@@ -10,6 +10,7 @@ import (
 	"slices"
 
 	"argus/internal/kube"
+	"argus/internal/lifecycle"
 	"argus/internal/wire"
 )
 
@@ -55,7 +56,7 @@ func zsync(ctx context.Context, vm string, owner, replica Node) error {
 		return err
 	}
 	done := map[string]any{"keep": []string{snap.Snap}}
-	logCleanup("snapshots of "+vm+" on "+owner.Name, owner.do(ctx, http.MethodPost, vmPath(vm, "zfs/prune"), done, nil))
+	lifecycle.LogCleanup("snapshots of "+vm+" on "+owner.Name, owner.do(ctx, http.MethodPost, vmPath(vm, "zfs/prune"), done, nil))
 	return replica.do(ctx, http.MethodPost, vmPath(vm, "zfs/prune"), done, nil)
 }
 

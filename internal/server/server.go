@@ -18,6 +18,7 @@ import (
 	"argus/internal/auth"
 	"argus/internal/hostd"
 	"argus/internal/kube"
+	"argus/internal/lifecycle"
 	"argus/internal/manager"
 	"argus/internal/registry"
 	"argus/internal/tlscert"
@@ -96,11 +97,6 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 		s.pages[p] = t
 	}
 
-	go s.auditLoop()
-	go s.auth.PersistSessions(context.Background())
-	if k != nil || s.manager != nil {
-		go s.alarmLoop()
-	}
 	s.mux.Handle("GET /static/", http.FileServerFS(web.FS))
 	s.mux.HandleFunc("GET /audit", s.requireOrg(s.auditPage))
 	s.mux.HandleFunc("POST /notify", s.requireOrg(s.notifyForm))
@@ -319,13 +315,32 @@ func New(k *kube.Client, a *auth.Store, o Options) (*Server, error) {
 	s.mux.HandleFunc("POST /vms/{ns}/{name}/{action}", s.require(auth.Operator, s.action))
 	s.mux.HandleFunc("GET /vms/{ns}/{name}/console", s.require(auth.Operator, s.console))
 	s.mux.HandleFunc("GET /ws/{ns}/{name}/{kind}", s.require(auth.Operator, s.consoleWS))
-	go s.haLoop()
-	if s.manager == nil && k != nil {
-		go s.backupLoop()
-		go s.storageLoop()
-		go k.WatchVMs(context.Background())
-	}
 	return s, nil
+}
+
+func (s *Server) Run(ctx context.Context) {
+	var g lifecycle.Group
+	g.Go(ctx, s.auditLoop)
+	g.Go(ctx, s.auth.PersistSessions)
+	g.Go(ctx, s.haLoop)
+	if s.kube != nil || s.manager != nil {
+		g.Go(ctx, s.alarmLoop)
+	}
+	if s.manager == nil && s.kube != nil {
+		g.Go(ctx, s.backupLoop)
+		g.Go(ctx, s.storageLoop)
+		g.Go(ctx, s.kube.WatchVMs)
+	}
+	if s.registry != nil {
+		g.Go(ctx, func(ctx context.Context) {
+			lifecycle.Every(ctx, 6*time.Hour, true, "registry gc", func(context.Context) {
+				if err := s.registry.GC(); err != nil {
+					log.Printf("registry: gc: %v", err)
+				}
+			})
+		})
+	}
+	g.Wait()
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

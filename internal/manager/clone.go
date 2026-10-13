@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"argus/internal/kube"
+	"argus/internal/lifecycle"
 	"argus/internal/wire"
 )
 
@@ -54,9 +55,9 @@ func (c *Manager) CopyVM(src, dst Node, ns, vm, name, pool string, template bool
 			return err
 		}
 		defer func() {
-			cctx, cancel := cleanupCtx()
+			cctx, cancel := lifecycle.CleanupContext()
 			defer cancel()
-			logCleanup("export of "+vm, src.do(cctx, http.MethodPost, vmPathIn(ns, vm, "unexport"), nil, nil))
+			lifecycle.LogCleanup("export of "+vm, src.do(cctx, http.MethodPost, vmPathIn(ns, vm, "unexport"), nil, nil))
 		}()
 		RenameExport(&ex, vm, name)
 		return c.importAndWait(ctx, j, dst, name, pool, template, ex)

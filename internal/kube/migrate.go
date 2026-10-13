@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"argus/internal/lifecycle"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -217,7 +219,9 @@ func (c *Client) ImportVM(ctx context.Context, ns, name, operation string, ex Ex
 		return err
 	}
 	if err := c.createImportVM(ctx, ns, name, operation, src, ex, opts); err != nil {
-		return errors.Join(err, c.FinishImport(context.Background(), ns, name))
+		cctx, cancel := lifecycle.CleanupContext()
+		defer cancel()
+		return errors.Join(err, c.FinishImport(cctx, ns, name))
 	}
 	return nil
 }

@@ -61,10 +61,10 @@ func newTelemetry(path string) *telemetry {
 	return t
 }
 
-func (t *telemetry) save() {
+func (t *telemetry) save(force bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.path == "" || time.Since(t.saved) < saveEvery {
+	if t.path == "" || !force && time.Since(t.saved) < saveEvery {
 		return
 	}
 	t.saved = time.Now()

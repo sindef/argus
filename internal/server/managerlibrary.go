@@ -97,14 +97,6 @@ func (s *Server) startRegistry(ctx context.Context) error {
 	if err := s.reloadManagerCert(ctx); err != nil {
 		return err
 	}
-	go func() {
-		for {
-			if err := g.GC(); err != nil {
-				log.Printf("registry: gc: %v", err)
-			}
-			time.Sleep(6 * time.Hour)
-		}
-	}()
 	return nil
 }
 
