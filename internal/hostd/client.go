@@ -148,6 +148,10 @@ func (c *Client) ZFSDestroy(ctx context.Context, datasets []string, snap string)
 	return c.do(ctx, http.MethodPost, "/zfs/destroy", map[string]any{"datasets": datasets, "snap": snap}, nil)
 }
 
+func (c *Client) ZFSRollback(ctx context.Context, dataset, snap string) error {
+	return c.do(ctx, http.MethodPost, "/zfs/rollback", map[string]any{"dataset": dataset, "snap": snap}, nil)
+}
+
 func (c *Client) ZFSSnapshot(ctx context.Context, datasets []string, snap string) error {
 	return c.do(ctx, http.MethodPost, "/zfs/snapshot", map[string]any{"datasets": datasets, "snap": snap}, nil)
 }

@@ -16,6 +16,7 @@ import (
 var (
 	validDataset = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]*/pvc-[0-9a-f-]{36}$`)
 	validZSnap   = regexp.MustCompile(`^argus-(zrepl|cbt)-[0-9]+$`)
+	validCSISnap = regexp.MustCompile(`^snapshot-[0-9a-f-]{36}$`)
 )
 
 func snapKind(kind string) (string, error) {

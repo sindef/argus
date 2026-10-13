@@ -218,11 +218,13 @@ func (t BackupTarget) Where() string {
 }
 
 type VolumeRequest struct {
-	Name string `json:"name"`
-	Size int    `json:"size"`
-	URL  string `json:"url"`
-	VM   string `json:"vm"`
-	Pool string `json:"pool"`
+	Snapshot string `json:"snapshot,omitempty"`
+	Target   string `json:"target,omitempty"`
+	Name     string `json:"name"`
+	Size     int    `json:"size"`
+	URL      string `json:"url"`
+	VM       string `json:"vm"`
+	Pool     string `json:"pool"`
 }
 
 type Task struct {

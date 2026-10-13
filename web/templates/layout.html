@@ -272,7 +272,10 @@
           </form><hr>{{end}}{{end}}
           <button data-dialog="volume-edit" data-fill='{{$f}}'>{{template "icon" "pencil"}}Details and resize…</button>
           <button hx-post="{{$base}}/snapshot" hx-vals='{"name":"{{.Name}}"}'>{{template "icon" "camera"}}Snapshot</button>
-          {{range .Snapshots}}<button hx-post="{{$base}}/delete-snapshot" hx-vals='{"name":"{{.}}"}' hx-confirm="Delete snapshot {{.}}?">{{template "icon" "x"}}Delete {{.}}</button>{{end}}
+          {{$v := .}}{{range .Snapshots}}<hr><span class="menu-label">{{.}}</span>
+          {{if not $v.UsedBy}}<button hx-post="{{$base}}/restore-snapshot" hx-vals='{"name":"{{$v.Name}}","snapshot":"{{.}}"}' hx-confirm="Roll {{$v.Name}} back to {{.}}? Newer snapshots of it are deleted.">{{template "icon" "rotate-cw"}}Restore</button>{{end}}
+          <button hx-post="{{$base}}/clone-snapshot" hx-vals='{"name":"{{$v.Name}}","snapshot":"{{.}}"}' data-prompt="Clone to new volume" data-prompt-placeholder="Name of the new volume">{{template "icon" "copy"}}Clone to new volume…</button>
+          <button hx-post="{{$base}}/delete-snapshot" hx-vals='{"name":"{{.}}"}' hx-confirm="Delete snapshot {{.}}?">{{template "icon" "x"}}Delete</button>{{end}}
           <hr>
           <button class="danger" hx-post="{{$base}}/delete" hx-vals='{"name":"{{.Name}}"}' hx-confirm="Delete volume {{.Name}}?">{{template "icon" "trash-2"}}Delete</button>{{end}}
         </div>

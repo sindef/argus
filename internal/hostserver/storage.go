@@ -69,6 +69,23 @@ func (s *Server) volumeOp(ctx context.Context, op string, q wire.VolumeRequest) 
 		return s.kube.AttachVolume(ctx, kube.Namespace, q.VM, q.Name)
 	case "delete-snapshot":
 		return s.kube.DeleteVolumeSnapshot(ctx, q.Name)
+	case "restore-snapshot":
+		if s.hostd == nil {
+			return errNoHostd
+		}
+		ds, zsnap, newer, err := s.kube.RollbackTarget(ctx, q.Name, q.Snapshot)
+		if err != nil {
+			return err
+		}
+		if err := s.kube.DeleteVolumeSnapshotsAndWait(ctx, newer); err != nil {
+			return err
+		}
+		return s.hostd.ZFSRollback(ctx, ds, zsnap)
+	case "clone-snapshot":
+		if !ui.ValidObject.MatchString(q.Target) {
+			return errors.New("invalid name for the new volume")
+		}
+		return s.kube.CloneVolumeSnapshot(ctx, q.Name, q.Snapshot, q.Target)
 	}
 	return errors.New("unknown volume operation")
 }

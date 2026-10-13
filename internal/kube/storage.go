@@ -28,6 +28,7 @@ var (
 	zfsNodeGVR   = schema.GroupVersionResource{Group: "zfs.openebs.io", Version: "v1", Resource: "zfsnodes"}
 	zfsVolumeGVR = schema.GroupVersionResource{Group: "zfs.openebs.io", Version: "v1", Resource: "zfsvolumes"}
 	volSnapGVR   = schema.GroupVersionResource{Group: "snapshot.storage.k8s.io", Version: "v1", Resource: "volumesnapshots"}
+	volSnapCGVR  = schema.GroupVersionResource{Group: "snapshot.storage.k8s.io", Version: "v1", Resource: "volumesnapshotcontents"}
 )
 
 type Pool struct {
@@ -282,6 +283,103 @@ func (c *Client) SnapshotVolume(ctx context.Context, name string) error {
 	}}
 	_, err := c.dyn.Resource(volSnapGVR).Namespace(Namespace).Create(ctx, snap, metav1.CreateOptions{})
 	return err
+}
+
+func (c *Client) volumeSnapshot(ctx context.Context, volume, snap string) (*unstructured.Unstructured, error) {
+	s, err := c.dyn.Resource(volSnapGVR).Namespace(Namespace).Get(ctx, snap, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	if s.GetLabels()[volumeLabel] != volume {
+		return nil, fmt.Errorf("%s is not a snapshot of %s", snap, volume)
+	}
+	return s, nil
+}
+
+func (c *Client) CloneVolumeSnapshot(ctx context.Context, volume, snap, name string) error {
+	v, err := c.standaloneVolume(ctx, volume)
+	if err != nil {
+		return err
+	}
+	if _, err := c.volumeSnapshot(ctx, volume, snap); err != nil {
+		return err
+	}
+	src, err := c.dyn.Resource(dvGVR).Namespace(Namespace).Get(ctx, volume, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	class, _, _ := unstructured.NestedString(src.Object, "spec", "storage", "storageClassName")
+	dv := &unstructured.Unstructured{Object: obj{
+		"apiVersion": "cdi.kubevirt.io/v1beta1",
+		"kind":       "DataVolume",
+		"metadata":   obj{"name": name, "labels": obj{volumeLabel: "true"}},
+		"spec": obj{
+			"source":  obj{"snapshot": obj{"namespace": Namespace, "name": snap}},
+			"storage": storageSpec(int(v.SizeGiB()), class),
+		},
+	}}
+	_, err = c.dyn.Resource(dvGVR).Namespace(Namespace).Create(ctx, dv, metav1.CreateOptions{})
+	return err
+}
+
+func (c *Client) RollbackTarget(ctx context.Context, volume, snap string) (dataset, zsnap string, newer []string, err error) {
+	v, err := c.standaloneVolume(ctx, volume)
+	if err != nil {
+		return "", "", nil, err
+	}
+	if v.UsedBy != "" {
+		return "", "", nil, fmt.Errorf("detach %s from %s first", volume, v.UsedBy)
+	}
+	s, err := c.volumeSnapshot(ctx, volume, snap)
+	if err != nil {
+		return "", "", nil, err
+	}
+	content, _, _ := unstructured.NestedString(s.Object, "status", "boundVolumeSnapshotContentName")
+	if ready, _, _ := unstructured.NestedBool(s.Object, "status", "readyToUse"); !ready || content == "" {
+		return "", "", nil, fmt.Errorf("snapshot %s is not ready yet", snap)
+	}
+	sc, err := c.dyn.Resource(volSnapCGVR).Get(ctx, content, metav1.GetOptions{})
+	if err != nil {
+		return "", "", nil, err
+	}
+	handle, _, _ := unstructured.NestedString(sc.Object, "status", "snapshotHandle")
+	_, zsnap, ok := strings.Cut(handle, "@")
+	if !ok || v.Dataset == "" {
+		return "", "", nil, fmt.Errorf("%s is not a ZFS snapshot", snap)
+	}
+	list, err := c.dyn.Resource(volSnapGVR).Namespace(Namespace).List(ctx, metav1.ListOptions{LabelSelector: volumeLabel + "=" + volume})
+	if err != nil {
+		return "", "", nil, err
+	}
+	for _, o := range list.Items {
+		if o.GetCreationTimestamp().After(s.GetCreationTimestamp().Time) {
+			newer = append(newer, o.GetName())
+		}
+	}
+	return v.Dataset, zsnap, newer, nil
+}
+
+func (c *Client) DeleteVolumeSnapshotsAndWait(ctx context.Context, names []string) error {
+	for _, n := range names {
+		if err := c.DeleteVolumeSnapshot(ctx, n); err != nil && !apierrors.IsNotFound(err) {
+			return err
+		}
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	for _, n := range names {
+		for {
+			if _, err := c.dyn.Resource(volSnapGVR).Namespace(Namespace).Get(ctx, n, metav1.GetOptions{}); apierrors.IsNotFound(err) {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("snapshot %s is still being deleted", n)
+			case <-time.After(2 * time.Second):
+			}
+		}
+	}
+	return nil
 }
 
 func (c *Client) DeleteVolumeSnapshot(ctx context.Context, name string) error {

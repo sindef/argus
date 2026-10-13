@@ -76,6 +76,20 @@ func NewServer() *Server {
 		}
 		reply(w, nil, err)
 	})
+	s.mux.HandleFunc("POST /zfs/rollback", func(w http.ResponseWriter, r *http.Request) {
+		var req struct{ Dataset, Snap string }
+		err := decode(r, &req)
+		if err == nil {
+			err = checkDatasets([]string{req.Dataset})
+		}
+		if err == nil && !validCSISnap.MatchString(req.Snap) {
+			err = fmt.Errorf("invalid snapshot %q", req.Snap)
+		}
+		if err == nil {
+			_, err = run(r.Context(), "zfs", "rollback", req.Dataset+"@"+req.Snap)
+		}
+		reply(w, nil, err)
+	})
 	s.mux.HandleFunc("POST /zfs/prune", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Datasets, Keep []string

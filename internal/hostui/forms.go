@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 
 	"argus/internal/kube"
 	"argus/internal/ui"
@@ -39,7 +40,8 @@ func ValidNetwork(n wire.NetworkRequest) error {
 func FormVolume(r *http.Request) wire.VolumeRequest {
 	var size int
 	_ = ui.IntField(r, "size", 1, 4096, &size)
-	return wire.VolumeRequest{Name: r.FormValue("name"), Size: size, URL: r.FormValue("url"), VM: r.FormValue("vm"), Pool: r.FormValue("pool")}
+	return wire.VolumeRequest{Name: r.FormValue("name"), Size: size, URL: r.FormValue("url"), VM: r.FormValue("vm"), Pool: r.FormValue("pool"),
+		Snapshot: r.FormValue("snapshot"), Target: strings.TrimSpace(r.Header.Get("HX-Prompt"))}
 }
 
 func VolumePools(vols []HostVolume) []string {

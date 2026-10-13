@@ -378,3 +378,4 @@ tr.acked td:not(.row-actions) { opacity: .55; }
 .progress > span { display: block; height: 100%; background: var(--accent); transition: width .5s; }
 .progress.busy > span { width: 30% !important; animation: busy 1.4s ease-in-out infinite; }
 @keyframes busy { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+.menu-label { display: block; padding: 6px 10px 2px; color: var(--muted); font-size: 12px; }
