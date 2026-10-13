@@ -121,16 +121,16 @@ func (c *Manager) save(ctx context.Context, ns []Node, rv string) error {
 	return auth.SaveJSON(ctx, c.store, nodesKey, "nodes", rv, ns)
 }
 
-func (c *Manager) AddNode(ctx context.Context, org, name, url, token, fingerprint, datacenter, cluster string) error {
-	url = strings.TrimRight(url, "/")
-	ca, err := fetchCA(ctx, url)
+func (c *Manager) AddNode(ctx context.Context, n Node, fingerprint string) error {
+	n.URL = strings.TrimRight(n.URL, "/")
+	ca, err := fetchCA(ctx, n.URL)
 	if err != nil {
 		return err
 	}
 	if got := tlscert.Fingerprint(ca); !strings.EqualFold(got, strings.ReplaceAll(strings.TrimSpace(fingerprint), ":", "")) {
 		return fmt.Errorf("CA fingerprint mismatch: node presents %s", got)
 	}
-	n := Node{Name: name, URL: url, Token: token, CA: string(ca), Org: org, Datacenter: datacenter, Cluster: cluster}
+	n.CA = string(ca)
 	if _, err := n.Info(ctx); err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func (c *Manager) AddNode(ctx context.Context, org, name, url, token, fingerprin
 		return err
 	}
 	for _, x := range ns {
-		if x.Name == name || x.URL == url {
+		if x.Name == n.Name || x.URL == n.URL {
 			return errors.New("node already registered")
 		}
 	}

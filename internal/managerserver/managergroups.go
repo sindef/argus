@@ -103,7 +103,7 @@ func (s *Server) groupAction(w http.ResponseWriter, r *http.Request) {
 			err = errors.New("invalid image reference")
 			break
 		}
-		err = s.manager.RollingUpdate(r.Context(), org, ungroup(dc), ungroup(cl), img, r.FormValue("shutdown") != "")
+		err = s.manager.RollingUpdate(r.Context(), org, manager.Rollout{Datacenter: ungroup(dc), Cluster: ungroup(cl), Image: img, Shutdown: r.FormValue("shutdown") != ""})
 	default:
 		err = errors.New("unknown operation")
 	}

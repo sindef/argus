@@ -332,7 +332,13 @@ func (c *Manager) leave(ctx context.Context, j *Job, n Node) error {
 	return nil
 }
 
-func (c *Manager) RollingUpdate(ctx context.Context, org, dc, cluster, image string, shutdown bool) error {
+type Rollout struct {
+	Datacenter, Cluster, Image string
+	Shutdown                   bool
+}
+
+func (c *Manager) RollingUpdate(ctx context.Context, org string, ro Rollout) error {
+	dc, cluster, image, shutdown := ro.Datacenter, ro.Cluster, ro.Image, ro.Shutdown
 	nodes, err := c.NodesFor(context.Background(), org)
 	if err != nil {
 		return err

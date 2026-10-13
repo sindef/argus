@@ -527,7 +527,8 @@ func (s *Server) managerAddNode(w http.ResponseWriter, r *http.Request) {
 		err = errors.New("invalid host name")
 	}
 	if err == nil {
-		err = s.manager.AddNode(r.Context(), ui.Session(r).Org, name, u.Scheme+"://"+u.Host, r.FormValue("token"), r.FormValue("fingerprint"), strings.TrimSpace(r.FormValue("datacenter")), strings.TrimSpace(r.FormValue("cluster")))
+		err = s.manager.AddNode(r.Context(), manager.Node{Org: ui.Session(r).Org, Name: name, URL: u.Scheme + "://" + u.Host, Token: r.FormValue("token"),
+			Datacenter: strings.TrimSpace(r.FormValue("datacenter")), Cluster: strings.TrimSpace(r.FormValue("cluster"))}, r.FormValue("fingerprint"))
 	}
 	if err != nil {
 		s.renderHosts(w, r, err)
